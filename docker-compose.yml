@@ -1,0 +1,162 @@
+# NOTE networks had to be prepended with letters to ensure 
+# proper alphabetical order 
+
+services:
+  simulation:
+    image: grfics-simulation
+    container_name: simulation
+    hostname: simulation
+    build: ./simulation
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "80:80"
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "55555"]
+      interval: 5s
+      retries: 5
+    networks:
+      a-grfics-admin:  # gets random bridge IP (e.g., 172.18.x.x)
+      b-ics-net:
+        ipv4_address: 192.168.95.10
+
+    # Optional if you want to override default CMD
+    # command: sh -c "./simulation/simulation & cd modbus && ./run_all.sh"
+
+  plc:
+    image: v3
+    container_name: plc
+    hostname: plc
+    build: ./plc
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "8080:8080"
+    networks:
+      a-grfics-admin:  # gets random bridge IP (e.g., 172.18.x.x)
+      b-ics-net:
+        ipv4_address: 192.168.95.2
+    volumes:
+      - plc_volume:/docker_persistent
+
+    # Optional if you want to override default CMD
+    # command: sh -c "./simulation/simulation & cd modbus && ./run_all.sh"
+
+
+  ews:
+    image: workstation
+    container_name: EWS
+    hostname: EWS
+    build: ./workstation
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "6080:6080"
+    networks:
+      a-grfics-admin:  # gets random bridge IP (e.g., 172.18.x.x)
+      b-ics-net:
+        ipv4_address: 192.168.95.5
+
+    # Optional if you want to override default CMD
+    # command: sh -c "./simulation/simulation & cd modbus && ./run_all.sh"
+
+  hmi:
+    image: scadalts
+    container_name: HMI
+    build: ./scadalts
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "6081:80"
+    networks:
+      a-grfics-admin:  # gets random bridge IP (e.g., 172.18.x.x)
+      c-dmz-net:
+        ipv4_address: 192.168.90.107
+    volumes:
+      - scadalts_db:/var/lib/mysql
+    # Optional if you want to override default CMD
+    # command: sh -c "./simulation/simulation & cd modbus && ./run_all.sh"
+
+  kali:
+    image: kali-novnc
+    container_name: kali
+    hostname: kali
+    build: ./attacker
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "6088:6080"
+    networks:
+      a-grfics-admin:  # gets random bridge IP (e.g., 172.18.x.x)
+      c-dmz-net:
+        ipv4_address: 192.168.90.6
+
+  router:
+    image: router
+    container_name: router
+    hostname: router
+    build: ./router
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "bash", "-c", "ip route | grep -q 192.168.95.0 || exit 1"]
+      interval: 5s
+      retries: 5
+    cap_add:
+     - NET_ADMIN
+     - NET_RAW
+    sysctls:
+      net.ipv4.ip_forward: '1'
+    environment:
+      - FWUI_SECRET_KEY=some-long-secret-you-generate
+    volumes:
+     - router_config:/etc/firewall
+    networks:
+      a-grfics-admin:
+      b-ics-net:
+        ipv4_address: 192.168.95.200
+      c-dmz-net:
+        ipv4_address: 192.168.90.200
+
+  caldera:
+    image: caldera
+    container_name: caldera
+    hostname: caldera
+    build: ./caldera
+    restart: unless-stopped
+    ports:
+      - "8888:8888"
+    networks:
+      a-grfics-admin:
+      c-dmz-net:
+        ipv4_address: 192.168.90.250
+
+networks:
+  b-ics-net:
+    driver: macvlan
+    driver_opts:
+      parent: eth0  # Replace with your actual host NIC
+    ipam:
+      config:
+        - subnet: 192.168.95.0/24
+          gateway: 192.168.95.1
+
+  c-dmz-net:
+    driver: macvlan
+    driver_opts:
+      parent: eth0  # Replace with your actual host NIC
+    ipam:
+      config:
+        - subnet: 192.168.90.0/24
+          gateway: 192.168.90.1
+
+
+  a-grfics-admin:
+    driver: bridge
+
+volumes:
+  scadalts_db:
+    name: scadalts_db
+  plc_volume:
+    name: plc_volume
+  router_config:
+    name: router_config

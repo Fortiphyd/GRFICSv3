@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Intrusion Detection System (IDS)</h2>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <strong>Status:</strong> 🟢 {{ stats.status }} |
+    <strong>Alerts Today:</strong> {{ stats.alerts_today }} |
+    <strong>Custom Rules:</strong> {{ stats.rules_count }}
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header">Custom Suricata Rules</div>
+  <div class="card-body">
+    <form method="post" action="{{ url_for('save_rules') }}">
+      <textarea name="rules_text" class="form-control" rows="15" spellcheck="false">{{ rule_text }}</textarea>
+      <div class="mt-3 text-end">
+       <button type="submit" class="btn btn-sm btn-success float-end ms-2">Save & Apply</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">Recent Alerts</div>
+  <div class="card-body">
+    {% if alerts %}
+      <table class="table table-sm table-striped">
+        <thead>
+          <tr><th>Time</th><th>Source</th><th>Destination</th><th>Protocol</th><th>Signature</th></tr>
+        </thead>
+        <tbody>
+        {% for a in alerts %}
+          <tr>
+            <td>{{ a.timestamp }}</td>
+            <td>{{ a.src }}</td>
+            <td>{{ a.dst }}</td>
+            <td>{{ a.proto }}</td>
+            <td>{{ a.signature }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="text-muted">No alerts logged yet.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
