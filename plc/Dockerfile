@@ -7,6 +7,9 @@ COPY webserver /workdir/webserver/
 
 WORKDIR /workdir
 
+RUN chmod +x install.sh
+RUN chmod +x background_installer.sh
+
 # 1. Install dependencies (runs once, cached unless package list changes)
 
 RUN apt-get update && apt-get install -y \

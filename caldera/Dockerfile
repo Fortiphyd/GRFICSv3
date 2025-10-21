@@ -72,6 +72,7 @@ fi
 
 # Download emu payloads
 # emu doesn't seem capable of running this itself - always download
+RUN chmod +x /usr/src/app/plugins/emu/download_payloads.sh
 RUN cd /usr/src/app/plugins/emu; ./download_payloads.sh
 
 # The commands above (git clone) will generate *huge* .git folders - remove them
@@ -81,6 +82,7 @@ RUN (find . -type d -name ".git") | xargs rm -rf
 RUN cd /usr/src/app/plugins/sandcat/gocat; go mod tidy && go mod download
 
 # Update sandcat agents
+RUN chmod +x /usr/src/app/plugins/sandcat/update-agents.sh
 RUN cd /usr/src/app/plugins/sandcat; ./update-agents.sh
 
 # Make sure emu can always be used in container (even if not enabled right now)
