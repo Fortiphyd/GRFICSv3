@@ -1,3 +1,11 @@
 # Auto detect text files and perform LF normalization
 * text=auto
 *.unityweb filter=lfs diff=lfs merge=lfs -text
+# Always use LF for scripts that will run in containers or Linux
+*.sh text eol=lf
+*.py text eol=lf
+Dockerfile text eol=lf
+
+# Keep Windows-style endings only if absolutely required for Windows tools
+*.bat text eol=crlf
+*.ps1 text eol=crlf
