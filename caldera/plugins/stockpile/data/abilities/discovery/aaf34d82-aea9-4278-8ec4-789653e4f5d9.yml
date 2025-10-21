@@ -1,0 +1,21 @@
+- id: aaf34d82-aea9-4278-8ec4-789653e4f5d9
+  name: GetAdminMembers
+  description: Get Administrator users for a computer
+  tactic: discovery
+  technique:
+    attack_id: T1033
+    name: System Owner/User Discovery
+  platforms:
+    windows:
+      psh:
+        command: |
+          Import-Module .\powerview.ps1 -Force;
+          Get-NetUser -AdminCount | ConvertTo-Json -Depth 1
+        parsers:
+          plugins.stockpile.app.parsers.json:
+          - source: domain.user.name
+            custom_parser_vals:
+              json_key: samaccountname
+              json_type: str
+        payloads:
+        - powerview.ps1

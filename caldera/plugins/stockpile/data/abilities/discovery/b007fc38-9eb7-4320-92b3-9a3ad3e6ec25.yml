@@ -1,0 +1,19 @@
+---
+
+- id: b007fc38-9eb7-4320-92b3-9a3ad3e6ec25
+  name: Get Chrome Bookmarks
+  description: Get Chrome Bookmarks
+  tactic: discovery
+  technique:
+    attack_id: T1217
+    name: Browser Bookmark Discovery
+  platforms:
+    darwin:
+      sh:
+        command: |
+          cat ~/Library/Application\ Support/Google/Chrome/Default/Bookmarks
+        parsers:
+          plugins.stockpile.app.parsers.bookmarks:
+            - source: host.chrome.bookmark_title
+              edge: resolves_to
+              target: host.chrome.bookmark_url

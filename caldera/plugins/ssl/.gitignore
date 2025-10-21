@@ -1,0 +1,16 @@
+*.pyc
+*.crt
+*.exe
+*.pyd
+*.DS_Store
+*.spec
+*.pstat
+*.tokens
+*__pycache__*
+.history/*
+.idea/*
+.logs/*
+!.logs/.gitkeep
+core.db
+conf/haproxy.conf
+conf/certificate.pem

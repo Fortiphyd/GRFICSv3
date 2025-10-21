@@ -1,0 +1,30 @@
+---
+
+- id: 9360ba0d-46a3-47a1-bbe6-e6c875790500
+  name: Modbus - Read Device Information
+  description: |
+    Modbus Function  (0x2B, subcode 0x0E): Read Device Information
+
+    This function code is used to read the device information
+  tactic: discovery
+  technique_id: T0888
+  technique_name: Remote System Information Discovery
+  executors:
+  - platform: linux
+    name: sh
+    command: >
+      ./modbus_cli #{modbus.server.ip} --port #{modbus.server.port} read_device_info --level #{modbus.read_device_info.level}
+    payloads:
+    - modbus_cli
+  - platform: windows
+    name: psh
+    command: >
+      .\modbus_cli.exe #{modbus.server.ip} --port #{modbus.server.port} read_device_info --level #{modbus.read_device_info.level}
+    payloads:
+    - modbus_cli.exe
+  - platform: darwin
+    name: sh
+    command: >
+      ./modbus_cli_darwin #{modbus.server.ip} --port #{modbus.server.port} read_device_info --level #{modbus.read_device_info.level}
+    payloads:
+    - modbus_cli_darwin

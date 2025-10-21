@@ -1,0 +1,28 @@
+---
+
+- id: 02fb7fa9-8886-4330-9e65-fa7bb1bc5271
+  name: Kill rogue process
+  description: Force kill any unauthorized processes
+  tactic: response
+  technique:
+    attack_id: x
+    name: x
+  platforms:
+    linux:
+      sh:
+        command: |
+          kill -9 #{host.pid.unauthorized}
+    darwin:
+      sh:
+        command: |
+          kill -9 #{host.pid.unauthorized}
+    windows:
+      psh,pwsh:
+        command: |
+          Stop-Process -Id #{host.pid.unauthorized} -Force
+      cmd:
+        command: |
+          taskkill /pid #{host.pid.unauthorized} /f
+  requirements:
+    - plugins.stockpile.app.requirements.paw_provenance:
+      - source: host.pid.unauthorized

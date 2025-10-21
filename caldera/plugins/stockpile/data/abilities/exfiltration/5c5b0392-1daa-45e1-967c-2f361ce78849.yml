@@ -1,0 +1,65 @@
+- id: 5c5b0392-1daa-45e1-967c-2f361ce78849
+  name: Compress Staged Directory (Password Protected) and Split Into Smaller Chunks
+  description: |
+    This ability will compress the staged files into a password protected archive and break it
+    into smaller chunks based on the given byte size. The original archive will be automatically
+    deleted. Use this instead of other archiving abilities if small file sizes for exfiltration 
+    are desired. When used with an exfiltration ability, the exfiltration ability will run numerous
+    times in an operation depending on how many chunks are created. 
+  tactic: exfiltration
+  technique:
+    attack_id: T1030
+    name: Data Transfer Size Limits
+  platforms:
+    linux:
+      sh:
+        command: |
+          tar -C #{host.dir.staged} -czf - . | gpg -c --pinentry-mode=loopback --passphrase '#{host.archive.password}' > #{host.dir.staged}.tar.gz.gpg;
+          split -b#{file.size.chunk} '#{host.dir.staged}.tar.gz.gpg' '#{host.dir.staged}'/calderachunk;
+          rm '#{host.dir.staged}.tar.gz.gpg';
+          find '#{host.dir.staged}' -maxdepth 1 -name 'calderachunk*' 2>/dev/null;
+        cleanup: |
+          find '#{host.dir.staged}' -maxdepth 1 -name 'calderachunk*' -exec rm -rf {} \;
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+          - source: host.dir.compress
+    windows:
+      psh:
+        command: |
+          & "C:\Program Files\7-Zip\7z.exe" a "#{host.dir.staged}.7z" "#{host.dir.staged}\*" '-p#{host.archive.password}' | Out-Null;
+          sleep 2;
+          $Archive = Get-Item -Path "#{host.dir.staged}.7z";
+          $StageDir = "#{host.dir.staged}";
+          $BaseName = $StageDir + "\calderachunk";
+          $UpperBound = [int32]"#{file.size.chunk}";
+          $Content = [IO.File]::OpenRead($Archive);
+          $buff = New-Object byte[] $UpperBound;
+          $Bytes = $idx = 0;
+          try {
+              do {
+                  $Bytes = $Content.Read($buff, 0, $buff.Length);
+                  if ($Bytes -gt 0) {
+                      $ChunkName = "{0}{1}" -f ($BaseName, $idx.ToString().PadLeft(3,'0'));
+                      $ChunkFile = [IO.File]::OpenWrite($ChunkName);
+                      try {
+                          $ChunkFile.Write($buff, 0, $Bytes);
+                      } finally {
+                          $ChunkFile.Close();
+                      }
+                  }
+                  $idx ++;
+              } while ($Bytes -gt 0)
+          }
+          finally {
+              $Content.Close();
+          }
+          Remove-Item $Archive;
+          Get-ChildItem -Path "$StageDir\calderachunk*" | foreach {$_.FullName} | Select-Object;
+        cleanup: |
+          Get-ChildItem -Path "$StageDir\calderachunk*" | Remove-Item;
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+          - source: host.dir.compress
+  requirements:
+  - plugins.stockpile.app.requirements.paw_provenance:
+    - source: host.dir.staged

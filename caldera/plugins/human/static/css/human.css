@@ -1,0 +1,111 @@
+:root {
+    --default-font: 'Veranda', sans-serif;
+    --theme-color: white;
+    --primary-background: black;
+    --secondary-background: #1e1e1e;
+    --section-background: #1e1e1e;
+    --font-color: white;
+    --invert-percentage: 100%;
+    --secondary-font-color: firebrick;
+}
+
+.row .row-interior {
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: none;
+}
+.column .column-interior {
+    background-color: black;
+    padding: 25px;
+    border-radius: 25px;
+    margin-bottom: 0;
+    margin-top: 0;
+}
+
+.human-box h4 {
+    font-size:20px;
+    text-align: left;
+}
+
+.human-basic hr {
+    opacity: .25;
+}
+
+.human-box hr {
+    margin: 30px 0;
+}
+
+.human-box table{
+    width: 100%;
+}
+
+.human-box table p {
+    font-family: var(--default-font);
+    font-size: 14px;
+    font-weight: 700;
+}
+.human-box input[type='text'] {
+    width: 100%;
+    margin-top: 0;
+}
+.human-box select {
+    width: 100%;
+}
+
+.human-box ul {
+    padding-inline-start: 20px;
+}
+.human-box input[type='number'] {
+    position: relative;
+    width: 50px;
+    padding: 0;
+    margin: 0;
+}
+
+.human-box input[type='range'] ::before {
+    display:none;
+}
+
+.human-header-list {
+    list-style-position: inside;
+    text-align: center;
+    display: inline-block;
+}
+.install-container {
+    position: relative;
+}
+.install-container .background-text {
+    position: absolute;
+    color: #f1f1f1;
+    font-size: 40px;
+    bottom: 10px;
+    opacity: 30%;
+}
+
+.install-container span {
+    font-size: 14px;
+    line-height: 22px;
+}
+
+.duk-table-icon img {
+    margin: 0;
+}
+
+#command-button {
+    display: inline-block;
+    background-color: black;
+    color: var(--font-color);
+    height: 25px;
+    width: 50%;
+    border: none;
+    margin: 5px;
+    cursor: pointer;
+}
+
+.delete-command{
+    flex:10%;
+    color:red;
+    cursor:pointer;
+    font-size:22px;
+}

@@ -1,0 +1,14 @@
+---
+
+- id: 3aad5312-d48b-4206-9de4-39866c12e60f
+  name: Credentials in Registry - HKCU
+  description: Search for possible credentials stored in Registry
+  tactic: credential-access
+  technique:
+    attack_id: T1552.002
+    name: "Unsecured Credentials: Credentials in Registry"
+  platforms:
+    windows:
+      psh:
+        command: |
+          reg query HKCU /f password /t REG_SZ /s

@@ -1,0 +1,32 @@
+- id: 2fe2d5e6-7b06-4fc0-bf71-6966a1226731
+  name: Disrupt WIFI
+  description: Turn a computers WIFI off
+  tactic: impact
+  technique:
+    attack_id: T1499
+    name: Endpoint Denial of Service
+  platforms:
+    darwin:
+      sh:
+        command: |
+          ./wifi.sh off
+        cleanup: |
+          ./wifi.sh on
+        payloads:
+        - wifi.sh
+    linux:
+      sh:
+        command: |
+          ./wifi.sh off
+        cleanup: |
+          ./wifi.sh on
+        payloads:
+        - wifi.sh
+    windows:
+      psh:
+        command: |
+          .\wifi.ps1 -Off
+        cleanup: |
+          .\wifi.ps1 -On
+        payloads:
+        - wifi.ps1

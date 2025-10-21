@@ -1,0 +1,47 @@
+---
+
+- id: 5a39d7ed-45c9-4a79-b581-e5fb99e24f65
+  name: System processes
+  description: Identify system processes
+  tactic: discovery
+  technique:
+    attack_id: T1057
+    name: Process Discovery
+  platforms:
+    windows:
+      psh:
+        command: Get-Process
+      cmd:
+        command: tasklist
+      donut_amd64:
+        build_target: ProcessDump.donut
+        language: csharp
+        code: |
+          using System;
+          using System.Diagnostics;
+          using System.ComponentModel;
+
+          namespace ProcessDump
+          {
+              class MyProcess
+              {
+                  void GrabAllProcesses()
+                  {
+                      Process[] allProc = Process.GetProcesses();
+                      foreach(Process proc in allProc){
+                          Console.WriteLine("Process: {0} -> PID: {1}", proc.ProcessName, proc.Id);
+                      }
+                  }
+                  static void Main(string[] args)
+                  {
+                      MyProcess myProc = new MyProcess();
+                      myProc.GrabAllProcesses();
+                  }
+              }
+          }
+    darwin:
+      sh:
+        command: ps aux
+    linux:
+      sh:
+        command: ps aux

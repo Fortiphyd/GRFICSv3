@@ -1,0 +1,49 @@
+---
+
+- id: 0bff4ee7-42a4-4bde-b09a-9d79d8b9edd7
+  name: Find LSASS
+  description: Get process info for LSASS
+  tactic: discovery
+  technique:
+    attack_id: T1057
+    name: Process Discovery
+  platforms:
+    windows:
+      psh:
+        command: |
+          $ps = get-process | select processname,Id;
+          $valid = foreach($p in $ps) { if($p.ProcessName -eq "lsass") {$p} };
+          $valid | ConvertTo-Json
+        parsers:
+          plugins.stockpile.app.parsers.json:
+            - source: host.process.id
+              custom_parser_vals:
+                json_key: Id
+                json_type: int
+      cmd:
+        build_target: GetLsass.exe
+        language: csharp
+        code: |
+          using System;
+          using System.Diagnostics;
+          using System.ComponentModel;
+
+          namespace ProcessDump
+          {
+              class MyProcess
+              {
+                  void GrabLsassProcess()
+                  {
+                      Process[] allProc = Process.GetProcessesByName("lsass");
+                      foreach(Process proc in allProc){
+                          Console.WriteLine("Process: {0} -> PID: {1}", proc.ProcessName, proc.Id);
+                      }
+                  }
+                  static void Main(string[] args)
+                  {
+                      MyProcess myProc = new MyProcess();
+                      myProc.GrabLsassProcess();
+                  }
+              }
+          }
+

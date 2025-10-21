@@ -1,0 +1,19 @@
+---
+
+- id: 36eecb80-ede3-442b-8774-956e906aff02
+  name: 1-min sleep
+  description: Pause all operations to avoid making noise
+  tactic: defense-evasion
+  technique:
+    attack_id: T1497.003
+    name: "Virtualization/Sandbox Evasion: Time Based Evasion"
+  platforms:
+    darwin:
+      sh:
+        command: sleep 60
+    linux:
+      sh:
+        command: sleep 60
+    windows:
+      psh:
+        command: sleep 60

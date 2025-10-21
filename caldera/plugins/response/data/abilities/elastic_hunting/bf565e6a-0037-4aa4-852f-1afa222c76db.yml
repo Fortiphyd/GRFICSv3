@@ -1,0 +1,30 @@
+---
+- id: bf565e6a-0037-4aa4-852f-1afa222c76db
+  name: Search for Child Processes (elastic)
+  description: Search for Sysmon Event 1 records to discover children of known processes.
+  tactic: hunt
+  technique:
+    attack_id: x
+    name: x
+  platforms:
+    windows:
+      elasticsearch: &cmd
+        command: |
+          process.parent.entity_id:\{#{investigate.process.guid}\} AND winlog.event_id:1 AND winlog.provider_name:"Microsoft-Windows-Sysmon"
+        parsers:
+          plugins.response.app.parsers.ecs_sysmon:
+            - source: host.process.guid
+              edge: has_pid
+              target: host.unauthorized.pid
+            - source: host.process.guid
+              edge: has_process_name
+              target: host.process.name
+            - source: host.process.guid
+              edge: has_interesting
+              target: investigate.process.guid
+    linux:
+      elasticsearch:
+        *cmd
+    darwin:
+      elasticsearch:
+        *cmd

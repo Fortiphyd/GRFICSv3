@@ -1,0 +1,14 @@
+---
+
+- id: 9b007f62-daa1-44bd-a57d-00c5315ec6fe
+  name: USB Connected Device Discovery
+  description: find attached usb devices
+  tactic: discovery
+  technique:
+    attack_id: T1120
+    name: Peripheral Device Discovery
+  platforms:
+    darwin:
+      sh:
+        command: |
+          system_profiler SPUSBDataType

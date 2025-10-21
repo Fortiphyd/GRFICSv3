@@ -1,0 +1,21 @@
+.terminal {
+    border-radius: 10px;
+    background-color: var(--primary-background);
+}
+.terminal p,h2 {
+    color: white;
+}
+.terminal td {
+    color: white;
+}
+.terminal pre {
+    border: none;
+    background-color: inherit;
+    color: white;
+    margin: 5px;
+    height: 400px;
+    width: 95%;
+}
+.ability-filter tr td {
+    width: 22%;
+}

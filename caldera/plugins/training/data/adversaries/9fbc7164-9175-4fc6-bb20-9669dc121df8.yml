@@ -1,0 +1,7 @@
+---
+
+id: 9fbc7164-9175-4fc6-bb20-9669dc121df8
+name: Blue Certification 4
+description: Fourth adversary for blue certification
+atomic_ordering:
+  - fc4715ac-758e-4ba9-9e52-d07ff3d22a74

@@ -1,0 +1,35 @@
+---
+- id: ba907d7a-b334-47e7-b652-4e481b5aa534
+  name: User Cron Jobs Baseline
+  description: Capture the cron jobs that exist at the start of the operation
+  tactic: setup
+  technique:
+    attack_id: x
+    name: x
+  platforms:
+    linux:
+      sh:
+        command: |
+          echo '' > /tmp/cron_jobs;
+          for user in $(getent passwd | cut -f1 -d:); do
+            $(crontab -u $user -l 2>/dev/null | grep -v '\#' | while read -r job; do
+              echo "${user}>${job}" >> /tmp/cron_jobs;
+            done);
+          done;
+          cat /tmp/cron_jobs | sort > /tmp/baseline_cronjobs_list.txt;
+          rm /tmp/cron_jobs;
+        cleanup: |
+          rm -f /tmp/baseline_cronjobs_list.txt
+    darwin:
+      sh:
+        command: |
+          echo '' > /tmp/cron_jobs;
+          for user in $(dscl . list /Users | grep -v "^_"); do
+            $(crontab -u $user -l 2>/dev/null | grep -v '\#' | while read -r job; do
+              echo "${user}>${job}" >> /tmp/cron_jobs;
+            done);
+          done;
+          cat /tmp/cron_jobs | sort > /tmp/baseline_cronjobs_list.txt;
+          rm /tmp/cron_jobs;
+        cleanup: |
+          rm -f /tmp/baseline_cronjobs_list.txt

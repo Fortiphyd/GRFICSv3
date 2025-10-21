@@ -1,0 +1,7 @@
+---
+
+id: 72c0b333-f6fe-4fa0-a342-4215e8de3947
+name: Blue Certification 1
+description: First adversary for blue certification
+atomic_ordering:
+  - 6d53c4a8-ecd3-4131-a7a2-704a5b43dd83

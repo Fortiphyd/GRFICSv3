@@ -1,0 +1,69 @@
+<html>
+	<head>
+		<title>Login | Caldera</title>
+		<link rel="shortcut icon" type="image/png" href="/gui/img/favicon.png"/>
+		<link rel="stylesheet" href="/gui/css/lib/custom-bulma.css">
+		<link rel="stylesheet" href="/gui/css/core.css">
+		<link href="/gui/css/lib/fa-all.min.css" rel="stylesheet">
+	</head>
+	<body>
+		<div class="container content is-flex is-flex-direction-column is-align-items-center is-justify-content-center">
+			<img src="/gui/img/caldera-logo.png">
+			<div class="wrapper">
+				<form action="/enter" method="POST">
+					<div class="field">
+						<label class="label">Username</label>
+						<div class="control has-icons-left">
+							<input class="input" type="text" placeholder="username" name="username">
+							<span class="icon is-small is-left">
+								<i class="fas fa-user"></i>
+							</span>
+						</div>
+					</div>
+					<div class="field">
+						<label class="label">Password</label>
+						<div class="control has-icons-left">
+							<input class="input" type="password" placeholder="password" name="password">
+							<span class="icon is-small is-left">
+								<i class="fas fa-lock"></i>
+							</span>
+						</div>
+					</div>
+					<button type="submit" class="button fancy-button is-fullwidth">Log In</button>
+				</form>
+			</div>
+		</div>
+	</body>
+
+	<style>
+		html,body,.container {
+			height: 100%;
+			background: #161616;
+		}
+
+		img {
+			width: 250px;
+			margin: 16px;
+		}
+
+		input:active, input:focus {
+			border-color: white !important;
+		}
+		input:focus {
+			box-shadow: 0 0 0 0.125em #FFFFFF50 !important;
+		}
+
+		.wrapper {
+			padding: 20px;
+		}
+
+	</style>
+
+	<script>
+        document.cookie.split(';').forEach((c) => {
+            document.cookie = c.replace(/^ +/, '').replace(/=.*/, `=;expires=${new Date().toUTCString()};path=/`);
+        });
+
+        // # sourceURL=login.js
+	</script>
+</html>

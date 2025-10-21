@@ -1,0 +1,35 @@
+---
+
+- id: 1b4fb81c-8090-426c-93ab-0a633e7a16a7
+  name: Sniff network traffic
+  description: Perform a packet capture
+  tactic: credential-access
+  technique:
+    attack_id: T1040
+    name: Network Sniffing
+  privilege: Elevated
+  platforms:
+    windows:
+      psh:
+        timeout: 80
+        command: |
+          $path = "$ENV:UserProfile\Desktop\pcap.etl";
+          New-NetEventSession -Name "PCAP" -CaptureMode SaveToFile -LocalFilePath $path;
+          Add-NetEventProvider -Name "Microsoft-Windows-TCPIP" -SessionName "PCAP";
+          Start-NetEventSession -Name "PCAP";
+          Start-Sleep -s 60;
+          Stop-NetEventSession -Name "PCAP";
+          if (Test-Path $path) {
+            echo $path;
+            exit 0;
+          } else {
+            echo "Failed to generate PCAP file.";
+            exit 1;
+          };
+        cleanup: |
+          Remove-NetEventSession -Name "PCAP";
+          Remove-Item $ENV:UserProfile\Desktop\pcap.etl;
+    darwin:
+      sh:
+        command: |
+          tcpdump -i en0 & sleep 5; kill $!

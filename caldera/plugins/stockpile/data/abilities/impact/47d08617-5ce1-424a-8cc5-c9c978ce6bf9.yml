@@ -1,0 +1,22 @@
+---
+
+- id: 47d08617-5ce1-424a-8cc5-c9c978ce6bf9
+  name: Leave note
+  description: Create a text file for the user to find
+  tactic: impact
+  technique:
+    attack_id: T1491
+    name: Defacement
+  platforms:
+    darwin:
+      sh:
+        command: |
+          echo "proof that this machine was hacked." > message.txt
+    linux:
+      sh:
+        command: |
+          echo "proof that this machine was hacked." > message.txt
+    windows:
+      psh:
+        command: |
+          Set-Content -Path 'message.txt' -Value 'proof that this machine was hacked.'

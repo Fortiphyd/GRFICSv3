@@ -1,0 +1,38 @@
+<div x-data="alpineSsl">
+    <div>
+        <h2>SSL</h2>
+        <p>
+            Add HTTPS to Caldera
+        </p>
+    </div>
+    <hr>
+    <div id="ssl-content" class="is-flex is-flex-direction-column is-align-items-center is-justify-content-center">
+        <p class="block" x-bind:class="{ 'has-text-success': isHttps, 'has-text-danger': !isHttps }">
+            You are 
+            <span x-show="!isHttps">not</span>
+            using Caldera over HTTPS
+        </p>
+
+        <p class="block">This plugin creates an HTTPS interface for Caldera, allowing users and agents to securely communicate with the server.</p>
+        
+        <a class="button is-primary is-small" href="/docs/Plugin-library.html#ssl" target="_blank">
+            <span>Setup Instructions</span>
+            <span class="icon"><em class="fas fa-angle-right"></em></span>
+        </a>
+    </div>
+</div>
+
+<script>
+function alpineSsl() {
+    return {
+        isHttps: location.protocol === 'https:'
+    }
+}
+</script>
+
+<style scoped>
+    #ssl-content {
+        height: 50%;
+        width: 100%;
+    }
+</style>

@@ -1,0 +1,20 @@
+---
+
+- id: 5c4dd985-89e3-4590-9b57-71fed66ff4e2
+  name: Permission Groups Discovery
+  description: Summary of permission and security groups
+  tactic: discovery
+  technique:
+    attack_id: T1069.001
+    name: "Permission Groups Discovery: Local Groups"
+  platforms:
+    windows:
+      psh:
+        command: |
+          gpresult /R
+    darwin:
+      sh:
+        command: groups
+    linux:
+      sh:
+        command: groups

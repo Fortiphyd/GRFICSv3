@@ -1,0 +1,50 @@
+- id: 10fad81e-3f68-47be-83b6-fbee7711c6a9
+  name: Advanced File Search and Stager
+  description: |
+    Highly configurable file finder and stager for Linux and Windows. Drops a payload file to the host to parse
+    arguments rather than running multiple commands for each fact (e.g., each file type). This ability allows for a safe
+    mode, only staging files found that have the appropriate file ending. The staging directory is configurable but
+    defaults to the current user's Recycle Bin (Windows) and /tmp (Linux). Payload files include default values for all
+    parameters (matching the base fact source - File Search and Stage). Options for searches: file extensions (include,
+    exclude [windows]), directories (include, exclude), accessed date cutoff, modified date cutoff, sensitive search
+    strings in files or titles.
+  tactic: collection
+  technique:
+    attack_id: T1119
+    name: Automated Collection
+  platforms:
+    windows:
+      psh:
+        command: |
+          .\file_search.ps1 -Extensions '#{windows.included.extensions}' -ExcludedExtensions '#{windows.excluded.extensions}'
+           -Directories '#{windows.included.directories}' -ExcludedDirectories '#{windows.excluded.directories}'
+           -AccessedCutoff #{file.last.accessed} -ModifiedCutoff #{file.last.modified}
+           -SearchStrings '#{file.sensitive.content}' -StagingDirectory '#{windows.staging.location}'
+           -SafeMode $#{safe.mode.enabled} -PseudoExtension #{pseudo.data.identifier}
+        timeout: 300
+        payloads:
+        - file_search.ps1
+        cleanup: |
+          if ('#{windows.staging.location}' -match "recycle[``|\s]+bin") {
+                 $sid = ([System.Security.Principal.WindowsIdentity]::GetCurrent()).User.Value;
+                 $StageDir = "C:\`$Recycle.Bin\$sid\s";
+          } else { $StageDir = '#{windows.staging.location}\s'; };
+          if (Test-Path -Path $StageDir) {Remove-Item -Force -Recurse $StageDir};
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: host.dir.staged
+    linux:
+      sh:
+        command: |
+          chmod +x ./file_search.sh; ./file_search.sh --extensions '#{linux.included.extensions}'
+           --directories '#{linux.included.directories}' --exclude-dir '#{linux.excluded.directories}'
+           --accessed '#{file.last.accessed}' --modified '#{file.last.modified}' --search-strings '#{file.sensitive.content}'
+           --staging-directory '#{linux.staging.location}' --safe-mode '#{safe.mode.enabled}' --pseudo-ext '#{pseudo.data.identifier}'
+        timeout: 300
+        payloads:
+          - file_search.sh
+        cleanup: |
+          if [ -d '#{linux.staging.location}' ]; then rm -rf '#{linux.staging.location}/.s'; fi;
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: host.dir.staged

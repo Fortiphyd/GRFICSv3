@@ -1,0 +1,17 @@
+---
+
+- id: 1c353eb4-29ab-4dfe-88ed-f34f5a60848e
+  name: File and Directory Discovery
+  description: Find or discover files on the file system
+  tactic: discovery
+  technique:
+    attack_id: T1083
+    name: File and Directory Discovery
+  platforms:
+    windows:
+      psh:
+        command: |
+          Get-ChildItem -Path #{host.system.path}
+  requirements:
+    - plugins.stockpile.app.requirements.paw_provenance:
+      - source: host.system.path

@@ -1,0 +1,43 @@
+- id: bf01fdc9-d801-4461-81df-e511efb3c1fc
+  name: Restore Modified Sensitive Directory
+  description: Restore sensitive directories with their backups if they have been modified
+  tactic: response
+  technique:
+    attack_id: x
+    name: x
+  repeatable: False
+  platforms:
+    linux:
+      sh:
+        command: |
+          directory="#{directory.sensitive.path}";
+          mkdir -p $directory;
+          rm -r ${directory}/*;
+          tar -xzf /tmp/sensitive_file_backups/#{directory.sensitive.backup} -C $directory;
+    darwin:
+      sh:
+        command: |
+          directory="#{directory.sensitive.path}";
+          mkdir -p $directory;
+          rm -r ${directory}/*;
+          tar -xzf /tmp/sensitive_file_backups/#{directory.sensitive.backup} -C $directory;
+    windows:
+      psh:
+        command: |
+          $directory = "#{directory.sensitive.path}";
+          New-Item -ItemType Directory -Force -Path $directory | Out-Null;
+          Remove-Item -Path "$($directory)\*" -Recurse -EA silentlycontinue;
+          Expand-Archive -LiteralPath "C:\Users\Public\sensitive_file_backups\#{directory.sensitive.backup}" -DestinationPath "$($directory)\";
+  requirements:
+    - plugins.response.app.requirements.has_property:
+        - source: directory.sensitive.path
+          edge: has_property
+          target: has_been_modified
+    - plugins.stockpile.app.requirements.basic:
+        - source: directory.sensitive.path
+          edge: has_backup
+          target: directory.sensitive.backup
+    - plugins.stockpile.app.requirements.paw_provenance:
+        - source: directory.sensitive.backup
+    - plugins.stockpile.app.requirements.paw_provenance:
+        - source: directory.sensitive.path

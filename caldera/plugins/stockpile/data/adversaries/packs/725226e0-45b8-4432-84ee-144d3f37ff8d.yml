@@ -1,0 +1,11 @@
+---
+
+id: 725226e0-45b8-4432-84ee-144d3f37ff8d
+name: |
+  Windows Worm #2
+description: Move laterally with WinRM and WinRM
+atomic_ordering:
+  - 85341c8c-4ecb-4579-8f53-43e3e91d7617 # arp -a
+  - fa4ed735-7006-4451-a578-b516f80e559f # nslookup
+  - 4908fdc4-74fc-4d7c-8935-26d11ad26a8d # winrm copy
+  - 41bb2b7a-75af-49fd-bd15-6c827df25921 # winrm exec

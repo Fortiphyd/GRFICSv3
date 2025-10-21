@@ -1,0 +1,25 @@
+
+# Start a child process
+my $pid = fork();
+if (-1 == $pid) { # Error
+        die "fork1: $!";
+}
+if (0 != $pid) { # the parent process terminates
+        exit 0;
+}
+# the child process becomes the parent process
+if (-1 == syscall(112)) {
+        die "setsid: $!";
+}
+# a child process (grandchild) starts
+$pid = fork();
+if (-1 == $pid) { # Error
+        die "fork2: $!";
+}
+if (0 != $pid) { # the child process terminates
+        exit 0;
+}
+# “grandchild” code   
+
+# execute process with environment set process name
+exec {"/proc/$$/fd/$fd"} $ENV{'SC_PROC_NAME'} or die "exec: $!";

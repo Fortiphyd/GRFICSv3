@@ -1,0 +1,23 @@
+---
+
+- id: 5a4cb2be-2684-4801-9355-3a90c91e0004
+  name: Network Service Scanning
+  description: Scans the local network for common open ports
+  tactic: discovery
+  technique:
+    attack_id: T1046
+    name: Network Service Scanning
+  platforms:
+    windows:
+      psh:
+        command: |
+          Import-Module ./basic_scanner.ps1;
+          $ports = @(22, 53, 80, 445);
+          Get-NetIPConfiguration | ?{$_.NetAdapter.Status -ne "Disconnected"} | Get-NetIPaddress -AddressFamily IPv4 | %{
+              $ipv4 = $_.IPAddress;
+              $prefixLength = $_.PrefixLength;
+              Scan-Netrange -ipv4 $ipv4 -prefixLength $prefixLength -ports $ports;
+          };
+        payloads:
+          - basic_scanner.ps1
+        timeout: 180

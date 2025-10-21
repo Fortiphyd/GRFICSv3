@@ -1,0 +1,28 @@
+---
+
+- id: 85341c8c-4ecb-4579-8f53-43e3e91d7617
+  name: Collect ARP details
+  description: Locate all active IP and FQDNs on the network
+  tactic: discovery
+  technique:
+    attack_id: T1018
+    name: Remote System Discovery
+  platforms:
+    darwin:
+      sh:
+        command: arp -a
+        parsers:
+          plugins.stockpile.app.parsers.ipaddr:
+            - source: remote.host.ip
+    linux:
+      sh:
+        command: arp -a
+        parsers:
+          plugins.stockpile.app.parsers.ipaddr:
+            - source: remote.host.ip
+    windows:
+      psh,cmd:
+        command: arp -a
+        parsers:
+          plugins.stockpile.app.parsers.ipaddr:
+            - source: remote.host.ip

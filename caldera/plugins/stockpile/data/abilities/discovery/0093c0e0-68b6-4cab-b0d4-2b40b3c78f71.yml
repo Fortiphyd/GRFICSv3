@@ -1,0 +1,17 @@
+---
+
+- id: 0093c0e0-68b6-4cab-b0d4-2b40b3c78f71
+  name: enumerate VMs
+  description: Enumerate running virtual machines on hypervisor
+  tactic: discovery
+  technique:
+    attack_id: T1057
+    name: Process Discovery
+  platforms:
+    linux:
+      sh:
+        command: |
+          acrnctl list
+        parsers:
+          plugins.stockpile.app.parsers.acrn:
+            - source: hypervisor.vm.name

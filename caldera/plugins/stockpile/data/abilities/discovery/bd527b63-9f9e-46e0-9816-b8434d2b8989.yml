@@ -1,0 +1,22 @@
+---
+
+- id: bd527b63-9f9e-46e0-9816-b8434d2b8989
+  name: Current User
+  description: Obtain user from current session
+  tactic: discovery
+  technique:
+    attack_id: T1033
+    name: System Owner/User Discovery
+  platforms:
+    darwin:
+      sh:
+        command: |
+          whoami
+    linux:
+      sh:
+        command: |
+          whoami
+    windows:
+      psh:
+        command: |
+          whoami

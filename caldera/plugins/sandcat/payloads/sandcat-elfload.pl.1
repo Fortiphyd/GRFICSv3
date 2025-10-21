@@ -1,0 +1,17 @@
+#!/usr/bin/env perl
+
+use warnings;
+use strict;
+
+# Create RAMFS through memfd_create
+my $name = "";
+my $fd = syscall(319, $name, 1);
+if ($fd == -1) {
+    die "memfd_create: $!"
+}
+
+#open fd handle
+open(my $FH, '>&='.$fd) or die "open: $!";
+select((select($FH), $|=1)[0]);
+
+# embedded file goes here

@@ -1,0 +1,33 @@
+- id: 90a67a85-e81c-4525-8bae-12a2c5787d9a
+  name: Hash Powershell Profiles
+  description: This ability creates file hashes of Powershell profiles, creating the profiles themselves if they do not exist.
+  tactic: setup
+  technique:
+    attack_id: x
+    name: x
+  repeatable: False
+  platforms:
+    windows:
+      psh:
+        command: |
+          $files = @("$Profile", "$PsHome\Profile.ps1", "$PsHome\Microsoft.Powershell_profile.ps1");
+          $output = @();
+          ForEach ($file in $files) {
+            if (-not (Test-Path $file)) {
+              New-Item -Path $file -ItemType File | Out-Null;
+            };
+            $output += $(Get-FileHash $file -EA silentlycontinue | foreach-object {$_.Path + '>' + $_.Hash});
+          };
+          $output
+        parsers:
+          plugins.response.app.parsers.key_value:
+            - source: file.sensitive.path
+              edge: has_hash
+              target: file.sensitive.hash
+        cleanup: |
+          $files = @("$Profile", "$PsHome\Profile.ps1", "$PsHome\Microsoft.Powershell_profile.ps1");
+          ForEach ($file in $files) {
+            if ((Get-Content $file -EA silentlycontinue) -eq $Null) {
+              Remove-Item -Path $file -Force -EA silentlycontinue;
+            };
+          }

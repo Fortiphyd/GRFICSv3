@@ -1,0 +1,41 @@
+---
+
+- id: 300157e5-f4ad-4569-b533-9d1fa0e74d74
+  name: Compress staged directory
+  description: Compress a directory on the file system
+  tactic: exfiltration
+  technique:
+    attack_id: T1560.001
+    name: "Archive Collected Data: Archive via Utility"
+  platforms:
+    darwin:
+      sh:
+        command: |
+          tar -P -zcf #{host.dir.staged}.tar.gz #{host.dir.staged} && echo #{host.dir.staged}.tar.gz
+        cleanup: |
+          rm #{host.dir.staged}.tar.gz
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: host.dir.compress
+    linux:
+      sh:
+        command: |
+          tar -P -zcf #{host.dir.staged}.tar.gz #{host.dir.staged} && echo #{host.dir.staged}.tar.gz
+        cleanup: |
+          rm #{host.dir.staged}.tar.gz
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: host.dir.compress
+    windows:
+      psh,pwsh:
+        command: |
+          Compress-Archive -Path #{host.dir.staged} -DestinationPath #{host.dir.staged}.zip -Force;
+          sleep 1; ls #{host.dir.staged}.zip | foreach {$_.FullName} | select
+        cleanup: |
+          rm #{host.dir.staged}.zip
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: host.dir.compress
+  requirements:
+    - plugins.stockpile.app.requirements.paw_provenance:
+      - source: host.dir.staged

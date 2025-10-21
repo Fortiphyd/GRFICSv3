@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="/training/css/markdown.css"/>
+    <link rel="stylesheet" href="/training/css/training.css"/>
+    <title>Solution Guide: {{ certificate.name }}</title>
+</head>
+<body class="solution-content">
+
+<h1>Certificate Solution Guide: {{ certificate.name }}</h1>
+<p>Below are instructions for completing all flags within the <i>{{ certificate.name }}</i> training certification.</p>
+
+{% for badge in certificate.badges %}
+    {% for flag in badge.flags %}
+        <h2>{{ flag.number }}. {{ flag.name }}</h2>
+        <p>{{ flag.challenge }}</p>
+        {% if flag.has_solution_guide %}
+            <div class="markdown-body">
+                {{ flag.solution_guide_as_html() | safe }}
+            </div>
+        {% else %}
+            <p>No solution guide exists for this flag.</p>
+        {% endif %}
+    {% endfor %}
+{% endfor %}
+
+</body>
+</html>

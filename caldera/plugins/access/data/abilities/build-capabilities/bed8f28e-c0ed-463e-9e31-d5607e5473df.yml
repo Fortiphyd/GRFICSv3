@@ -1,0 +1,16 @@
+---
+- id: bed8f28e-c0ed-463e-9e31-d5607e5473df
+  name: Load Metasploit Abilities
+  description: Load Metasploit Abilities
+  tactic: build-capabilities
+  technique:
+    name: Build or acquire exploits
+    attack_id: T1349
+  platforms:
+    darwin,linux:
+      sh:
+        command: |
+          msfconsole -r msf_extract.rb #{app.contact.http} #{app.api_key.red}
+        timeout: 1000
+        payloads:
+          - msf_extract.rb

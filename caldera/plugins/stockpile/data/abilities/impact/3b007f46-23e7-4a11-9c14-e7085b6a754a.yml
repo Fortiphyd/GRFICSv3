@@ -1,0 +1,14 @@
+---
+
+- id: 3b007f46-23e7-4a11-9c14-e7085b6a754a
+  name: Quit Outlook
+  description: Quit Outlook
+  tactic: impact
+  technique:
+    attack_id: T1489
+    name: Service Stop
+  platforms:
+    darwin:
+      osa:
+        command: |
+          quit app "Microsoft Outlook.app"

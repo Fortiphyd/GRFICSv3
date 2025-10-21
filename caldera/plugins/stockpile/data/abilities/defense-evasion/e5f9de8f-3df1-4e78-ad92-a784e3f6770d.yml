@@ -1,0 +1,17 @@
+---
+- id: e5f9de8f-3df1-4e78-ad92-a784e3f6770d
+  name: Move Powershell & triage
+  description: Copy powershell to non-standard location and perform triage commands
+  tactic: defense-evasion
+  technique:
+    attack_id: T1059.001
+    name: PowerShell
+  platforms:
+    windows:
+      psh:
+        command: |
+          Copy-Item C:\Windows\system32\WindowsPowerShell\v1.0\powershell.exe C:\Windows\Temp\debug.exe;
+          C:\Windows\Temp\debug.exe get-process >> C:\Windows\temp\debug.log;
+          C:\Windows\Temp\debug.exe get-localgroup >> C:\Windows\temp\debug.log;
+          C:\Windows\Temp\debug.exe get-localuser >> C:\Windows\temp\debug.log;
+          C:\Windows\Temp\debug.exe Get-ItemProperty Registry::HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion >> C:\Windows\temp\debug.log;

@@ -1,0 +1,10 @@
+adversary_id: 1bac97ca-77fc-4c9a-835e-4de1b1b7f639
+name: Lateral Movement - Esentutl
+description: Discovers other hosts on the domain and moves binary agents using LoL
+  to disguise implant as `splunk.log` on remote host to take advantage of ADS
+atomic_ordering:
+- 74d1b640-7f1e-4b36-beba-23a8228f39e0 # Local FQDN
+- 13379ae1-d20e-4162-91f8-320d78a35e7f # Discover local hosts
+- 22881b9d-0efa-4ef4-9704-df0f11170cc3 # Lateral Movement - esentutl
+objective: 495a9828-cab1-44dd-a0ca-66e58177d8cc
+tags: []

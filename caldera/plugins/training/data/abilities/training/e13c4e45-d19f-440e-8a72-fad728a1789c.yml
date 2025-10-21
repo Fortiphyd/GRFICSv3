@@ -1,0 +1,13 @@
+---
+- id: e13c4e45-d19f-440e-8a72-fad728a1789c
+  name: Delete Pretend Malicious Mail
+  description: Delete previously stored pretend malicious mail
+  tactic: training
+  technique:
+    attack_id: x
+    name: x
+  platforms:
+    linux:
+      sh:
+        command: |
+          rm -f /var/mail/victim

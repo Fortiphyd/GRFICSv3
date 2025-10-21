@@ -1,0 +1,31 @@
+---
+
+- id: fa6e8607-e0b1-425d-8924-9b894da5a002
+  name: Get System Time
+  description: get current system time (ISO 8601)
+  tactic: discovery
+  technique:
+    attack_id: T1124
+    name: System Time Discovery
+  platforms:
+    darwin:
+      sh:
+        command: |
+          date -u +"%Y-%m-%dT%H:%M:%SZ"
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: host.current.time
+    linux:
+      sh:
+        command: |
+          date -u +"%Y-%m-%dT%H:%M:%SZ"
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: host.current.time
+    windows:
+      psh:
+        command: |
+          Get-Date -UFormat '+%Y-%m-%dT%H:%M:%SZ'
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: host.current.time

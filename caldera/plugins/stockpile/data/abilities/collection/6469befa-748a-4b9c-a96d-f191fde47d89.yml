@@ -1,0 +1,37 @@
+---
+
+- id: 6469befa-748a-4b9c-a96d-f191fde47d89
+  name: Create staging directory
+  description: create a directory for exfil staging
+  tactic: collection
+  technique:
+    attack_id: T1074.001
+    name: "Data Staged: Local Data Staging"
+  platforms:
+    darwin:
+      sh:
+        command: |
+          mkdir -p staged && echo $PWD/staged
+        cleanup: |
+          rm -rf staged
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: host.dir.staged
+    linux:
+      sh:
+        command: |
+          mkdir -p staged && echo $PWD/staged
+        cleanup: |
+          rm -rf staged
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: host.dir.staged
+    windows:
+      psh,pwsh:
+        command: |
+          New-Item -Path "." -Name "staged" -ItemType "directory" -Force | foreach {$_.FullName} | Select-Object
+        cleanup: |
+          Remove-Item -Path "staged" -recurse
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: host.dir.staged

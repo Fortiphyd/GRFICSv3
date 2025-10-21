@@ -1,0 +1,13 @@
+---
+
+id: 0b73bf34-fc5b-48f7-9194-dce993b915b1
+name: Nosy Neighbor
+description: Find preferred WIFI networks & disrupt the current connection
+atomic_ordering:
+  - 43b3754c-def4-4699-a673-1d85648fda6a
+  - c0da588f-79f0-4263-8998-7496b1a40596
+  - 85341c8c-4ecb-4579-8f53-43e3e91d7617
+  - 5a39d7ed-45c9-4a79-b581-e5fb99e24f65
+  - 9a30740d-3aa8-4c23-8efa-d51215e8a5b9
+  - a0676fe1-cd52-482e-8dde-349b73f9aa69
+  - 2fe2d5e6-7b06-4fc0-bf71-6966a1226731

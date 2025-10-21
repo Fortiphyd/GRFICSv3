@@ -1,0 +1,14 @@
+---
+
+- id: fdf8bf36-797f-4157-805b-fe7c1c6fc903
+  name: Find Hostname
+  description: Find hostname of remote host
+  tactic: discovery
+  technique:
+    attack_id: T1018
+    name: Remote System Discovery
+  platforms:
+    windows:
+      psh:
+        command: |
+          nbtstat -A #{remote.host.ip}

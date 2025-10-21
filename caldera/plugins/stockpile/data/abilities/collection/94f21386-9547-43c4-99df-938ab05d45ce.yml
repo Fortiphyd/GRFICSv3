@@ -1,0 +1,15 @@
+---
+
+- id: 94f21386-9547-43c4-99df-938ab05d45ce
+  name: WMIC Process Enumeration
+  description: Capture process id, executable path, pid and parent pid before writing to disk
+  tactic: collection
+  technique:
+    attack_id: T1047
+    name: WMIC
+  platforms:
+    windows:
+      psh:
+        command: |
+            wmic process get executablepath,name,processid,parentprocessid >> $env:APPDATA\vmtools.log;
+            cat $env:APPDATA\vmtools.log

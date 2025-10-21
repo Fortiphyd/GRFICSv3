@@ -1,0 +1,22 @@
+- id: cb85039a-6196-4262-883b-0beeb804b83d
+  name: Enable Outbound TCP/UDP firewall rule
+  description: Blocks outbound TCP and UDP traffic on a specific port
+  privilege: Elevated
+  tactic: response
+  technique:
+    attack_id: T1065
+    name: Uncommonly Used Port
+  platforms:
+    windows:
+      psh, pwsh:
+        command: |
+          New-NetFirewallRule -DisplayName "Block out-bound UDP traffic to port #{remote.port.unauthorized} from PID #{host.pid.unauthorized}" -Group "Caldira" -Direction Outbound -Protocol UDP -Action Block -RemotePort #{remote.port.unauthorized};
+          New-NetFirewallRule -DisplayName "Block out-bound TCP traffic to port #{remote.port.unauthorized} from PID #{host.pid.unauthorized}" -Group "Caldira" -Direction Outbound -Protocol TCP -Action Block -RemotePort #{remote.port.unauthorized};
+        cleanup: |
+          Remove-NetFirewallRule -DisplayName "Block out-bound UDP traffic to port #{remote.port.unauthorized} from PID #{host.pid.unauthorized}";
+          Remove-NetFirewallRule -DisplayName "Block out-bound TCP traffic to port #{remote.port.unauthorized} from PID #{host.pid.unauthorized}";
+  requirements:
+    - plugins.response.app.requirements.basic:
+        - source: remote.port.unauthorized
+          edge: has_pid
+          target: host.pid.unauthorized

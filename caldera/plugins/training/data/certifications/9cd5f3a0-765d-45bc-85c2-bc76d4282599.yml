@@ -1,0 +1,32 @@
+id: 9cd5f3a0-765d-45bc-85c2-bc76d4282599
+name: User Certificate
+description: "Basic user certificate."
+badges:
+  agents:
+    - flags.agents.flag_0.AgentsFlag0
+    - flags.agents.flag_1.AgentsFlag1
+    - flags.agents.flag_2.AgentsFlag2
+    - flags.agents.flag_3.AgentsFlag3
+    - flags.agents.flag_4.AgentsFlag4
+    - flags.agents.flag_5.AgentsFlag5
+    - flags.agents.flag_6.AgentsFlag6
+    - flags.agents.flag_7.AgentsFlag7
+  adversaries:
+    - flags.adversaries.flag_0.AdversariesFlag0
+    - flags.adversaries.flag_1.AdversariesFlag1
+    - flags.adversaries.flag_2.AdversariesFlag2
+  operations:
+    - flags.operations.flag_0.OperationsFlag0
+    - flags.operations.flag_1.OperationsFlag1
+    - flags.operations.flag_2.OperationsFlag2
+    - flags.operations.flag_3.OperationsFlag3
+  advanced:
+    - flags.advanced.flag_0.AdvancedFlag0
+    - flags.advanced.flag_1.AdvancedFlag1
+    - flags.advanced.flag_2.AdvancedFlag2
+  manx:
+    - flags.plugins.manx.flag_0.PluginsManxFlag0
+    - flags.plugins.manx.flag_1.PluginsManxFlag1
+  response:
+    - flags.plugins.response.flag_0.PluginsResponseFlag0
+    - flags.plugins.response.flag_1.PluginsResponseFlag1

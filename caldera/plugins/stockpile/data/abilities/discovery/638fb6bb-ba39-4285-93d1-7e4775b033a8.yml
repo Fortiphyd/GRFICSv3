@@ -1,0 +1,22 @@
+---
+- id: 638fb6bb-ba39-4285-93d1-7e4775b033a8
+  name: Find System Network Connections
+  description: Find System Network Connections
+  tactic: discovery
+  technique:
+    attack_id: T1049
+    name: System Network Connections Discovery
+  platforms:
+    darwin:
+      sh:
+        command: |
+          netstat -anto
+    linux:
+      sh:
+        command: |
+          netstat -anto
+    windows:
+      psh:
+        command: |
+          netstat -anto;
+          Get-NetTCPConnection

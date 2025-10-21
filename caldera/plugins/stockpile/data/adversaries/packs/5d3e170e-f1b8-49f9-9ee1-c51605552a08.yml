@@ -1,0 +1,10 @@
+---
+
+id: 5d3e170e-f1b8-49f9-9ee1-c51605552a08
+name: Collection
+description: A collection adversary
+atomic_ordering:
+    - 1f7ff232-ebf8-42bf-a3c4-657855794cfe #find company emails
+    - d69e8660-62c9-431e-87eb-8cf6bd4e35cf #find ip addresses
+    - 90c2efaa-8205-480d-8bb6-61d90dbaf81b #find sensitive files
+    - 6469befa-748a-4b9c-a96d-f191fde47d89 #create staging dir

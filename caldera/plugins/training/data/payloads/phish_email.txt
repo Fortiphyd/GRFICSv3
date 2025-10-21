@@ -1,0 +1,12 @@
+From hacker@badguys.com
+Return-Path: <hacker@badguys.com>
+X-Original-To: victim@localhost
+Delivered-To: victim@localhost
+Received: by localhost
+Subject: Phish
+From: hacker@badguys.com
+To: <victim@localhost>
+X-Mailer: Caldera
+Message-Id: <9e8ebd8b-93b4-4704-96e2-e7ecfcd381dd@localhost>
+
+Hello from your friendly neighborhood phisherman!

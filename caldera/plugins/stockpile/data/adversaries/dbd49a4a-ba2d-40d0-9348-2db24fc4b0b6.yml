@@ -1,0 +1,10 @@
+---
+
+id: dbd49a4a-ba2d-40d0-9348-2db24fc4b0b6
+name: Service Creation Lateral Movement
+description: Lateral movement via SMB copy and execution via creation of Windows service "sandsvc"
+objective: 495a9828-cab1-44dd-a0ca-66e58177d8cc
+atomic_ordering:
+  - deeac480-5c2a-42b5-90bb-41675ee53c7e
+  - 65048ec1-f7ca-49d3-9410-10813e472b30
+  - 95727b87-175c-4a69-8c7a-a5d82746a753

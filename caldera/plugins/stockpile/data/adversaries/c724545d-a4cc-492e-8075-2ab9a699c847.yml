@@ -1,0 +1,8 @@
+description: This adversary consists of several abilities to bypass UAC on an updated Windows 10 system
+id: c724545d-a4cc-492e-8075-2ab9a699c847
+name: You Shall (Not) Bypass
+atomic_ordering:
+  - 665432a4-42e7-4ee1-af19-a9a8c9455d0c
+  - 95ad5d69-563e-477b-802b-4855bfb3be09
+  - e99cce5c-cb7e-4a6e-8a09-1609a221b90a
+  - e3db134c-4aed-4c5a-9607-c50183c9ef9e

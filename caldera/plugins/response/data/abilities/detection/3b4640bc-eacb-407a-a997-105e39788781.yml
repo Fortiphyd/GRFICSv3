@@ -1,0 +1,37 @@
+---
+- id: 3b4640bc-eacb-407a-a997-105e39788781
+  name: Find unauthorized processes
+  description: Search for processes which should not be on the host
+  tactic: detection
+  technique:
+    attack_id: x
+    name: x
+  repeatable: True
+  platforms:
+    darwin:
+      sh:
+        command: |
+          ps aux | grep -v grep | grep #{remote.port.unauthorized} | awk '{print $2}'
+        parsers:
+          plugins.response.app.parsers.process:
+            - source: remote.port.unauthorized
+              edge: has_pid
+              target: host.pid.unauthorized
+    linux:
+      sh:
+        command: |
+          ps aux | grep -v grep | grep #{remote.port.unauthorized} | awk '{print $2}'
+        parsers:
+          plugins.response.app.parsers.process:
+            - source: remote.port.unauthorized
+              edge: has_pid
+              target: host.pid.unauthorized
+    windows:
+      psh,pwsh:
+        command: |
+          Get-NetTCPConnection -RemotePort "#{remote.port.unauthorized}" -EA silentlycontinue | where-object { write-host $_.OwningProcess }
+        parsers:
+          plugins.response.app.parsers.process:
+            - source: remote.port.unauthorized
+              edge: has_pid
+              target: host.pid.unauthorized

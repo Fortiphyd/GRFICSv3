@@ -1,0 +1,19 @@
+---
+
+id: 48e1a882-1606-4910-8f2d-2352eb80cba2.yml
+name: bayes
+description: |
+  The Bayes planner decides which links and abilities to execute at each step of the operation, by using statistics from past Caldera operational data (previously executed actions/abilities). It utilizes the user-controlled parameters of minimum probability of link success and minimum link data (set in 48e1a882-1606-4910-8f2d-2352eb80cba2.yml) to make decisions adaptable to user criteria and execute only links with the necessary confidence and data significance. Operations are automatically executed in order of links' probability of success (high to low), with links with insufficient data executing last and links with sufficient past data but an insufficient likelihood of success (based on past data) being dropped altogether. The NB planner allows for execution of operations with high confidence in each link and automatic prioritizing of more effective abilities. 
+module: plugins.stockpile.app.planners.bayes
+ignore_enforcement_modules: []
+allow_repeatable_abilities: False
+params:
+  min_prob_link_success : 0.49
+   # minimum calculated likelihood of success necessary to run a link (action)
+  min_link_data: 3
+   # minimum number of past links (executed actions/abilities) required for bayes probabilistic reasoning to be applied to an ability.
+  debug: False
+   # when True then planner logs link selection logic in DEBUG level system output
+  delay_execution_links: ["300157e5-f4ad-4569-b533-9d1fa0e74d74"]
+   # link ids of links that should be treated as insufficient data and defaulted back to atomic 
+   # order execution (back of queue) for better operation ordering. Currently contains: 'compress staged directory'

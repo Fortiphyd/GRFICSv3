@@ -1,0 +1,14 @@
+---
+
+- id: 2946edba-54d8-11eb-ae93-0242ac130002
+  name: Password Policy for a domain
+  description: Password Policy Discovery for a domain
+  tactic: discovery
+  technique:
+    attack_id: T1201
+    name: Password Policy Discovery for a domain
+  platforms:
+    windows:
+      psh:
+        command: |
+          net accounts /domain

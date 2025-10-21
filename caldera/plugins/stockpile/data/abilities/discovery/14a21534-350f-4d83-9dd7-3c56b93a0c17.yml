@@ -1,0 +1,17 @@
+---
+
+- id: 14a21534-350f-4d83-9dd7-3c56b93a0c17
+  name: Find Domain
+  description: Find Domain information
+  tactic: discovery
+  technique:
+    attack_id: T1016
+    name: System Network Configuration Discovery
+  platforms:
+    windows:
+      psh:
+        command: |
+          nbtstat -n
+        parsers:
+          plugins.stockpile.app.parsers.nbtstat:
+            - source: network.domain.name

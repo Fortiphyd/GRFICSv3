@@ -1,0 +1,18 @@
+---
+
+- id: 5f77ecf9-613f-4863-8d2f-ed6b447a4633
+  name: Parse SSH known_hosts
+  description: View the known_hosts file
+  tactic: discovery
+  technique:
+    attack_id: T1018
+    name: Remote System Discovery
+  platforms:
+    darwin:
+      sh:
+        command: |
+          cat ~/.ssh/known_hosts
+    linux:
+      sh:
+        command: |
+          cat ~/.ssh/known_hosts

@@ -1,0 +1,168 @@
+---
+
+- id: 7a6ba833-de40-466a-8969-5c37b13603e0
+  name: 'Check analysis environment processes'
+  description: 'Check for analysis/sandbox environment processes. Process black list is based on the SUNBURST malware observed in a Solarwinds related compromise (https://research.checkpoint.com/2020/sunburst-teardrop-and-the-netsec-new-normal/).'
+  tactic: defense-evasion
+  technique:
+    attack_id: T1497.001
+    name: 'Virtualization/Sandbox Evasion: System Checks'
+  platforms:
+    windows:
+      psh:
+        command: |
+          $forensicProcesses = @(
+              "apimonitor-x64",
+              "apimonitor-x86",
+              "autopsy64",
+              "autopsy",
+              "autoruns64",
+              "autoruns",
+              "autorunsc64",
+              "autorunsc",
+              "binaryninja",
+              "blacklight",
+              "cff explorer",
+              "cutter",
+              "de4dot",
+              "debugview",
+              "diskmon",
+              "dnsd",
+              "dnspy",
+              "dotpeek32",
+              "dotpeek64",
+              "dumpcap",
+              "evidence center",
+              "exeinfope",
+              "fakedns",
+              "fakenet",
+              "ffdec",
+              "fiddler",
+              "fileinsight",
+              "floss",
+              "gdb",
+              "hiew32demo",
+              "hiew32",
+              "hollows_hunter",
+              "idaq64",
+              "idaq",
+              "idr",
+              "ildasm",
+              "ilspy",
+              "jd-gui",
+              "lordpe",
+              "officemalscanner",
+              "ollydbg",
+              "pdfstreamdumper",
+              "pe-bear",
+              "pebrowse64",
+              "peid",
+              "pe-sieve32",
+              "pe-sieve64",
+              "pestudio",
+              "peview",
+              "ppee",
+              "procdump64",
+              "procdump",
+              "processhacker",
+              "procexp64",
+              "procexp",
+              "procmon",
+              "prodiscoverbasic",
+              "py2exedecompiler",
+              "r2agent",
+              "rabin2",
+              "radare2",
+              "ramcapture64",
+              "ramcapture",
+              "reflector",
+              "regmon",
+              "resourcehacker",
+              "retdec-ar-extractor",
+              "retdec-bin2llvmir",
+              "retdec-bin2pat",
+              "retdec-config",
+              "retdec-fileinfo",
+              "retdec-getsig",
+              "retdec-idr2pat",
+              "retdec-llvmir2hll",
+              "retdec-macho-extractor",
+              "retdec-pat2yara",
+              "retdec-stacofin",
+              "retdec-unpacker",
+              "retdec-yarac",
+              "rundotnetdll",
+              "sbiesvc",
+              "scdbg",
+              "scylla_x64",
+              "scylla_x86",
+              "shellcode_launcher",
+              "solarwindsdiagnostics",
+              "sysmon64",
+              "sysmon",
+              "task explorer",
+              "task explorer-x64",
+              "tcpdump",
+              "tcpvcon",
+              "tcpview",
+              "vboxservice",
+              "win32_remote",
+              "win64_remotex64",
+              "windbg",
+              "windump",
+              "winhex64",
+              "winhex",
+              "winobj",
+              "wireshark",
+              "x32dbg",
+              "x64dbg",
+              "xwforensics64",
+              "xwforensics",
+              "redcloak",
+              "avgsvc",
+              "avgui",
+              "avgsvca",
+              "avgidsagent",
+              "avgsvcx",
+              "avgwdsvcx",
+              "avgadminclientservice",
+              "afwserv",
+              "avastui",
+              "avastsvc",
+              "aswidsagent",
+              "aswidsagenta",
+              "aswengsrv",
+              "avastavwrapper",
+              "bccavsvc",
+              "psanhost",
+              "psuaservice",
+              "psuamain",
+              "avp",
+              "avpui",
+              "ksde",
+              "ksdeui",
+              "tanium",
+              "taniumclient",
+              "taniumdetectengine",
+              "taniumendpointindex",
+              "taniumtracecli",
+              "taniumtracewebsocketclient64"
+          );
+
+          function Find-ForensicProcesses {
+              param (
+                  $ForensicProcessList
+              );
+              $CurrentProcesses = Get-Process | Sort-Object | Select-Object -Property Name | Get-Unique -AsString;
+              foreach ($proc in $CurrentProcesses) {
+                  foreach ($forensicProc in $ForensicProcessList) {
+                      if ($proc.name -like $forensicProc) {
+                          $procPath = Get-Process -Name $proc.Name | Sort-Object | Select-Object -Property Path | Get-Unique;
+                          Write-Host "[!] Forensic process found: " $proc.Name;
+                          Write-Host "[!] Path: " $procPath.Path;
+                      }
+                  }
+              }
+          }
+
+          Find-ForensicProcesses($forensicProcesses);

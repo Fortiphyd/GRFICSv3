@@ -1,0 +1,20 @@
+---
+
+- id: 2331077e-7be9-4e89-b2bb-32e8d7f6a708
+  name: Collect Parent's Child Proccesses
+  description: Collect all process creation events with the given parent process GUID
+  tactic: response
+  technique:
+    attack_id: x
+    name: Query Event Logs
+  platforms:
+    windows:
+      psh:
+        timeout: 300
+        command: |
+          $time_range = (Get-Date) - (New-TimeSpan -Seconds $(#{sysmon.time.range}/1000));
+          Get-WinEvent -FilterHashTable @{ Logname='Microsoft-Windows-Sysmon/Operational'; StartTime=$time_range; Id=1 } | where -Property Message -Match "\bParentProcessGuid: {#{host.process.parentguid}}" | Format-List;
+      cmd:
+        timeout: 300
+        command: |
+          wevtutil qe Microsoft-Windows-Sysmon/Operational /q:"*/System/TimeCreated[timediff(@SystemTime) <= #{sysmon.time.range}] and */System/EventID=1 and */EventData/Data[@Name='ParentProcessGuid']='#{host.process.parentguid}'" /f:text

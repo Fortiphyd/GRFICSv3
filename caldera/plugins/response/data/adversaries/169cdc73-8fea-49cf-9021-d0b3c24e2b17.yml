@@ -1,0 +1,12 @@
+id: 169cdc73-8fea-49cf-9021-d0b3c24e2b17
+name: Task Hunter
+objective: 495a9828-cab1-44dd-a0ca-66e58177d8cc
+description: Profile to remove illegitimate Cron Jobs and Scheduled Tasks. Run operations
+  that use this profile with the batch planner.
+atomic_ordering:
+  - ba907d7a-b334-47e7-b652-4e481b5aa534
+  - a65a62e1-b8c0-4f88-b564-166e7499d560
+  - ee54384f-cfbc-4228-9dc1-cc5632307afb
+  - 8bc73098-54d1-4f69-abd5-271e3e2da5df
+  - 32e563bb-ba06-4bcc-b817-fc2c434c0b66
+  - 4744d99f-5fea-42a8-8ec4-c228db57caea

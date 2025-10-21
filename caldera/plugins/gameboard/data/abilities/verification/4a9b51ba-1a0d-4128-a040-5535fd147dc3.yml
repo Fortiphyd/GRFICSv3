@@ -1,0 +1,14 @@
+---
+
+- id: 4a9b51ba-1a0d-4128-a040-5535fd147dc3
+  name: GameBoard Plugin Manual Detection - PID
+  description: GameBoard plugin pid detection placeholder ability
+  tactic: verification
+  technique:
+    attack_id: x
+    name: x
+  platforms:
+    windows:
+      psh:
+        command: |
+          ;

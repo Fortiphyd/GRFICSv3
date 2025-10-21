@@ -1,0 +1,19 @@
+- id: 68235976-2404-42a8-9105-68230cfef562
+  name: Invoke-MemeKatz
+  description: Downloads random meme and sets as desktop background
+  tactic: impact
+  technique:
+    attack_id: T1491
+    name: Defacement
+  platforms:
+    windows:
+      psh,pwsh:
+        command: |
+          .\Invoke-MemeKatz.ps1
+        payloads:
+        - Invoke-MemeKatz.ps1
+      cmd:
+        command: |
+          powershell.exe -ep bypass -c "Invoke-MemeKatz.ps1"
+        payloads:
+        - Invoke-MemeKatz.ps1

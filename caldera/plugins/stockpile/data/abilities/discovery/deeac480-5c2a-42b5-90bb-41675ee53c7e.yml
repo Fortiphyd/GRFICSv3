@@ -1,0 +1,25 @@
+---
+
+- id: deeac480-5c2a-42b5-90bb-41675ee53c7e
+  name: View remote shares
+  description: View the shares of a remote host
+  tactic: discovery
+  technique:
+    attack_id: T1135
+    name: Network Share Discovery
+  platforms:
+    windows:
+      psh:
+        command: net view \\#{remote.host.fqdn} /all
+        parsers:
+          plugins.stockpile.app.parsers.net_view:
+          - source: remote.host.fqdn
+            edge: has_share
+            target: remote.host.share
+      cmd:
+        command: net view \\#{remote.host.fqdn} /all
+        parsers:
+          plugins.stockpile.app.parsers.net_view:
+          - source: remote.host.fqdn
+            edge: has_share
+            target: remote.host.share

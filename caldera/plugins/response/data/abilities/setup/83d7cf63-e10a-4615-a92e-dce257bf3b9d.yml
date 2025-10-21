@@ -1,0 +1,36 @@
+- id: 83d7cf63-e10a-4615-a92e-dce257bf3b9d
+  name: Backup Powershell Profiles
+  description: This ability creates backups of Powershell profiles, creating the profiles themselves if they do not exist.
+  tactic: setup
+  technique:
+    attack_id: x
+    name: x
+  repeatable: False
+  platforms:
+    windows:
+      psh:
+        command: |
+          $files = @("$Profile", "$PsHome\Profile.ps1", "$PsHome\Microsoft.Powershell_profile.ps1");
+          New-Item -ItemType Directory -Force -Path C:\Users\Public\sensitive_file_backups | Out-Null;
+          $output = '';
+          ForEach ($file in $files) {
+            if (-not (Test-Path $file)) {
+              New-Item -Path $file -ItemType File | Out-Null;
+            };
+            $randname = -join (( 0x41..0x5A) + ( 0x61..0x7A) | Get-Random -Count 13 | % {[char]$_});
+            Copy-Item $file -Destination "C:\Users\Public\sensitive_file_backups\$randname";
+            $output = "$($output)$($file)>$($randname)`n"
+          };
+          $output
+        parsers:
+          plugins.response.app.parsers.key_value:
+            - source: file.sensitive.path
+              edge: has_backup
+              target: file.backup.name
+        cleanup: |
+          $files = @("$Profile", "$PsHome\Profile.ps1", "$PsHome\Microsoft.Powershell_profile.ps1");
+          ForEach ($file in $files) {
+            if ((Get-Content $file -EA silentlycontinue) -eq $Null) {
+              Remove-Item -Path $file -Force -EA silentlycontinue;
+            };
+          }

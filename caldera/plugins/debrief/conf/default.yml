@@ -1,0 +1,6 @@
+---
+
+# List of hosts trusted for remote content. Supports glob wildcards.
+# Leaving this empty means no hosts restrictions are applied
+# see: https://www.reportlab.com/docs/reportlab-userguide.pdf
+reportlab_trusted_hosts: []

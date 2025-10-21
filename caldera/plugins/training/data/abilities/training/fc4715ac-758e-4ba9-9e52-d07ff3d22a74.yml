@@ -1,0 +1,29 @@
+---
+- id: fc4715ac-758e-4ba9-9e52-d07ff3d22a74
+  name: Add New Cronjob/Scheduled Task
+  description: Certification ability to create a new cronjob or scheduled task
+  tactic: training
+  technique:
+    attack_id: x
+    name: x
+  platforms:
+    linux:
+      sh:
+        command: |
+          crontab -l > new_crontab;
+          echo '0 * * * * /bin/echo bad_cronjob' >> new_crontab;
+          crontab new_crontab;
+          rm -f new_crontab;
+    darwin:
+      sh:
+        command: |
+          crontab -l > new_crontab;
+          echo '0 * * * * /bin/echo bad_cronjob' >> new_crontab;
+          crontab new_crontab;
+          rm -f new_crontab;
+    windows:
+      psh:
+        command: |
+          $action = New-ScheduledTaskAction -Execute "calc.exe";
+          $trigger = New-ScheduledTaskTrigger -Daily -At 9am;
+          Register-ScheduledTask -Action $action -Trigger $trigger -TaskName "FindMe" -Description "Pretend malicious scheduled action";

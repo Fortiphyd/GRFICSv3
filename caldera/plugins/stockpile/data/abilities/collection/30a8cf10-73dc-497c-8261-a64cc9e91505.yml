@@ -1,0 +1,32 @@
+---
+
+- id: 30a8cf10-73dc-497c-8261-a64cc9e91505
+  name: Compress staged directory (Password Protected)
+  description: This ability packages staged files into a password-protected archive. Note - Requires 7Z for Windows and GPG version 2.1+ for Linux
+  tactic: collection
+  technique:
+    attack_id: T1560.001
+    name: "Archive Collected Data: Archive via Utility"
+  platforms:
+    linux:
+      sh:
+        command: |
+          tar -C #{host.dir.staged} -czf - . | gpg -c --pinentry-mode=loopback --passphrase #{host.archive.password} > #{host.dir.staged}.tar.gz.gpg && echo #{host.dir.staged}.tar.gz.gpg
+        cleanup: |
+          rm #{host.dir.staged}.tar.gz.gpg
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: host.dir.compress
+    windows:
+      psh:
+        command: |
+          & "C:\Program Files\7-Zip\7z.exe" a "#{host.dir.staged}.7z" "#{host.dir.staged}\*" "-p#{host.archive.password}" | Out-Null;
+          sleep 1; ls #{host.dir.staged}.7z | foreach {$_.FullName} | select
+        cleanup: |
+          rm #{host.dir.staged}.7z
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: host.dir.compress
+  requirements:
+    - plugins.stockpile.app.requirements.paw_provenance:
+      - source: host.dir.staged

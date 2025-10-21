@@ -1,0 +1,35 @@
+- id: a0676fe1-cd52-482e-8dde-349b73f9aa69
+  name: Preferred WIFI
+  description: See the most used WIFI networks of a machine
+  tactic: discovery
+  technique:
+    attack_id: T1016
+    name: System Network Configuration Discovery
+  platforms:
+    darwin:
+      sh:
+        command: |
+          ./wifi.sh pref
+        payloads:
+        - wifi.sh
+        parsers:
+          plugins.stockpile.app.parsers.wifipref:
+            - source: wifi.network.ssid
+    linux:
+      sh:
+        command: |
+          ./wifi.sh pref
+        payloads:
+        - wifi.sh
+        parsers:
+          plugins.stockpile.app.parsers.wifipref:
+            - source: wifi.network.ssid
+    windows:
+      psh:
+        command: |
+          .\wifi.ps1 -Pref
+        payloads:
+        - wifi.ps1
+        parsers:
+          plugins.stockpile.app.parsers.wifipref:
+            - source: wifi.network.ssid

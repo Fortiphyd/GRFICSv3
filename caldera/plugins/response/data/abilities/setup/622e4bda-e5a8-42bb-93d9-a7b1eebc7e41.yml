@@ -1,0 +1,107 @@
+- id: 622e4bda-e5a8-42bb-93d9-a7b1eebc7e41
+  name: Backup Bash Profiles
+  description: If bash profile doesn't exist, create it, and then backup each profile.
+  tactic: setup
+  technique:
+    attack_id: x
+    name: x
+  repeatable: False
+  platforms:
+    linux:
+      sh:
+        command: |
+          mkdir -p /tmp/sensitive_file_backups;
+          user_profiles=".bashrc .bash_profile .bash_login .profile";
+          output="";
+          home_dir=$(echo "/home/*" | sed 's/\\\*/\*/g');
+          dirs=$(find $home_dir -maxdepth 0 -type d);
+          dirs="${dirs} /root";
+          files="";
+          for dir in $dirs;
+            do for prof in $user_profiles;
+              do files="${files}${dir}/${prof} ";
+            done;
+          done;
+          files="${files} /etc/profile /etc/bash.bashrc";
+          for file in $files;
+            do if [ ! -f $file ];
+              then touch $file;
+            fi;
+            randname=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 13);
+            cp $file /tmp/sensitive_file_backups/$randname;
+            output="${output}${file}>${randname}\n";
+          done;
+          echo $output | sed '/^[[:space:]]*$/d'
+        parsers:
+          plugins.response.app.parsers.key_value:
+            - source: file.sensitive.path
+              edge: has_backup
+              target: file.backup.name
+        cleanup: |
+          user_profiles=".bashrc .bash_profile .bash_login .profile";
+          output="";
+          home_dir=$(echo "/home/*" | sed 's/\\\*/\*/g');
+          dirs=$(find $home_dir -maxdepth 0 -type d);
+          dirs="${dirs} /root";
+          files="";
+          for dir in $dirs;
+            do for prof in $user_profiles;
+              do files="${files}${dir}/${prof} ";
+            done;
+          done;
+          files="${files} /etc/profile /etc/bash.bashrc";
+          for file in $files;
+            do if [ ! -s $file ];
+              then rm -f $file;
+            fi;
+          done;
+          rm -rf /tmp/sensitive_file_backups;
+    darwin:
+      sh:
+        command: |
+          mkdir -p /tmp/sensitive_file_backups;
+          user_profiles=".bashrc .bash_profile .bash_login .profile";
+          output="";
+          home_dir=$(echo "/Users/*" | sed 's/\\\*/\*/g');
+          dirs=$(find $home_dir -maxdepth 0 -type d);
+          dirs="${dirs} /var/root";
+          files="";
+          for dir in $dirs;
+            do for prof in $user_profiles;
+              do files="${files}${dir}/${prof} ";
+            done;
+          done;
+          files="${files} /etc/profile /etc/bash.bashrc";
+          for file in $files;
+            do if [ ! -f $file ];
+              then touch $file;
+            fi;
+            randname=$(head /dev/urandom | LC_CTYPE=C tr -dc A-Za-z0-9 | head -c 13);
+            cp $file /tmp/sensitive_file_backups/$randname;
+            output="${output}${file}>${randname}\n";
+          done;
+          echo $output | sed '/^[[:space:]]*$/d'
+        parsers:
+          plugins.response.app.parsers.key_value:
+            - source: file.sensitive.path
+              edge: has_backup
+              target: file.backup.name
+        cleanup: |
+          user_profiles=".bashrc .bash_profile .bash_login .profile";
+          output="";
+          home_dir=$(echo "/Users/*" | sed 's/\\\*/\*/g');
+          dirs=$(find $home_dir -maxdepth 0 -type d);
+          dirs="${dirs} /var/root";
+          files="";
+          for dir in $dirs;
+            do for prof in $user_profiles;
+              do files="${files}${dir}/${prof} ";
+            done;
+          done;
+          files="${files} /etc/profile /etc/bash.bashrc";
+          for file in $files;
+            do if [ ! -s $file ];
+              then rm -f $file;
+            fi;
+          done;
+          rm -rf /tmp/sensitive_file_backups;

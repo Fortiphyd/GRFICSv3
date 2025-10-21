@@ -1,0 +1,18 @@
+---
+
+- id: 89955f55-529d-4d58-bed4-fed9e42515ec
+  name: cURL socket address
+  description: See the raw content of a socket
+  tactic: collection
+  technique:
+    attack_id: T1005
+    name: Data from Local System
+  platforms:
+    darwin:
+      sh:
+        command: |
+          curl #{remote.host.socket}
+    linux:
+      sh:
+        command: |
+          curl #{remote.host.socket}

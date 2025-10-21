@@ -1,0 +1,9 @@
+
+---
+
+id: 90ef8eaa-01b7-4e98-9070-105eca3bac39
+name: Access Payloads
+standard_payloads:
+  msf_extract.py:
+    description: GET METASPLOIT EXPLOITS
+    id: 169b74a7-e31b-4dd6-b6ff-721f3a615cc7

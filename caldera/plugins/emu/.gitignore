@@ -1,0 +1,16 @@
+*.pyc
+*.crt
+*.pyd
+*.DS_Store
+*.spec
+*.pstat
+*.tokens
+*__pycache__*
+.idea/*
+conf/secrets.yml
+data/adversary-emulation-plans
+data/abilities
+data/adversaries
+data/sources
+data/planners
+payloads

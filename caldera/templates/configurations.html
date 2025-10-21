@@ -1,0 +1,136 @@
+<div x-data="alpineConfiguration()" x-init="initPage()">
+    <div>
+        <h2>Configuration</h2>
+    </div>
+    <hr>
+    <div class="container">
+        <div class="tabs is-centered is-small is-toggle">
+            <ul>
+                <li x-bind:class="{ 'is-active': activeTab === 'settings' }" @click="activeTab = 'settings'">
+                    <a>
+                        <span class="icon is-small"><i class="fas fa-cogs" aria-hidden="true"></i></span>
+                        <span>Settings</span>
+                    </a>
+                </li>
+                <li x-bind:class="{ 'is-active': activeTab === 'plugins' }" @click="activeTab = 'plugins'"> 
+                    <a>
+                        <span class="icon is-small"><i class="fas fa-puzzle-piece" aria-hidden="true"></i></span>
+                        <span>Plugins</span>
+                    </a>
+                </li>
+            </ul>
+        </div>
+
+        <div x-show="activeTab === 'settings'">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Setting Name</th>
+                        <th>Current Value</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="setting of Object.keys(settings)" :key="setting">
+                        <tr>
+                            <td x-text="setting"></td>
+                            <td>
+                                <input class="input is-small" x-model="settings[setting]">
+                            </td>
+                            <td>
+                                <button class="button is-small is-primary" @click="updateSetting(setting)">Update</button>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+
+        <div x-show="activeTab === 'plugins'">
+            <table class="table">
+                <col width="15%">
+                <col width="70%">
+                <col width="15%">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Description</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="plugin of plugins" :key="plugin.name">
+                        <tr>
+                            <td x-text="plugin.name"></td>
+                            <td x-text="plugin.description"></td>
+                            <td>
+                                <button x-show="!plugin.enabled && !pendingPlugins.includes(plugin.name)" class="button is-small is-primary" @click="enablePlugin(plugin.name)">Enable</button>
+                                <p class="has-text-success" x-show="plugin.enabled && !pendingPlugins.includes(plugin.name)">Enabled</p>
+                                <p class="has-text-info" x-show="pendingPlugins.includes(plugin.name)">Pending Restart</p>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    function alpineConfiguration() {
+        return {
+            settings: {},
+            plugins: [],
+            pendingPlugins: [],
+
+            activeTab: 'settings',
+
+            initPage() {
+                apiV2('GET', '/api/v2/config/main').then((config) => {
+                    delete config.plugins;
+                    this.settings = config;
+                    return apiV2('GET', '/api/v2/plugins');
+                }).then((plugins) => {
+                    this.plugins = plugins;
+                }).catch((error) => {
+                    toast('Error loading page', false);
+                    console.error(error);
+                });
+            },
+
+            updateSetting(setting) {
+                let requestBody = {
+                    value: this.settings[setting].toString(),
+                    prop: setting
+                };
+
+                apiV2('PATCH', '/api/v2/config/main', requestBody).then((response) => {
+                    toast('Setting updated', true);
+                }).catch((error) => {
+                    toast(`Error updating ${setting}`, false);
+                    console.error(error);
+                });
+            },
+
+            enablePlugin(pluginName) {
+                pluginName = sanitize(pluginName);
+                let requestBody = {
+                    value: pluginName,
+                    prop: 'plugin'
+                };
+
+                apiV2('PATCH', '/api/v2/config/main', requestBody).then((response) => {
+                    toast('Plugin enabled! Restart the server for the changes to take effect.', true);
+                    this.pendingPlugins.push(pluginName);
+                }).catch((error) => {
+                    toast(`Error enabling ${pluginName}`, false);
+                    console.error(error);
+                });
+            },
+
+        };
+    }
+
+    // # sourceURL=configuration.js
+</script>

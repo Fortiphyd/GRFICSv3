@@ -1,0 +1,14 @@
+---
+
+- id: c9be8043-a445-4cbf-b77b-ed7bb007fc7c
+  name: Internet Explorer Version
+  description: Determine the version of Internet Explorer running
+  tactic: discovery
+  technique:
+    attack_id: T1518
+    name: Software Discovery
+  platforms:
+    windows:
+      psh:
+        command: |
+          (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Internet Explorer').Version

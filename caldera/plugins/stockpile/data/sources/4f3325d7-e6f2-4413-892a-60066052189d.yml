@@ -1,0 +1,51 @@
+---
+
+id: 4f3325d7-e6f2-4413-892a-60066052189d
+name: Alice Filters
+facts: []
+rules:
+  - action: DENY # Loopback
+    trait: remote.host.ip
+    match: 127.0.0.1
+  - action: DENY
+    trait: remote.ssh.ip
+    match: 127.0.0.1
+  - action: DENY # Multicast
+    trait: remote.host.ip
+    match: 224.*
+  - action: DENY
+    trait: remote.ssh.ip
+    match: 224.*
+  - action: DENY
+    trait: remote.host.ip
+    match: 232.*
+  - action: DENY
+    trait: remote.ssh.ip
+    match: 232.*
+  - action: DENY
+    trait: remote.host.ip
+    match: 233.*
+  - action: DENY
+    trait: remote.ssh.ip
+    match: 233.*
+  - action: DENY
+    trait: remote.host.ip
+    match: 234.*
+  - action: DENY
+    trait: remote.ssh.ip
+    match: 234.*
+  - action: DENY
+    trait: remote.host.ip
+    match: 239.*
+  - action: DENY
+    trait: remote.ssh.ip
+    match: 239.*
+  - action: DENY # Broadcast
+    trait: remote.host.ip
+    match: |
+        *.255
+  - action: DENY
+    trait: remote.ssh.ip
+    match: |
+        *.255
+

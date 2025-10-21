@@ -1,0 +1,19 @@
+---
+
+- id: 530e47c6-8592-42bf-91df-c59ffbd8541b
+  name: View admin shares
+  description: Network Share Discovery
+  tactic: discovery
+  technique:
+    attack_id: T1135
+    name: Network Share Discovery
+  platforms:
+    windows:
+      pwsh,psh:
+        command: Get-SmbShare | ConvertTo-Json
+        parsers:
+          plugins.stockpile.app.parsers.json:
+            - source: domain.smb.share
+              custom_parser_vals:
+                json_key: Path
+                json_type: str

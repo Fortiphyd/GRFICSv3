@@ -1,0 +1,28 @@
+---
+
+- id: 3796a00b-b11d-4731-b4ca-275a07d83299
+  name: Impersonate user
+  description: Run an application as a different user
+  tactic: execution
+  technique:
+    attack_id: T1059.001
+    name: "Command and Scripting Interpreter: PowerShell"
+  platforms:
+    windows:
+      psh:
+        command: |
+          $job = Start-Job -ScriptBlock {
+            $username = '#{host.user.name}';
+            $password = '#{host.user.password}';
+            $securePassword = ConvertTo-SecureString $password -AsPlainText -Force;
+            $credential = New-Object System.Management.Automation.PSCredential $username, $securePassword;
+            Start-Process Notepad.exe -NoNewWindow -PassThru -Credential $credential;
+          };
+          Receive-Job -Job $job -Wait;
+  requirements:
+    - plugins.stockpile.app.requirements.paw_provenance:
+      - source: host.user.name
+    - plugins.stockpile.app.requirements.basic:
+      - source: host.user.name
+        edge: has_password
+        target: host.user.password

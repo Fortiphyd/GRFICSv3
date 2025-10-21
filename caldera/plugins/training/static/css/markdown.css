@@ -1,0 +1,128 @@
+/* Based on https://gist.github.com/timblair/1171018 */
+
+.markdown-body body {
+    margin: 0 auto;
+    font-family: Georgia, Palatino, serif;
+    line-height: 1;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+    font-weight: 400;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body p {
+    margin-bottom: 24px;
+    padding: 0;
+}
+
+.markdown-body h1 {
+    font-size: 48px;
+}
+
+.markdown-body h2 {
+    font-size: 36px;
+    margin: 24px 0 6px;
+}
+
+.markdown-body h3 {
+    font-size: 24px;
+}
+
+.markdown-body h4 {
+    font-size: 21px;
+}
+
+.markdown-body h5 {
+    font-size: 18px;
+}
+
+.markdown-body a {
+    color: #0099ff;
+    margin: 0;
+    padding: 0;
+    vertical-align: baseline;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+    margin: 0;
+}
+
+.markdown-body li {
+    line-height: 24px;
+}
+
+.markdown-body li ul,
+.markdown-body li ul {
+    margin-left: 24px;
+}
+
+.markdown-body p,
+.markdown-body ul,
+.markdown-body ol {
+    font-size: 16px;
+    line-height: 24px;
+    max-width: 540px;
+}
+
+.markdown-body pre {
+    padding: 0px 24px;
+    max-width: 800px;
+    white-space: pre-wrap;
+}
+
+.markdown-body code {
+    font-family: Consolas, Monaco, Andale Mono, monospace;
+    line-height: 1.5;
+    font-size: 13px;
+}
+
+.markdown-body aside {
+    display: block;
+    float: right;
+    width: 390px;
+}
+
+.markdown-body blockquote {
+    margin: 1em 2em;
+    max-width: 476px;
+}
+
+.markdown-body blockquote p {
+    color: #666;
+    max-width: 460px;
+}
+
+.markdown-body hr {
+    width: 540px;
+    text-align: left;
+    margin: 0 auto 0 0;
+    color: #999;
+}
+
+.markdown-body table {
+    border-collapse: collapse;
+    margin: 1em 1em;
+    border: 1px solid #CCC;
+}
+
+.markdown-body table thead {
+    background-color: #EEE;
+}
+
+.markdown-body table thead td {
+    color: #666;
+}
+
+.markdown-body table td {
+    padding: 0.5em 1em;
+    border: 1px solid #CCC;
+}

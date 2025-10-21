@@ -1,0 +1,17 @@
+---
+
+- id: 40161ad0-75bd-11e9-b475-0800200c9a66
+  name: Net use
+  description: Mounts a network file share on a target computer
+  tactic: lateral-movement
+  technique:
+    attack_id: T1021.002
+    name: "Remote Services: SMB/Windows Admin Shares"
+  platforms:
+    windows:
+      psh:
+        command: |
+           net use \\#{remote.host.ip}\c$ /user:#{domain.user.name} #{domain.user.password};
+        cleanup: |
+           net use \\#{remote.host.ip}\c$ /delete;
+  singleton: True

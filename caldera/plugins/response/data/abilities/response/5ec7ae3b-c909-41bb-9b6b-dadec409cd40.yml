@@ -1,0 +1,16 @@
+---
+- id: 5ec7ae3b-c909-41bb-9b6b-dadec409cd40
+  name: Delete known suspicious files
+  description: Use hash of known suspicious file to find instances of said file, and delete instances
+  tactic: response
+  technique:
+    attack_id: x
+    name: x
+  platforms:
+    windows:
+      psh:
+        command: |
+          Remove-Item -Path #{host.malicious.file} -Force;
+  requirements:
+    - plugins.stockpile.app.requirements.paw_provenance:
+        - source: host.malicious.file

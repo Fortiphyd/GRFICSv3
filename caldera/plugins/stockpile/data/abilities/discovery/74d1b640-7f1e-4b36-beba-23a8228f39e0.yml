@@ -1,0 +1,34 @@
+- repeatable: false
+  name: Local FQDN
+  additional_info:
+    cleanup: '[]'
+  technique_name: host discovery
+  executors:
+  - name: psh
+    additional_info: {}
+    variations: []
+    platform: windows
+    command: '[System.Net.Dns]::GetHostByName($env:computerName).HostName'
+    code: null
+    language: null
+    payloads: []
+    timeout: 60
+    parsers:
+    - parserconfigs:
+      - source: local.host.fqdn
+        custom_parser_vals: {}
+      module: plugins.stockpile.app.parsers.basic
+    cleanup: []
+    uploads: []
+    build_target: null
+  buckets: []
+  technique_id: TA0007
+  delete_payload: false
+  tactic: discovery
+  description: Uses windows libraries to get FQDN of infected host
+  singleton: true
+  plugin: ''
+  requirements: []
+  privilege: ''
+  access: {}
+  id: 74d1b640-7f1e-4b36-beba-23a8228f39e0

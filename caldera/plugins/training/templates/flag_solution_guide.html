@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="/training/css/markdown.css"/>
+    <link rel="stylesheet" href="/training/css/training.css"/>
+    <title>Solution Guide: {{ flag.name }}</title>
+</head>
+<body class="solution-content">
+
+<h1>Flag Solution Guide: {{ flag.name }}</h1>
+<p>{{ flag.challenge }}</p>
+<div class="markdown-body">
+    {{ flag.solution_guide_as_html() | safe }}
+</div>
+</body>
+</html>

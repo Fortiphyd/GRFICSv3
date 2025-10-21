@@ -1,0 +1,16 @@
+*.pyc
+*.crt
+*.pyd
+*.DS_Store
+*.spec
+*.pstat
+*.tokens
+*__pycache__*
+.idea/*
+.logs/*
+!.logs/.gitkeep
+data/uploads/*
+.env
+node_modules/
+src/plugins/*
+dist

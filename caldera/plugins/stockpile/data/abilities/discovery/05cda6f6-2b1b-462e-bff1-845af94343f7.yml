@@ -1,0 +1,24 @@
+---
+
+- id: 05cda6f6-2b1b-462e-bff1-845af94343f7
+  name: Discover injectable process
+  description: Discovers processes that the current user has the ability to access and selects an injectable one
+  tactic: discovery
+  technique:
+    attack_id: T1057
+    name: Process Discovery
+  platforms:
+    windows:
+      psh:
+        command: |
+          $owners = @{};
+          gwmi win32_process |% {$owners[$_.handle] = $_.getowner().user};
+          $ps = get-process | select processname,Id,@{l="Owner";e={$owners[$_.id.tostring()]}};
+          $valid = foreach($p in $ps) { if($p.Owner -eq $env:USERNAME -And $p.ProcessName -eq "svchost") {$p} };
+          $valid | ConvertTo-Json
+        parsers:
+          plugins.stockpile.app.parsers.json:
+            - source: host.process.id
+              custom_parser_vals:
+                json_key: Id
+                json_type: int

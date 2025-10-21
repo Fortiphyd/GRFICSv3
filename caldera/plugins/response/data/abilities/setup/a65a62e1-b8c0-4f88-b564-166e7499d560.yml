@@ -1,0 +1,15 @@
+---
+- id: a65a62e1-b8c0-4f88-b564-166e7499d560
+  name: Scheduled Tasks Baseline
+  description: Capture the scheduled tasks that exist at the start of the operation
+  tactic: setup
+  technique:
+    attack_id: x
+    name: x
+  platforms:
+    windows:
+      psh:
+        command: |
+          Get-ScheduledTask > C:\Users\Public\baseline_schtasks_list.txt
+        cleanup: |
+          Remove-Item -Path C:\Users\Public\baseline_schtasks_list.txt -Force

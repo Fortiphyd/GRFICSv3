@@ -1,0 +1,18 @@
+---
+
+- id: feaced8f-f43f-452a-9500-a5219488abb8
+  name: Identify local users
+  description: Identify all local users
+  tactic: discovery
+  technique:
+    attack_id: T1087.001
+    name: "Account Discovery: Local Account"
+  platforms:
+    darwin:
+      sh:
+        command: |
+          dscl . list /Users | grep -v '_'
+    windows:
+      psh:
+        command: |
+          Get-WmiObject -Class Win32_UserAccount

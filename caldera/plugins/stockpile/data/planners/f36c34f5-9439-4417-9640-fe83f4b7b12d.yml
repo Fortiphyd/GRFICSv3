@@ -1,0 +1,14 @@
+---
+
+id: f36c34f5-9439-4417-9640-fe83f4b7b12d
+name: buckets
+description: |
+  The buckets planner is a variant of the batch planner that makes use of the new bucket features within Caldera.
+  Each of the abilities within caldera are sorted into buckets based on their corresponding tactics in ATT&CK by
+  default, with the option of non-default mappings remaining possible. This planner simply loops through all
+  abilities available to the provided adversary, in the order of tactics provided in the ATT&CK matrix, looping if
+  more things can be done.
+module: plugins.stockpile.app.planners.buckets
+params: {}
+ignore_enforcement_modules: []
+allow_repeatable_abilities: False

@@ -1,0 +1,14 @@
+---
+
+- id: 364ea817-bbb9-4083-87dd-94b9dba45f6f
+  name: Account Discovery (targeted)
+  description: The net utility is executed via cmd to enumerate detailed information about a specific user account.
+  tactic: discovery
+  technique:
+    attack_id: T1087.002
+    name: "Account Discovery: Domain Account"
+  platforms:
+    windows:
+      cmd,psh:
+        command: |
+          net user #{domain.user.name} /domain

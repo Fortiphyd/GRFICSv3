@@ -1,0 +1,49 @@
+---
+
+- id: 316251ed-6a28-4013-812b-ddf5b5b007f8
+  name: Screen Capture
+  description: capture the contents of the screen
+  tactic: collection
+  technique:
+    attack_id: T1113
+    name: Screen Capture
+  platforms:
+    darwin:
+      sh:
+        command: |
+          for i in {1..5}; do screencapture -t png screen-$i.png; echo "$(cd "$(dirname "$1")"; pwd -P)/$(basename "screen-$i.png")"; sleep 5; done;
+        cleanup:
+          for i in {1..5}; do /bin/rm screen-$i.png; done;
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: host.screenshot.png
+    windows:
+      psh,pwsh:
+        command: |
+          $loadResult = [Reflection.Assembly]::LoadWithPartialName("System.Drawing");
+          function screenshot([Drawing.Rectangle]$bounds, $path) {
+             $bmp = New-Object Drawing.Bitmap $bounds.width, $bounds.height;
+             $graphics = [Drawing.Graphics]::FromImage($bmp);
+             $graphics.CopyFromScreen($bounds.Location, [Drawing.Point]::Empty, $bounds.size);
+             $bmp.Save($path);
+             $graphics.Dispose();
+             $bmp.Dispose();
+          }
+          if ($loadResult) {
+            $bounds = [Drawing.Rectangle]::FromLTRB(0, 0, 1000, 900);
+            $dest = "$HOME\Desktop\screenshot.png";
+            screenshot $bounds $dest;
+            if (Test-Path -Path $dest) {
+              $dest;
+              exit 0;
+            };
+          };
+          exit 1;
+        cleanup:
+          $filePath = "$HOME\Desktop\screenshot.png";
+          if (Test-Path -Path $filePath) {
+            del $filePath;
+          };
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: host.screenshot.png

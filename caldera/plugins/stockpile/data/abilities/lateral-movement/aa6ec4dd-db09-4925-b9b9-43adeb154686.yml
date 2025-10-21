@@ -1,0 +1,38 @@
+---
+
+- id: aa6ec4dd-db09-4925-b9b9-43adeb154686
+  name: Mount Share
+  description: Mount a windows share
+  tactic: lateral-movement
+  technique:
+    attack_id: T1021.002
+    name: "Remote Services: SMB/Windows Admin Shares"
+  platforms:
+    windows:
+      psh:
+        command: |
+          net use \\#{remote.host.fqdn}\C$ /user:#{domain.user.name} #{domain.user.password}
+        cleanup: |
+          net use \\#{remote.host.fqdn}\C$ /delete
+        parsers:
+          plugins.stockpile.app.parsers.share_mounted:
+            - source: remote.host.fqdn
+              edge: has_share
+  singleton: True
+  requirements:
+    - plugins.stockpile.app.requirements.not_exists:
+        - source: remote.host.fqdn
+          edge: has_share
+    - plugins.stockpile.app.requirements.basic:
+        - source: domain.user.name
+          edge: has_password
+          target: domain.user.password
+    - plugins.stockpile.app.requirements.req_like:
+        - source: remote.host.fqdn
+          edge: has_admin
+          target: domain.user.name
+    - plugins.stockpile.app.requirements.reachable:
+        - source: remote.host.fqdn
+          edge: isAccessibleFrom
+    - plugins.stockpile.app.requirements.no_backwards_movement:
+        - source: remote.host.fqdn

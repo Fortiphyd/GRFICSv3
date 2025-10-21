@@ -1,0 +1,6 @@
+---
+id: 2885d0fe-60a7-469b-9e2e-a46b7be2b4df
+name: Blue Certification 3 Cleanup
+description: Cleanup for third adversary for blue certification
+atomic_ordering:
+  - e13c4e45-d19f-440e-8a72-fad728a1789c

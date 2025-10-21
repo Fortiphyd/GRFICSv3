@@ -1,0 +1,8 @@
+---
+id: bcdbf6b9-14c5-495c-be84-37bce32c312b
+name:  Signed Binary Proxy Execution
+description: Perform Signed Binary Proxy Execution
+atomic_ordering:
+  - 0ef4cc7b-611c-4237-b20b-db36b6906554 # cred dumping - Procdump via lsass
+  - a74bc239-a196-4f7e-8d5c-fe8c0266071c # defense evasion - odbcconf
+  - e5bcefee-262d-4568-a261-e8a20855ec81 # defense evasion - maven

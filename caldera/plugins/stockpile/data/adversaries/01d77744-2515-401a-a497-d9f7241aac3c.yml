@@ -1,0 +1,14 @@
+---
+
+id: 01d77744-2515-401a-a497-d9f7241aac3c
+name: Check
+description: Profile to check proper platform configuration. Observe outputs to verify.
+atomic_ordering:
+  - bd527b63-9f9e-46e0-9816-b8434d2b8989
+  - 6e1a53c0-7352-4899-be35-fa7f364d5722
+  - 52177cc1-b9ab-4411-ac21-2eadc4b5d3b8
+  - 335cea7b-bec0-48c6-adfb-6066070f5f68
+  - e8017c46-acb8-400c-a4b5-b3362b5b5baa
+  - 9849d956-37ea-49f2-a8b5-f2ca080b315d
+  - 830bb6ed-9594-4817-b1a1-c298c0f9f425
+  - b18e8767-b7ea-41a3-8e80-baf65a5ddef5

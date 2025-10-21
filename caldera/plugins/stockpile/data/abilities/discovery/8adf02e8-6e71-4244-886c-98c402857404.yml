@@ -1,0 +1,15 @@
+---
+
+- id: 8adf02e8-6e71-4244-886c-98c402857404
+  name: tasklist Process Enumeration
+  description: Capture running processes and their loaded DLLs
+  tactic: discovery
+  technique:
+    attack_id: T1057
+    name: Process Discovery
+  platforms:
+    windows:
+      psh:
+        command: |
+            tasklist /m  >> $env:APPDATA\vmtool.log;
+            cat $env:APPDATA\vmtool.log

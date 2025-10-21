@@ -1,0 +1,797 @@
+<div id="gameboardPage" x-data="alpineGameboard()" x-init="initGameboard()">
+    <div x-ref="gameboardHeader">
+        <h2>Gameboard<sub class="is-size-7 pl-1">red vs. blue exercises</sub></h2>
+        <p>
+            Monitor red-and-blue team operations during an exercise to see if blue can detect, respond, and
+            shut down a red-team adversary.
+        </p>
+    </div>
+    <hr>
+    <div>
+        <table class="table points-table is-fullwidth">
+            <thead>
+            <tr>
+                <!--RED TEAM-->
+                <th colspan="2">
+                    <div class="is-flex is-flex-direction-column is-align-items-flex-end">
+                        <div class="is-flex is-flex-direction-column is-align-items-center">
+                            <div class="is-flex is-flex-direction-row is-align-items-center pb-2">
+                                <div><em class="fas fa-user pr-3 is-red-team is-size-2" alt="Red team"></em></div>
+                                <div class="is-flex is-flex-direction-row is-size-1">
+                                    <div x-text="redOperation.points < 0 ? '-' : ''"></div>
+                                    <div class="points-card has-background-black-ter mr-2 py-1 px-2"
+                                         alt="Red team points"
+                                         x-text="Math.floor(Math.abs(redOperation.points / 10))"></div>
+                                    <div class="points-card has-background-black-ter py-1 px-2" alt="Red team points"
+                                         x-text="Math.abs(redOperation.points % 10)"></div>
+                                </div>
+                            </div>
+                            <label for="red-op-select" class="mb-1 is-size-7">Operation</label>
+                            <div class="select is-small">
+                                <select id="red-op-select" x-model="redOperation.id" x-on:change="getGameboardData">
+                                    <option value="">Select a red op</option>
+                                    <template x-for="op in redOps" :key="op.id">
+                                        <option :value="op.id" x-text="op.name + ' - ' + op.start"></option>
+                                    </template>
+                                </select>
+                            </div>
+                            <label x-show="redOperation.state"
+                                   x-bind:class="redOperation.state === 'running' ? 'has-text-success' : 'has-text-warning'"
+                                   class="is-size-7 mt-2" for="red-op-select"
+                                   x-text="'is ' + redOperation.state"></label>
+                        </div>
+                    </div>
+                </th>
+
+                <!--STATS TABLE-->
+                <td colspan="3">
+                    <div class="is-flex is-flex-direction-column is-align-items-center">
+                        <table class="table stats-table my-5">
+                            <thead>
+                            <tr>
+                                <th></th>
+                                <th><em class="fas fa-plus"></em></th>
+                                <th><em class="fas fa-minus"></em></th>
+                                <th></th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr>
+                                <th colspan="0">T</th>
+                                <td colspan="1" title="True Positive" class="is-blue-team has-background-black"
+                                    x-text="stats.true_pos + '%'"></td>
+                                <td colspan="1" title="True Negative" class="is-blue-team has-background-black">0%</td>
+                                <th colspan="0">T</th>
+                            </tr>
+                            <tr>
+                                <th colspan="0">F</th>
+                                <td colspan="1" title="False Positive" class="is-red-team has-background-black"
+                                    x-text="stats.false_pos + '%'"></td>
+                                <td colspan="1" title="False Negative" class="is-red-team has-background-black"
+                                    x-text="stats.false_neg + '%'"></td>
+                                <th colspan="0">F</th>
+                            </tr>
+                            </tbody>
+                        </table>
+                        <div>
+                            <button class="button is-primary is-small" x-on:click="openModal('Analytic')">
+                                <em class="pr-1 fas fa-pencil-alt"></em>Custom Analytic
+                            </button>
+                        </div>
+                    </div>
+                </td>
+
+                <!--BLUE TEAM-->
+                <th colspan="2">
+                    <div class="is-flex is-flex-direction-column is-align-items-flex-start">
+                        <div class="is-flex is-flex-direction-column is-align-items-center">
+                            <div class="is-flex is-flex-direction-row is-align-items-center pb-2">
+                                <div class="is-flex is-flex-direction-row is-size-1">
+                                    <div x-text="blueOperation.points < 0 ? '-' : ''"></div>
+                                    <div class="points-card has-background-black-ter mr-2 py-1 px-2"
+                                         alt="Blue team points"
+                                         x-text="Math.floor(Math.abs(blueOperation.points) / 10)"></div>
+                                    <div class="points-card has-background-black-ter py-1 px-2" alt="Blue team points"
+                                         x-text="Math.abs(blueOperation.points % 10)"></div>
+                                </div>
+                                <div><em class="pl-3 fas fa-user is-blue-team is-size-2" alt="Blue team"></em></div>
+                            </div>
+                            <label for="blue-op-select" class="mb-1 is-size-7">Operation</label>
+                            <div class="select is-small">
+                                <select id="blue-op-select" x-model="blueOperation.id" x-on:change="getGameboardData">
+                                    <option value="">Select a blue op</option>
+                                    <template x-for="op in blueOps" :key="op.id">
+                                        <option :value="op.id" x-text="op.name + ' - ' + op.start"></option>
+                                    </template>
+                                </select>
+                            </div>
+                            <label x-show="blueOperation.state"
+                                   x-bind:class="blueOperation.state === 'running' ? 'has-text-success' : 'has-text-warning'"
+                                   class="is-size-7 mt-2" for="blue-op-select"
+                                   x-text="'is ' + blueOperation.state"></label>
+                            <template x-if="exchanges.blue.length > 0">
+                                <div>
+                                    <button x-on:click="openModal('Add External Detection')"
+                                            class="button is-primary is-blue-team is-small mt-3"><em
+                                            class="pr-1 fas fa-plus"></em>External Detection
+                                    </button>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </th>
+            </tr>
+            </thead>
+            <template x-if="exchanges.blue.length < 1 && exchanges.red.length < 1">
+                <tbody>
+                <tr>
+                    <td colspan="7" class="is-italic has-text-centered">No exchanges to show.</td>
+                </tr>
+                </tbody>
+            </template>
+            <template
+                    x-if="redOperation.id.length > 0 && blueOperation.id.length > 0 && exchanges.red && exchanges.blue">
+                <tbody>
+                <template x-for="(exchange, index) in dataExchanges" :key="'exchange-'+index">
+                    <tr class="m-2">
+                        <!--RED TEAM COLUMN-->
+                        <td colspan="2">
+                            <div x-show="exchange[1].red.length > 0"
+                                 class="is-flex is-align-items-flex-end is-flex-direction-column">
+                                <template x-for="redOp in exchange[1].red">
+                                    <div class="is-flex is-flex-direction-column is-align-items-center is-justify-content-center p-2 card has-red-line my-2 has-text-centered"
+                                         x-on:click="openModal('Facts', redOp)"
+                                         x-bind:class="access === 'red' ? 'is-red-team' : 'has-background-black-ter'">
+                                        <button class="facts-link has-text-white"
+                                                x-text="redOp.ability.name"></button>
+                                        <template x-if="access === 'red'">
+                                            <div class="is-flex-direction-column is-flex align-center">
+                                                <span x-text="getHumanFriendlyTimeISO8601(redOp.finish)"></span>
+                                                <span class="is-italic" x-text="redOp.paw"></span>
+                                            </div>
+                                        </template>
+                                        <template x-if="access === 'blue'">
+                                            <span class="is-italic" x-text="redOp.ability.technique_id"></span>
+                                        </template>
+                                        <span x-show="access === 'red' && redOp.facts.length > 0" class="facts-star"><em
+                                                class="fas fa-star"></em></span>
+                                    </div>
+                                </template>
+                            </div>
+                        </td>
+                        <!--RED POINTS COLUMN-->
+                        <td colspan="1" class="is-size-2 is-red-team is-flex is-justify-content-flex-end">
+                            <template x-for="redOp in exchange[1].red">
+                                <div class="is-red-team points-container p-2 mt-4 mb-5">
+                                    <span class="points-text"
+                                          x-text="redOp.points.value >= 0 ? '+'+redOp.points.value : redOp.points.value"></span>
+                                </div>
+                            </template>
+                        </td>
+                        <td colspan="1" class="process-column">
+                            <template x-if="exchange[1].red.length > 0 && exchange[1].blue.length > 0">
+                                <div title="Process ID"
+                                     class="is-flex is-justify-content-center is-flex-direction-column has-background-black-ter points-card has-text-centered px-5 py-3">
+                                    <p class="mb-0 is-size-7 has-background-black-ter">pid</p>
+                                    <p class="is-italic is-size-6 has-background-black-ter" x-text="exchange[0]"></p>
+                                </div>
+                            </template>
+                        </td>
+                        <!--BLUE POINTS COLUMN-->
+                        <td colspan="1" class="is-size-2 is-blue-team">
+                            <template x-for="blueOp in exchange[1].blue">
+                                <div class="is-blue-team points-container p-2 mt-4 mb-5">
+                                    <span class="points-text"
+                                          x-text="blueOp.points.value >= 0 ? '+'+blueOp.points.value : blueOp.points.value"></span>
+                                </div>
+                            </template>
+                        </td>
+                        <!--BLUE TEAM COLUMN-->
+                        <td colspan="2">
+                            <!--  Use blueOp.finish to determine whether or not to show a card (if blueOp.finish DNE, then it was not detected -->
+                            <template x-if="exchange[1].blue.length > 0 && exchange[1].blue[0].finish">
+                                <div class="is-flex is-justify-content-flex-start is-flex-direction-column">
+                                <template x-for="blueOp in exchange[1].blue">
+                                    <div class="is-flex is-flex-direction-column is-align-items-center is-justify-content-center p-2 my-2 card has-blue-line has-text-centered"
+                                         x-on:click="openModal('Facts', blueOp)"
+                                         x-bind:class="access === 'blue' ? 'is-blue-team' : 'has-background-black-ter'">
+                                        <template x-if="access === 'red'">
+                                            <span class="is-italic"
+                                                  x-text="blueOp.ability && blueOp.ability.name ? blueOp.ability.name : 'Click for more details.'"></span>
+                                        </template>
+                                        <template x-if="access === 'blue'">
+                                            <div class="is-flex is-flex-direction-column is-align-items-center">
+                                                <span class="is-italic"
+                                                      x-text="blueOp.ability && blueOp.ability.name ? blueOp.ability.name : 'Click for more details.'"></span>
+                                                <span x-text="blueOp.finish ? getHumanFriendlyTimeISO8601(blueOp?.finish) : ''"></span>
+                                                <span class="is-italic" x-text="blueOp?.paw"></span>
+                                            </div>
+                                        </template>
+                                        <span x-show="access === 'blue' && blueOp?.facts?.length > 0"
+                                              class="facts-star"><em class="fas fa-star"></em></span>
+                                    </div>
+                                </template>
+                            </div>
+                            </template>
+                        </td>
+                    </tr>
+                </template>
+                </tbody>
+            </template>
+        </table>
+    </div>
+
+    <!--    MODAL-->
+    <template x-if="modal.isOpen">
+        <div class="modal is-active">
+            <div class="modal-background" @click="modal.isOpen = false; modal.content = {}"></div>
+            <div class="modal-card" x-data="{analytic: {name: '', query: ''}, expandQueries: false}">
+                <header class="modal-card-head">
+                    <p class="modal-card-title" x-text="modal.title"></p>
+                </header>
+                <section class="modal-card-body">
+                    <template x-if="modal.title.includes('Analytic')">
+                        <div>
+                            <div class="modal-form">
+                                <div>
+                                    <label for="analytic-name">Analytic name</label>
+                                    <div class="modal-form-fields">
+                                        <input class="input is-small" id="analytic-name"
+                                               x-model="analytic.name" required>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label for="analytic-query">Query</label>
+                                    <div class="modal-form-fields">
+                                        <input class="input is-small" id="analytic-query"
+                                               x-model="analytic.query" required>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                    <template x-if="modal.title.includes('Detection')">
+                        <div>
+                            <div class="modal-form">
+                                <div>
+                                    <label for="host-select">Host</label>
+                                    <div class="modal-form-fields">
+                                        <div class="select is-small my-2 ml-3">
+                                            <select id="host-select" x-model="selectedHost">
+                                                <option value="" selected>Select a host</option>
+                                                {% for host in hosts %}
+                                                <option value="{{ host }}">{{ host }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label for="tactic-select">Tactic</label>
+                                    <div class="modal-form-fields">
+                                        <div class="select is-small my-2 ml-3">
+                                            <select id="tactic-select" x-model="selectedTactic"
+                                                    x-on:change="handleTacticChange()">
+                                                <option value="" selected>Select a tactic</option>
+                                                <template x-for="(tactic, index) in tactics" :key="'tactic'-index">
+                                                    <option x-text="tactic"></option>
+                                                </template>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label for="technique-select">Technique</label>
+                                    <div class="modal-form-fields">
+                                        <div class="select is-small my-2 ml-3">
+                                            <select id="technique-select" x-model="selectedTechnique">
+                                                <option value="" selected>Select a technique</option>
+                                                <template x-for="(technique, index) in techniques"
+                                                          :key="'technique'-index">
+                                                    <option x-text="technique[0] + ': ' + technique[1]"></option>
+                                                </template>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label for="detection-id-input">
+                                        <span class="has-tooltip-multiline has-tooltip-right"
+                                              data-tooltip="In order to add a manual Sysmon GUID detection, a blue agent must have been running on the target system during the red operation.">
+                                        Detect-by ID
+                                        </span>
+                                    </label>
+                                    <div class="modal-form-fields pl-2" id="detection-id-choice">
+                                        <input type="radio" id="detection-by-pid"
+                                               x-model="detectByGuid" value="0" checked>
+                                        <label for="detection-by-pid">pid</label>
+                                        <input type="radio" id="detection-by-guid"
+                                               x-model="detectByGuid" value="1">
+                                        <label for="detection-by-guid">guid</label>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label x-show="detectByGuid == 0" for="detection-id-choice">pid</label>
+                                    <label x-show="detectByGuid == 1" for="detection-id-choice">guid</label>
+                                    <div class="modal-form-fields">
+                                        <input id="detection-id-input" class="mt-4 ml-4 input is-small"
+                                               x-model="detectionID">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                    <template x-if="modal.title.includes('Facts') && modal.content">
+                        <div>
+                            <template x-if="modal.content.unique">
+                                <div class="modal-form">
+                                    <template x-if="modal.content.unique">
+                                        <div>
+                                            <label for="fact-unique">Unique</label>
+                                            <div class="modal-form-fields">
+                                                <input class="input is-small" id="fact-unique"
+                                                       x-bind:value="modal.content.unique" readonly>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <template
+                                            x-if="modal.content !== {} && modal.content.ability && modal.content.ability.technique_id && modal.content.ability.technique_name">
+                                        <div x-data="{concatName: modal.content.ability.technique_id + ': ' + modal.content.ability.technique_name}">
+                                            <label for="fact-command">Command</label>
+                                            <div class="modal-form-fields">
+                                                <input class="input is-small" id="fact-command"
+                                                       x-bind:value="concatName" readonly>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <template x-if="modal.content.output">
+                                        <div>
+                                            <label for="fact-output">Output</label>
+                                            <div class="modal-form-fields" x-show="modal.content.output !== 'False'">
+                                                <code class="has-text-white m-2" id="fact-output">
+                                                    <p x-text="linkOutput"></p>
+                                                </code>
+                                            </div>
+                                            <div class="modal-form-fields" x-show="modal.content.output === 'False'">
+                                                <input class="input is-italic is-small" id="fact-output"
+                                                       x-bind:value="'No output'" readonly>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                            <template x-if="modal?.content?.points?.reason">
+                                <div>
+                                    <div class="modal-form">
+                                        <div>
+                                            <label for="fact-reason">Reason</label>
+                                            <div class="modal-form-fields">
+                                                <input class="input is-small" id="fact-reason"
+                                                       x-bind:value="modal?.content?.points?.reason" readonly>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                            <template x-if="modal.content.unique">
+                                <div>
+                                    <div class="modal-form-group-header">
+                                        <button type="button" class="button no-style heading pt-2"
+                                                x-on:click="expandQueries = !expandQueries"
+                                                x-bind:class="expandQueries ? 'expanded' : 'collapsed'">
+                                            <span>
+                                                Suggested Queries
+                                                <em x-show="!expandQueries" class="fas fa-caret-right"></em>
+                                                <em x-show="expandQueries" class="fas fa-caret-down"></em>
+                                            </span>
+                                            <span class="navbar-divider"></span>
+                                        </button>
+                                    </div>
+                                    <div class="modal-form" x-show="expandQueries"
+                                         x-data="{generatedQueries: generateQueries(modal.content, access)}">
+                                        <template x-if="generatedQueries && generatedQueries.ELK?.length > 0">
+                                            <div>
+                                                <label for="fact-elk-queries" class="is-align-items-flex-start mt-3">ELK
+                                                    Queries</label>
+                                                <div class="modal-form-fields" id="fact-elk-queries">
+                                                    <template x-for="(query, index) in generatedQueries.ELK"
+                                                              :key="'query-elk-'+index">
+                                                        <code class="has-text-white m-2" x-text="query">
+                                                        </code>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </template>
+                                        <template x-if="generatedQueries && generatedQueries.Splunk?.length > 0">
+                                            <div>
+                                                <label for="fact-splunk-queries" class="is-align-items-flex-start mt-3">Splunk
+                                                    Queries</label>
+                                                <div class="modal-form-fields" id="fact-splunk-queries">
+                                                    <template x-for="(query, index) in generatedQueries.Splunk"
+                                                              :key="'query-splunk-'+index">
+                                                        <code class="has-text-white m-2" x-text="query">
+                                                        </code>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </section>
+                <footer class="modal-card-foot">
+                    <nav class="level">
+                        <div class="level-left">
+                            <template x-if="!modal.title.includes('Facts')">
+                                <div class="level-item">
+                                    <button class="button is-small" @click="modal.isOpen = false">Cancel</button>
+                                </div>
+                            </template>
+                            <template x-if="modal.title.includes('Facts')">
+                                <div class="level-item">
+                                    <button class="button is-small" @click="modal.isOpen = false; modal.content = {}">
+                                        Close
+                                    </button>
+                                </div>
+                            </template>
+                        </div>
+                        <div class="level-right">
+                            <template x-if="access === 'red' && modal.title.includes('Facts')">
+                                <button class="button is-small is-primary"
+                                        @click="modal.isOpen = false; openModal('Analytic')">Create Analytic
+                                </button>
+                            </template>
+                            <template x-if="modal.title.includes('Analytic')">
+                                <button class="button is-small is-primary" @click="createAnalytic(analytic)">Save
+                                </button>
+                            </template>
+                            <template x-if="modal.title.includes('Detection')">
+                                <button class="button is-small is-primary" @click="handleSubmitDetection()">Submit
+                                </button>
+                            </template>
+                        </div>
+                    </nav>
+                </footer>
+            </div>
+        </div>
+    </template>
+</div>
+
+<script>
+    function alpineGameboard() {
+        return {
+            redOperation: {
+                id: '',
+                state: '',
+                points: 0
+            },
+            blueOperation: {
+                id: '',
+                state: '',
+                points: 0
+            },
+            access: '',
+            dataExchanges: [],
+            exchanges: {
+                red: [],
+                blue: []
+            },
+            modal: {
+                isOpen: false,
+                title: '',
+                content: null,
+            },
+            stats: {
+                true_pos: 0,
+                false_pos: 0,
+                false_neg: 0,
+            },
+            tactics: [],
+            techniques: [],
+            selectedHost: '',
+            selectedTactic: '',
+            selectedTechnique: '',
+            detectByGuid: 1,
+            detectionID: '',
+            huntResults: '',
+            linkOutput: '',
+
+            async initGameboard() {
+                if (this.allTactics) this.tactics = Object.keys(this.allTactics);
+                while (this.$refs.gameboardHeader) {
+                    await sleep(3000);
+                    this.getGameboardData();
+                }
+            },
+            getGameboardData() {
+                const render = (data) => {
+                    this.resetTables();
+                    this.redOperation.state = data.red_op_state;
+                    this.blueOperation.state = data.blue_op_state;
+                    this.redOperation.points = data.points[0];
+                    this.blueOperation.points = data.points[1];
+                    this.access = data.access;
+                    if (data.exchanges.length > 1) {
+                        this.dataExchanges = data.exchanges;
+                        this.exchanges.red = [];
+                        this.exchanges.blue = [];
+                        data.exchanges.forEach(([_, e]) => {
+                            if (e.red) this.exchanges.red = this.exchanges.red.concat(e.red);
+                            if (e.blue) this.exchanges.blue = this.exchanges.blue.concat(e.blue);
+                        });
+                        this.updateStats(this.exchanges);
+                    }
+                };
+                if (this.redOperation.id && this.blueOperation.id) {
+                    restRequest('POST', {
+                        red: this.redOperation.id,
+                        blue: this.blueOperation.id
+                    }, render, '/plugin/gameboard/pieces');
+                }
+            },
+            handleTacticChange() {
+                if (this.selectedTactic && this.selectedTactic in this.allTactics) {
+                    this.techniques = this.allTactics[this.selectedTactic];
+                } else {
+                    toast('No techniques available for this tactic.', false);
+                }
+            },
+            handleSubmitDetection() {
+                const submitDetectionCallback = (data) => {
+                    this.modal.isOpen = false;
+                    if (data.verified != false) {
+                        this.huntResults = `The information you entered matched correctly! Result:${data.message}`;
+                        toast(this.huntResults, true);
+                    } else {
+                        this.huntResults = 'The information you entered did not match correctly.';
+                        toast(this.huntResults, false);
+                    }
+                };
+                restRequest('POST', {
+                    host: this.selectedHost,
+                    technique: this.selectedTechnique,
+                    verify: this.detectByGuid ? 'guid' : 'pid',
+                    info: this.detectionID,
+                    redOpId: this.redOperation.id,
+                    blueOpId: this.blueOperation.id,
+                }, submitDetectionCallback, '/plugin/gameboard/detection');
+            },
+            resetTables() {
+                this.exchanges = {
+                    red: [],
+                    blue: []
+                };
+                this.stats = {
+                    true_pos: 0,
+                    false_pos: 0,
+                    false_neg: 0,
+                };
+            },
+            getOutput(linkID) {
+                function loadResults(data) {
+                    return data.output ? b64DecodeUnicode(data.output) : '';
+                }
+
+                restRequest('POST', {
+                    index: 'result',
+                    link_id: linkID
+                }, (d) => {
+                    this.linkOutput = loadResults(d);
+                });
+            },
+            openModal(title, data = {}) {
+                this.modal.title = title;
+                if (data) this.modal.content = data;
+                if (title.includes('Fact') && data.id) {
+                    this.getOutput(data.id);
+                } else {
+                    this.linkOutput = '';
+                }
+                this.modal.isOpen = true;
+            },
+            updateStats(exchanges) {
+                let T_P = 0;
+                let F_P = 0;
+                let F_N = 0;
+                if (exchanges.red.length === 0) {
+                    F_P += exchanges.blue.length;
+                } else if (exchanges.blue.length === 0) {
+                    F_N += exchanges.red.length;
+                } else {
+                    T_P += exchanges.blue.length;
+                }
+                let total = T_P + F_P + F_N;
+                this.stats.true_pos = Math.round((T_P / total) * 100);
+                this.stats.false_pos = Math.round((F_P / total) * 100);
+                this.stats.false_neg = Math.round((F_N / total) * 100);
+            },
+            createAnalytic(analytic) {
+                const handleAnalyticCallback = (data) => {
+                    this.modal.isOpen = false;
+                    toast('Custom analytic created; Operation started.', true);
+                };
+                restRequest('POST', analytic, handleAnalyticCallback, '/plugin/gameboard/analytic');
+            },
+            generateQueries(link, opType) {
+                if (!link || !opType) return {};
+                let splunkQueries = [];
+                let elkQueries = [];
+                if (opType === 'blue') {
+                    this.generateSpecific('ProcessId', link.pin, link.finish, splunkQueries, elkQueries);
+                    link.facts.forEach((fact) => {
+                        if (fact.trait === 'host.process.guid') {
+                            this.generateSpecific('ProcessGuid', `"{ ${fact.value} }"`, link.finish);
+                        }
+                        if (fact.trait === 'host.process.recordid') {
+                            this.generateSpecific('RecordNumber', fact.value, link.finish, splunkQueries, elkQueries);
+                        }
+                    });
+                } else {
+                    this.generateSpecific('ProcessId', link.pid, link.finish, splunkQueries, elkQueries);
+                    this.generateSpecific('CommandLine', `"* ${b64DecodeUnicode(link.command).split(' ')[0]} *"`, link.finish, splunkQueries, elkQueries);
+                    if (link.executor.name === 'psh') {
+                        this.generateSpecific('CommandLine', '"*powershell*"', link.finish, splunkQueries, elkQueries);
+                    }
+                }
+                return {
+                    Splunk: splunkQueries,
+                    ELK: elkQueries
+                };
+            },
+            generateSpecific(field, value, finish, splunkQueries, elkQueries) {
+                splunkQueries.push(this.generateSplunkQuery(field, value, finish));
+                elkQueries.push(this.generateELKQuery(field, value));
+            },
+            generateSplunkQuery(field, value, finish) {
+                let earliest = this.incrementTime(finish, -5);
+                let latest = this.incrementTime(finish, 5);
+                return `source="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" ${field} = ${value} earliest="${earliest}" latest="${latest}" | table _time, Image, ProcessId, CommandLine, ParentProcessId, ParentProcessGuid, ParentCommandLine, User, Computer | sort _time`;
+            },
+            incrementTime(finishTime, increment) {
+                let converted = new Date(finishTime);
+                converted.setSeconds(converted.getSeconds() + increment);
+                return this.formatSplunkTime(converted);
+            },
+            formatSplunkTime(time) {
+                return `${time.getMonth() + 1}/${time.getDate()}/${time.getFullYear()}:${time.toString().split(' ')[4]}`;
+            },
+            generateELKQuery(field, value) {
+                return `event_data.${field}: ${value}`;
+            },
+
+            redOps: {{ red_ops | tojson }},
+            blueOps: {{ blue_ops | tojson }},
+            allTactics: {{ tactics | tojson }},
+        };
+    }
+
+    // # sourceURL=gameboard.js
+</script>
+
+<style>
+    #gameboardPage .is-red-team {
+        color: #ea1543;
+    }
+
+    #gameboardPage .is-blue-team {
+        color: #4C4CF2;
+    }
+
+    #gameboardPage .modal-form-fields code {
+        overflow-y: scroll;
+        max-height: 500px;
+        word-break: break-word;
+    }
+
+    #gameboardPage .facts-star {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+    }
+
+    #gameboardPage .process-column div p:first-child:before {
+        width: 2px;
+        height: 72px;
+        background-color: #242424;
+        content: "";
+        display: inline-block;
+        position: absolute;
+        margin-left: 7px;
+        margin-top: 42px;
+    }
+
+    #gameboardPage button.no-style {
+        background-color: transparent;
+        border: none;
+        box-shadow: none;
+    }
+
+    #gameboardPage .points-card {
+        border-radius: 5px;
+    }
+
+    #gameboardPage .card {
+        cursor: pointer;
+        border-radius: 2px;
+        color: white;
+        width: 315px;
+        height: 80px;
+    }
+
+    #gameboardPage .card.is-red-team, #gameboardPage .points-container.is-red-team {
+        background-color: #ea1543;
+    }
+
+    #gameboardPage button.is-blue-team, #gameboardPage .card.is-blue-team, #gameboardPage .points-container.is-blue-team {
+        background-color: #4C4CF2;
+        color: white;
+    }
+
+    #gameboardPage .card.has-red-line:after {
+        background: #ea1543;
+        content: "";
+        width: 15%;
+        height: 3px;
+        display: flex;
+        position: absolute;
+        z-index: 0;
+        transform: translate(181px, -5px);
+    }
+
+    #gameboardPage .card.has-blue-line:before {
+        background: #4C4CF2;
+        content: "";
+        width: 15%;
+        height: 3px;
+        display: flex;
+        position: absolute;
+        z-index: 0;
+        transform: translate(-181px, -5px);
+    }
+
+    #gameboardPage .points-container {
+        border-radius: 50px;
+        color: white;
+        width: 65px;
+        text-align: center;
+    }
+
+    #gameboardPage .facts-link {
+        line-height: 1.5em;
+        border: none;
+        background-color: transparent;
+        font-size: 1em;
+        text-decoration: underline;
+    }
+
+    #gameboardPage .stats-table {
+        max-width: 100px;
+    }
+
+    #gameboardPage .stats-table th, #gameboardPage .stats-table td {
+        text-align: center;
+    }
+
+    #gameboardPage .stats-table tr:not(:last-child) td {
+        border-bottom: 2px solid #ffffffa1 !important;
+    }
+
+    #gameboardPage .stats-table td:nth-child(2) {
+        border-right: 2px solid #ffffffa1 !important;
+    }
+
+    #gameboardPage .points-table thead th {
+        width: 40%;
+        border-bottom: none;
+    }
+
+    #gameboardPage .points-table tr, #gameboardPage .points-table td {
+        border: none;
+    }
+
+    #gameboardPage .points-table tr, #gameboardPage .points-table td {
+        vertical-align: middle !important;
+    }
+</style>

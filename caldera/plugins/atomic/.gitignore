@@ -1,0 +1,15 @@
+*.pyc
+*.crt
+*.pyd
+*.DS_Store
+*.spec
+*.pstat
+*.tokens
+*__pycache__*
+.idea/*
+conf/secrets.yml
+atomic-red-team/*
+data/*
+!data/.gitkeep
+payloads/*
+!payloads/.gitkeep

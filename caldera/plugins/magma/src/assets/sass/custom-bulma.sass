@@ -1,0 +1,104 @@
+@charset "utf-8"
+
+//    In order to compile, you'll need to install the CLI tool: https://sass-lang.com/install
+//    The command should look like (from project root):
+//        $ sass src/assets/sass/custom-bulma.sass src/assets/css/custom-bulma.css
+//    This will compile your SASS sheets into CSS to import into your HTML template.
+
+html,body,#app
+    width: 100%
+    min-height: 100vh
+    height: auto
+
+.fullwh
+    height: 100%
+    width: 100%
+
+.delete::before
+    background-color: #ddd !important
+.delete::after
+    background-color: #ddd !important
+
+// Derived Variables
+$scheme-main: hsl(0, 0%, 14%)
+$scheme-main-bis: hsl(0, 0%, 22%)
+$scheme-main-ter: hsl(0, 0%, 30%)
+$scheme-main-invert: rgb(235 235 235)
+$background: #171717
+$border: hsl(0, 0%, 30%)
+$primary: #8b00ff
+$primary-invert: #f6e5ff
+$primary-dark: #4c0089
+$size-small: 0.7rem
+$size-normal: 0.8rem
+$size-medium: 1rem
+$size-large: 1.25rem
+$radius-small: 6px
+$radius: 8px
+$radius-large: 8px
+$text: white
+$text-strong: white
+$link: white
+$link-hover: #DDD
+$link-active: $primary
+$warning: #F7DB89
+$success: #4a9
+$danger: #c31
+$border-light: $scheme-main-ter
+// Generic Variables
+$body-background-color: #161616
+$body-font-size: 1em
+
+// Element/Component variables
+// modal
+footer.modal-card-foot
+    padding: 10px
+$modal-card-title-size: 1.2rem
+// button
+$button-hover-color: #EEE
+// dropdown
+$dropdown-item-active-background-color: $primary
+$dropdown-item-active-color: $primary-invert
+$dropdown-item-hover-background-color: $scheme-main-ter
+$dropdown-item-hover-color: $link
+//table
+$table-cell-padding: 0.5em 2.5em
+// message
+$message-background-color: $scheme-main-bis
+$message-header-background-color: $scheme-main
+$message-header-color: $text
+// modal
+$modal-card-head-background-color: $scheme-main
+$modal-card-body-background-color: $scheme-main-bis
+// tabs
+$tabs-boxed-link-active-background-color: $primary
+// pagination
+$pagination-current-background-color: $primary
+$pagination-current-color: $primary-invert
+$pagination-current-border-color: $primary
+// Panel
+$panel-heading-background-color: $scheme-main
+$panel-heading-color: $text
+$panel-block-active-color: $text
+$panel-block-active-icon-color: $link-active
+$panel-item-border: 0.5px solid $scheme-main-ter
+$panel-tab-active-border-bottom-color: $primary
+
+//Custom css
+// Page tabs
+.tab.is-active 
+    background-color: $primary
+.tab:hover
+    background-color: $primary-dark
+// Navigation Menu
+.menu
+    font-size: 0.9rem !important
+.menu-label
+    border-bottom: 2px solid $primary
+hr
+    background-color: $primary !important
+// Buttons
+button.button
+    font-weight: 600
+@import '../../../node_modules/bulma/bulma.sass'
+@import '../../../node_modules/bulma-switch/src/sass/index.sass'

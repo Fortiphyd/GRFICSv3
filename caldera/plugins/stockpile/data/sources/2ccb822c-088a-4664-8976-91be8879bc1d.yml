@@ -1,0 +1,101 @@
+---
+
+id: 2ccb822c-088a-4664-8976-91be8879bc1d
+name: Exfil Operation
+facts:
+  # These facts apply to various exfiltration related abilities. The facts for the exfiltration abilities themselves are
+  # commented-out by default. When creating an operation or adversary, simply un-comment the desired exfiltration
+  # medium and fill the facts as appropriate. The file search + stage is uncommented by default as the base ability,
+  # along with the encrypted version of the archiver (Requires 7z for Windows).
+
+  # Advanced File Search and Stager Facts
+  # -------------------------------------
+  # None of the below facts can be empty. Some are mandatory (e.g. directories to search), others provide an option
+  # to use the literal strings 'none' or 'all' to disable that parameter. See notes.
+  #
+  # ---- Comma-separated values, do not include '.' or '*', these are added in the payload if needed. Example: doc,docx
+  # ---- May also use 'all' for INCLUDED extensions and 'none' for EXCLUDED extensions
+  - trait: linux.included.extensions
+    value: txt,cfg,conf,yml,doc,docx,xls,xlsx,pdf,sh,jpg,p7b,p7s,p7r,p12,pfx
+  - trait: windows.included.extensions
+    value: doc,xps,xls,ppt,pps,wps,wpd,ods,odt,lwp,jtd,pdf,zip,rar,docx,url,xlsx,pptx,ppsx,pst,ost,jpg,txt,lnk,p7b,p7s,p7r,p12,pfx
+  - trait: windows.excluded.extensions # Mainly used to avoid binary files during content search, not needed for Linux
+    value: exe,jar,dll,msi,bak,vmx,vmdx,vmdk,lck
+
+  # ---- Comma-separated values to look for. Spaces are allowed in terms. May also use 'none'
+  - trait: file.sensitive.content
+    value: user,pass,username,password,uname,psw
+
+  # ---- Integer; cutoff for access/modification (-30 = accessed/modified in last 30 days)
+  # ---- May also use 'none' for either or both options. Note on usage: if both options are present, the script
+  # ---- uses a boolean "or" - if a file was accessed in the desired timeframe but not modified in the time frame,
+  # ---- it will still be collected. If modification is more important, set accessed time to "none".
+  - trait: file.last.accessed
+    value: -30
+  - trait: file.last.modified
+    value: -30
+
+  # ---- Comma-separated, full paths to base folders (will recurse inside)
+  - trait: windows.included.directories
+    value: c:\users
+  - trait: linux.included.directories
+    value: /home
+
+  # ----  Comma-separated, does not need to be full paths. May also use 'none'
+  - trait: windows.excluded.directories
+    value: links,music,saved games,contacts,videos,source,onedrive
+  - trait: linux.excluded.directories
+    value: .local,.cache,lib,caldera
+
+  # Include the full path or use "Recycle Bin". Fall-back in the payload file is "c:\users\public".
+  # Recycle Bin will attempt to create a staging folder at c:\$Recycle.Bin\{SID} which should be writable by default
+  # Takes given location and creates a hidden folder called 's' at the location.
+  - trait: windows.staging.location
+    value: Recycle Bin
+
+  # ---- Include the full path, ensure it's writable for the agent. Fallback is /tmp. Creates a hidden folder called .s
+  - trait: linux.staging.location
+    value: /tmp
+
+  # ---- Safe Mode - Only stages files with the appropriate file ending if enabled (e.g. report_pseudo.docx)
+  - trait: safe.mode.enabled
+    value: false
+  - trait: pseudo.data.identifier
+    value: _pseudo
+
+  # Encrypted Compression
+  # -------------------------------------
+  - trait: host.archive.password
+    value: C4ld3ra
+
+  # GitHub Exfiltration
+  # -------------------------------------
+  #- trait: github.user.name
+  #  value: CHANGEME-BOTH
+  #- trait: github.access.token
+  #  value: CHANGEME-BOTH
+  #- trait: github.repository.name
+  #  value: CHANGEME-RepoOnly
+  #- trait: github.repository.branch
+  #  value: CHANGEME-RepoOnly
+
+  # DropBox Exfiltration
+  # -------------------------------------
+  #- trait: dropbox.api.key
+  #  value: CHANGEME
+  #- trait: dropbox.target.dir
+  #  value: CHANGEME
+
+  # AWS Exfiltration
+  # -------------------------------------
+
+  # FTP Exfiltration
+  # -------------------------------------
+  #- trait: ftp.server.address
+  #  value: CHANGEME
+  #- trait: ftp.user.name
+  #  value: CHANGEME
+  #- trait: ftp.user.password
+  #  value: CHANGEME
+rules: []
+relationships: []

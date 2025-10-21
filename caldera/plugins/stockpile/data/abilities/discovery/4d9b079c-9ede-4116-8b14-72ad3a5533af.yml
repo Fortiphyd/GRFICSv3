@@ -1,0 +1,17 @@
+---
+
+- id: 4d9b079c-9ede-4116-8b14-72ad3a5533af
+  name: PowerShell Process Enumeration
+  description: Capture running processes via PowerShell
+  tactic: discovery
+  technique:
+    attack_id: T1057
+    name: Process Discovery
+  platforms:
+    windows:
+      psh,pwsh:
+        command: |
+            get-process >> $env:APPDATA\vmtools.log;
+            cat $env:APPDATA\vmtools.log
+
+

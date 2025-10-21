@@ -1,0 +1,50 @@
+---
+- id: ee54384f-cfbc-4228-9dc1-cc5632307afb
+  name: New Cron Jobs
+  description: Checks to see if a new (unauthorized) cron job has been added
+  tactic: detection
+  technique:
+    attack_id: x
+    name: x
+  repeatable: True
+  platforms:
+    linux:
+      sh:
+        command: |
+          set -f;
+          for user in $(getent passwd | cut -f1 -d:); do
+            $(crontab -u $user -l 2>/dev/null | grep -v '\#' | while read -r job; do
+              echo "${user}>${job}" >> /tmp/cron_jobs;
+            done);
+          done;
+          cat /tmp/cron_jobs | sort > /tmp/new_cronjobs_list.txt;
+          new_jobs=$(comm -13 /tmp/baseline_cronjobs_list.txt /tmp/new_cronjobs_list.txt);
+          rm -f /tmp/cron_jobs;
+          rm -f /tmp/new_cronjobs_list.txt;
+          IFS=$(echo '\n');
+          echo $new_jobs;
+        parsers:
+          plugins.response.app.parsers.key_value:
+            - source: host.user.name
+              edge: has_new_cronjob
+              target: host.new.cronjob
+    darwin:
+      sh:
+        command: |
+          set -f;
+          for user in $(dscl . list /Users | grep -v "^_"); do
+            $(crontab -u $user -l 2>/dev/null | grep -v '\#' | while read -r job; do
+              echo "${user}>${job}" >> /tmp/cron_jobs;
+            done);
+          done;
+          cat /tmp/cron_jobs | sort > /tmp/new_cronjobs_list.txt;
+          new_jobs=$(comm -13 /tmp/baseline_cronjobs_list.txt /tmp/new_cronjobs_list.txt);
+          rm -f /tmp/cron_jobs;
+          rm -f /tmp/new_cronjobs_list.txt;
+          IFS=$(echo '\n');
+          echo $new_jobs;
+        parsers:
+          plugins.response.app.parsers.key_value:
+            - source: host.user.name
+              edge: has_new_cronjob
+              target: host.new.cronjob

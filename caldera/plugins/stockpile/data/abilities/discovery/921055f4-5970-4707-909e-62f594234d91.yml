@@ -1,0 +1,22 @@
+---
+
+- id: 921055f4-5970-4707-909e-62f594234d91
+  name: Remote Host Ping
+  description: Ping a remote host to see if it is accessible
+  tactic: discovery
+  technique:
+    attack_id: T1016
+    name: System Network Configuration Discovery
+  platforms:
+    windows:
+      psh:
+        command: |
+          ping #{remote.host.fqdn}
+        parsers:
+          plugins.stockpile.app.parsers.firewallping:
+            - source: remote.host.fqdn
+              edge: isAccessibleFrom
+  requirements:
+    - plugins.stockpile.app.requirements.not_exists:
+        - source: remote.host.fqdn
+          edge: isAccessibleFrom

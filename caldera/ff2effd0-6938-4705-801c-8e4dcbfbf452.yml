@@ -1,0 +1,6 @@
+name: Modbus Adversary
+description: '---'
+atomic_ordering:
+- 9360ba0d-46a3-47a1-bbe6-e6c875790500
+adversary_id: ff2effd0-6938-4705-801c-8e4dcbfbf452
+objective: 495a9828-cab1-44dd-a0ca-66e58177d8cc

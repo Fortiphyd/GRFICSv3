@@ -1,0 +1,28 @@
+id: 8da8f0b3-194a-4eed-95b0-43c1f1b64091
+name: Blue Certificate
+badges:
+  agents:
+    - flags.agents.blue_0.AgentsBlue0
+    - flags.agents.blue_1.AgentsBlue1
+    - flags.agents.blue_2.AgentsBlue2
+    - flags.agents.blue_3.AgentsBlue3
+  autonomous:
+    - flags.autonomous.blue_0.AutonomousBlue0
+    - flags.autonomous.blue_1.AutonomousBlue1
+    - flags.autonomous.blue_2.AutonomousBlue2
+    - flags.autonomous.blue_3.AutonomousBlue3
+  manual:
+    - flags.manual.blue_0.ManualBlue0
+    - flags.manual.blue_2a.ManualBlue2a
+    - flags.manual.blue_2b.ManualBlue2b
+    - flags.manual.blue_2c.ManualBlue2c
+    - flags.manual.blue_5a_win.ManualBlue5aWin
+    - flags.manual.blue_5b_win.ManualBlue5bWin
+    - flags.manual.blue_5c_win.ManualBlue5cWin
+    - flags.manual.blue_5d_win.ManualBlue5dWin
+  attack:
+    - flags.attack.blue_0.AttackBlue0
+    - flags.attack.blue_1.AttackBlue1
+    - flags.attack.blue_2.AttackBlue2
+    - flags.attack.blue_3.AttackBlue3
+    - flags.attack.blue_4.AttackBlue4

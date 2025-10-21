@@ -1,0 +1,38 @@
+---
+- id: 32e563bb-ba06-4bcc-b817-fc2c434c0b66
+  name: Remove Unauthorized Cron Job
+  description: Removes newly added cron jobs
+  tactic: response
+  technique:
+    attack_id: x
+    name: x
+  platforms:
+    linux:
+      sh:
+        command: |
+          crontab -u #{host.user.name} -l > temp_crontab;
+          line_number=$(grep -n '#{host.new.cronjob}' temp_crontab | cut -d':' -f1);
+          if [ $line_number ]; then
+            sed "${line_number}d" temp_crontab > new_crontab;
+            crontab -u #{host.user.name} new_crontab;
+            rm -f new_crontab;
+          fi;
+          rm -f temp_crontab new_crontab;
+    darwin:
+      sh:
+        command: |
+          crontab -u #{host.user.name} -l > temp_crontab;
+          line_number=$(grep -n '#{host.new.cronjob}' temp_crontab | cut -d':' -f1);
+          if [ $line_number ]; then
+            sed "${line_number}d" temp_crontab > new_crontab;
+            crontab -u #{host.user.name} new_crontab;
+            rm -f new_crontab;
+          fi;
+          rm -f temp_crontab new_crontab;
+  requirements:
+    - plugins.stockpile.app.requirements.basic:
+        - source: host.user.name
+          edge: has_new_cronjob
+          target: host.new.cronjob
+    - plugins.stockpile.app.requirements.paw_provenance:
+        - source: host.new.cronjob

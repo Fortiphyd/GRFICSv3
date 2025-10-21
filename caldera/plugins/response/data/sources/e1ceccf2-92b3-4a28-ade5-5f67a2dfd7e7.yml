@@ -1,0 +1,21 @@
+---
+
+id: e1ceccf2-92b3-4a28-ade5-5f67a2dfd7e7
+name: response
+facts:
+  - trait: remote.port.unauthorized
+    value: 7010
+  - trait: remote.port.unauthorized
+    value: 7011
+  - trait: remote.port.unauthorized
+    value: 7012
+  - trait: file.search.directory
+    value: C:\\Users\\Public
+  - trait: file.sensitive.path
+    value: /home/*/.bashrc
+  - trait: file.sensitive.path
+    value: /Users/*/.bashrc
+  - trait: file.sensitive.path
+    value: /etc/crontab
+  - trait: directory.sensitive.path
+    value: /etc/cron.*

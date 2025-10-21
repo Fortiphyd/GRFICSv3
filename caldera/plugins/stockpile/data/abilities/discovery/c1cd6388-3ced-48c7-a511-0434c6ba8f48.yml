@@ -1,0 +1,24 @@
+---
+
+- id: c1cd6388-3ced-48c7-a511-0434c6ba8f48
+  name: Find local users
+  description: Get a list of all local users
+  tactic: discovery
+  technique:
+    attack_id: T1087.001
+    name: "Account Discovery: Local Account"
+  platforms:
+    darwin:
+      sh:
+        command: |
+          cut -d: -f1 /etc/passwd | grep -v '_' | grep -v '#'
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: host.user.name
+    linux:
+      sh:
+        command: |
+          cut -d: -f1 /etc/passwd | grep -v '_' | grep -v '#'
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: host.user.name

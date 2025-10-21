@@ -1,0 +1,6 @@
+id: 7d1794bb-d7ce-4fe8-bae0-6959fa0a0a48
+name: Gameboard Plugin Placeholder Adversary
+description: Empty adversary for gameboard manual detections operation
+atomic_ordering:
+  - 4a9b51ba-1a0d-4128-a040-5535fd147dc3
+  - 0df4d46e-e202-4b29-9a19-c2540982002d

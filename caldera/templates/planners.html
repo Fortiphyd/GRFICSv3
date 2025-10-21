@@ -1,0 +1,67 @@
+<div x-data="alpinePlanners()" x-init="initPage()">
+    <div>
+        <h2>Planners</h2>
+        <p>
+            A planner is a module which contains logic for how a running operation should make decisions about
+            which abilities to use and in what order. Specifically, a planner's logic contains the decision making
+            to execute a single phase of an operation.
+        </p>
+    </div>
+    <hr>
+    <div>
+        <form>
+            <div id="select-planner" class="field has-addons">
+                <label class="label">Select a planner &nbsp;&nbsp;&nbsp;</label>
+                <div class="control is-expanded">
+                    <div class="select is-small is-fullwidth">
+                        <select id="planner-select" x-on:change="loadPlanner()" x-model="selectedPlannerId">
+                            <option value="" disabled selected>Select a planner</option>
+                            <template x-for="planner of planners" :key="planner.id">
+                                <option x-bind:value="planner.id" x-text="planner.name"></option>
+                            </template>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </form>
+        <div>
+            <h3 x-text="name"></h3>
+            <p x-text="description"></p>
+        </div>
+    </div>
+</div>
+
+<script>
+    function alpinePlanners() {
+        return {
+            planners: [],
+            selectedPlannerId: '',
+            name: '',
+            description: '',
+
+            initPage() {
+                apiV2('GET', '/api/v2/planners').then((planners) => {
+                    this.planners = planners;
+                }).catch((error) => {
+                    toast('Error loading page', false);
+                    console.error(error);
+                });
+            },
+
+            loadPlanner() {
+                let selectedPlanner = this.planners.find((planner) => planner.id === this.selectedPlannerId);
+                this.name = selectedPlanner.name;
+                this.description = selectedPlanner.description;
+            },
+        };
+    }
+
+    // # sourceURL=planners.js
+</script>
+
+<style>
+    #select-planner {
+        max-width: 800px;
+        margin: 0 auto;
+    }
+</style>

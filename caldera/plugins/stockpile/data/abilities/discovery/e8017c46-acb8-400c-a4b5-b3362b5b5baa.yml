@@ -1,0 +1,22 @@
+---
+
+- id: e8017c46-acb8-400c-a4b5-b3362b5b5baa 
+  name: Network Interface Configuration
+  description: View network configuration info for host
+  tactic: discovery
+  technique:
+    attack_id: T1016
+    name: System Network Configuration Discovery
+  platforms:
+    darwin:
+      sh:
+        command: |
+          sudo ifconfig
+    linux:
+      sh:
+        command: |
+          sudo ifconfig
+    windows:
+      psh:
+        command: |
+          ipconfig

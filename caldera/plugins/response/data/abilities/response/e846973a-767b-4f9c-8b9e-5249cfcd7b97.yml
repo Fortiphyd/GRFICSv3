@@ -1,0 +1,34 @@
+- id: e846973a-767b-4f9c-8b9e-5249cfcd7b97
+  name: Restore File Backup
+  description: Restore backups of files if file has been modified
+  tactic: response
+  technique:
+    attack_id: x
+    name: x
+  repeatable: False
+  platforms:
+    linux:
+      sh:
+        command: |
+          cp -f /tmp/sensitive_file_backups/#{file.backup.name} #{file.sensitive.path}
+    darwin:
+      sh:
+        command: |
+          cp -f /tmp/sensitive_file_backups/#{file.backup.name} #{file.sensitive.path}
+    windows:
+      psh:
+        command: |
+          Copy-Item "C:\Users\Public\sensitive_file_backups\#{file.backup.name}" -Destination "#{file.sensitive.path}" -Force
+  requirements:
+    - plugins.response.app.requirements.has_property:
+        - source: file.sensitive.path
+          edge: has_property
+          target: has_been_modified
+    - plugins.stockpile.app.requirements.basic:
+        - source: file.sensitive.path
+          edge: has_backup
+          target: file.backup.name
+    - plugins.stockpile.app.requirements.paw_provenance:
+        - source: file.backup.name
+    - plugins.stockpile.app.requirements.paw_provenance:
+        - source: file.sensitive.path

@@ -1,0 +1,27 @@
+- id: 18702cd3-8e98-4eb7-99d4-0d2816926af1
+  name: Modify Bash/Powershell Profile
+  description: Add a line to the Bash or Powershell profile
+  tactic: training
+  technique:
+    attack_id: x
+    name: x
+  repeatable: False
+  platforms:
+    linux:
+      sh:
+        command: |
+          touch ~/.bashrc;
+          echo '#Find this change!' >> ~/.bashrc;
+    darwin:
+      sh:
+        command: |
+          touch ~/.bashrc;
+          echo '#Find this change!' >> ~/.bashrc;
+    windows:
+      psh:
+        command: |
+          if (Test-Path $Profile) {
+            echo '#Find this change!' >> $Profile;
+          } else {
+            echo '#Find this change!' > $Profile;
+          }

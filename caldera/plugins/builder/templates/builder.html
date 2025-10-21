@@ -1,0 +1,45 @@
+<div x-data="alpineBuilder()" x-init="initPage()">
+    <div>
+        <h2>Builder</h2>
+        <p>Dynamically compile ability code via docker containers</p>
+    </div>
+    <hr>
+    <div class="is-flex is-align-items-center is-justify-content-center is-flex-direction-column">
+        <table class="table is-striped">
+            <thead>
+                <tr>
+                    <th>Supported build languages:</th>
+                </tr>
+            </thead>
+            <tbody>
+                <template x-for="env in envs" :key="env">
+                    <tr>
+                        <td x-text="env"></td>
+                    </tr>
+                </template>
+            </tbody>
+        </table>
+        <p class="block">Read more about using Builder to create dynamically-compiled payloads here:</p>
+        <a class="button is-primary is-small" href="/docs/Dynamically-Compiled-Payloads.html" target="_blank">
+            <span>Dynamically-Compiled Payloads</span>
+            <span class="icon"><em class="fas fa-angle-right"></em></span>
+        </a>
+    </div>
+</div>
+
+<script>
+    function alpineBuilder() {
+        return {
+            initPage() {
+                this.envs = Object.keys(this.envs);
+                console.log('envs', this.envs);
+            },
+
+            envs: {{ envs | tojson }}
+        };
+    }
+
+    // # sourceURL=builder.js
+</script>
+
+<style scoped></style>

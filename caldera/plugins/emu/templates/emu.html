@@ -1,0 +1,59 @@
+<div x-data="alpineEmu()" x-init="initPage()">
+    <div>
+        <h2>Emu</h2>
+        <p>The collection of abilities from the CTID Adversary Emulation Plans</p>
+    </div>
+    <hr>
+    <div class="is-flex is-align-items-center is-justify-content-center is-flex-direction-column fill">
+        <div class="is-flex is-flex-direction-row">
+            <div class="is-flex is-flex-direction-column is-align-items-center m-4">
+                <h1 class="has-text-info is-size-1 mb-0" x-text="numAbilities || '---'"></h1>
+                <p>abilities</p>
+                <a class="button is-primary is-small" x-on:click="addTab('abilities', '/campaign/abilities', 'plugin=emu')">
+                    <span>Abilities</span>
+                    <span class="icon"><em class="fas fa-angle-right"></em></span>
+                </a>
+            </div>
+            <div class="is-flex is-flex-direction-column is-align-items-center m-4">
+                <h1 class="has-text-info is-size-1 mb-0" x-text="numAdversaries || '---'"></h1>
+                <p>adversaries</p>
+                <a class="button is-primary is-small" x-on:click="addTab('adversaries', '/campaign/adversaries', 'plugin=emu')">
+                    <span>Adversaries</span>
+                    <span class="icon"><em class="fas fa-angle-right"></em></span>
+                </a>
+            </div>
+        </div>
+
+        <p>View or edit these abilities and adversaries on their respective pages.</p>
+    </div>
+</div>
+
+<script>
+    function alpineEmu() {
+        return {
+            numAbilities: 0,
+            numAdversaries: 0,
+
+            initPage() {
+                apiV2('GET', 'api/v2/abilities').then((abilities) => {
+                    this.numAbilities = abilities.filter((ability) => ability.plugin === 'emu').length;
+                    return apiV2('GET', 'api/v2/adversaries');
+                }).then((profiles) => {
+                    this.numAdversaries = profiles.filter((profile) => profile.plugin === 'emu').length;
+                }).catch((error) => {
+                    toast('Error loading page', false);
+                    console.error(error);
+                });
+            }
+        };
+    }
+
+    // # sourceURL=emu.js
+</script>
+
+<style scoped>
+    .fill {
+        height: 50%;
+        width: 100%;
+    }
+</style>

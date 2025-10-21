@@ -1,0 +1,15 @@
+id: 7e422753-ad7a-4401-bc8b-b12a28e69c25
+name: Incident responder
+description: A basic incident responder profile
+atomic_ordering:
+    - 3b4640bc-eacb-407a-a997-105e39788781
+    - 1b4aa8d5-ba97-4b9b-92a3-eaaaffbfdf0a
+    - 77272c88-ccf5-4225-a3d9-f9e171d1ca5b
+    - 1226f8ec-e2e5-4311-88e7-378c0e5cc7ce
+    - f9b3eff0-e11c-48de-9338-1578b351b14b
+    - 02fb7fa9-8886-4330-9e65-fa7bb1bc5271
+    - debd322d-2100-45f7-8832-29ef7c56786d
+    - cb85039a-6196-4262-883b-0beeb804b83d
+    - 5ec7ae3b-c909-41bb-9b6b-dadec409cd40
+    - 2ca64acd-dc12-4cc8-b78a-6a182508a50b
+    - 4b283acc-45c0-4de8-b0ac-ac0699e5ab95

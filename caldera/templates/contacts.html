@@ -1,0 +1,69 @@
+<div x-data="alpineContacts()" x-init="initPage()">
+    <div x-ref="contactsHeader">
+        <h2>Contacts</h2>
+        <p>
+            <b>Contacts are touch points for agents.</b> A contact is a connection point on the server for agents to communicate through. Agents can be
+            custom written against one (or multiple) contacts. Each contact logs all agent connections - and
+            all commands it hands out. Download a report for any contact below.
+        </p>
+    </div>
+    <hr>
+    <div>
+        <table class="table is-striped">
+            <tbody>
+                <template x-for="contact of contacts" :key="contact.name">
+                    <tr>
+                        <th x-text="contact.name"></th>
+                        <td x-text="contact.description"></td>
+                        <td>
+                            <template x-if="!availableContacts.includes(contact.name.toUpperCase())">
+                                <button class="button is-small" disabled>No report available</button>
+                            </template>
+                            <template x-if="availableContacts.includes(contact.name.toUpperCase())">
+                                <button class="button is-small is-primary" @click="downloadContactReport(contact.name)">
+                                    <span class="icon"><i class="fas fa-file-download"></i></span>
+                                    <span>Download Report</span>
+                                </button>
+                            </template>
+                        </td>
+                    </tr>
+                </template>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    function alpineContacts() {
+        return {
+            contacts: JSON.parse('{{ contacts | tojson }}'),
+            availableContacts: [],
+
+            async initPage() {
+                do {
+                    this.getAvailableReports();
+                    await sleep(2000);
+                } while (this.$refs.contactsHeader)
+            },
+
+            getAvailableReports() {
+                apiV2('GET', '/api/v2/contacts').then((reports) => {
+                    this.availableContacts = reports
+                }).catch((error) => {
+                    toast('Error getting available contacts', false)
+                })
+            },
+
+            downloadContactReport(contactName) {
+                apiV2('GET', `/api/v2/contacts/${contactName}`).then((contact) => {
+                    downloadJson(`${contactName}_contact_report`, contact);
+                }).catch((error) => {
+                    toast('Error downloading contact report', false);
+                    console.error(error);
+                });
+            }
+        };
+    }
+
+    // # sourceURL=contacts.js
+</script>

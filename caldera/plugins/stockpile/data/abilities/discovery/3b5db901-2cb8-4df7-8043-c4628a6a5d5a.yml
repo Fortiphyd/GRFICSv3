@@ -1,0 +1,33 @@
+---
+
+- id: 3b5db901-2cb8-4df7-8043-c4628a6a5d5a
+  name: Find user processes
+  description: Get process info for processes running as a user
+  tactic: discovery
+  technique:
+    attack_id: T1057
+    name: Process Discovery
+  platforms:
+    darwin:
+      sh:
+        command: |
+          ps aux | grep #{host.user.name}
+    linux:
+      sh:
+        command: |
+          ps aux | grep #{host.user.name}
+    windows:
+      psh:
+        command: |
+          $owners = @{};
+          gwmi win32_process |% {$owners[$_.handle] = $_.getowner().user};
+          $ps = get-process | select processname,Id,@{l="Owner";e={$owners[$_.id.tostring()]}};
+          foreach($p in $ps) {
+              if($p.Owner -eq "#{host.user.name}") {
+                  $p;
+              }
+          }
+  requirements:
+    - plugins.stockpile.app.requirements.paw_provenance:
+      - source: host.user.name
+

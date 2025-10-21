@@ -1,0 +1,21 @@
+---
+
+- id: 30732a56-4a23-4307-9544-09caf2ed29d5
+  name: Find deletable dirs (per user)
+  description: Discover all directories containing deletable files by user
+  tactic: discovery
+  technique:
+    attack_id: T1082
+    name: System Information Discovery
+  platforms:
+    darwin:
+      sh:
+        command: |
+          find / -type d -user #{host.user.name} \( -perm -g+w -or -perm -o+w \) 2>/dev/null -exec ls -adl {} \;
+    linux:
+      sh:
+        command: |
+          find / -type d -user #{host.user.name} \( -perm -g+w -or -perm -o+w \) 2>/dev/null -exec ls -adl {} \;
+  requirements:
+    - plugins.stockpile.app.requirements.paw_provenance:
+      - source: host.user.name

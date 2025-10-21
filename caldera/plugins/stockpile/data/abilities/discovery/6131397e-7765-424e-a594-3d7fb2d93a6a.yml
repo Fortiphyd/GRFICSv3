@@ -1,0 +1,25 @@
+- id: 6131397e-7765-424e-a594-3d7fb2d93a6a
+  name: GetDomain
+  description: Determine the Windows Domain of a computer
+  tactic: discovery
+  technique:
+    attack_id: T1482
+    name: Domain Trust Discovery
+  platforms:
+    windows:
+      psh:
+        command: |
+          Import-Module .\powerview.ps1 -Force;
+          Get-NetDomain | ConvertTo-Json -Depth 1
+        parsers:
+          plugins.stockpile.app.parsers.json:
+          - source: domain.ad.forest
+            custom_parser_vals:
+              json_key: Forest
+              json_type: str
+          - source: domain.ad.name
+            custom_parser_vals:
+              json_key: Name
+              json_type: str
+        payloads:
+        - powerview.ps1

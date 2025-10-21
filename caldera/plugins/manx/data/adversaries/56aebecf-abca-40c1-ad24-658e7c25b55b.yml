@@ -1,0 +1,8 @@
+---
+
+id: 56aebecf-abca-40c1-ad24-658e7c25b55b
+name: Terminal
+description: An adversary to run terminal operations
+phases:
+  1:
+    - 356d1722-7784-40c4-822b-0cf864b0b36d

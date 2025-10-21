@@ -1,0 +1,17 @@
+---
+- id: 6d53c4a8-ecd3-4131-a7a2-704a5b43dd83
+  name: Create Process on Unauthorized Port
+  description: Certification ability to create a listening process on an unauthorized port
+  tactic: training
+  technique:
+    attack_id: x
+    name: x
+  platforms:
+    linux:
+      sh:
+        command: |
+          nc -nlv 7011 &
+    darwin:
+      sh:
+        command: |
+          nc -nlv 7011 &

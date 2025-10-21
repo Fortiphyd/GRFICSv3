@@ -1,0 +1,40 @@
+- id: 1b4aa8d5-ba97-4b9b-92a3-eaaaffbfdf0a
+  name: Find atypical open ports
+  description: Compare open ports against a known baseline
+  tactic: detection
+  technique:
+    attack_id: T1065
+    name: Uncommonly Used Port
+  repeatable: True
+  platforms:
+    windows:
+      psh, pwsh:
+        command: |
+          function getFullList($portList){
+              $final = @();
+              foreach ($p in $portList) {
+                  if ($p -like "*-*") {
+                      $minmax = $p.Split("-");
+                      for ($i = ($minmax[0] -as [int]); $i -lt ($minmax[1] -as [int]); $i++) {
+                          $final += ($i -as [string]);
+                      };
+                  } else {
+                      $final += $p;
+                  };
+              };
+              return $final;
+          };
+          $basePorts = @("135","139","389","445","636","1000-5000","9389","49152-65535");
+          $allPorts = getFullList $basePorts;
+          $pidToPort = @();
+          foreach ($port in (Get-NetTCPConnection -RemoteAddress 0.0.0.0 -state Listen)){
+              if ($allPorts -notcontains $port.LocalPort){
+                  $pidToPort += , @{pid=$port.OwningProcess;port=$port.LocalPort};
+              }
+          };
+          $pidToPort | ConvertTo-Json;
+        parsers:
+          plugins.response.app.parsers.ports:
+            - source: host.pid.unauthorized
+              edge: has_port
+              target: host.port.unauthorized

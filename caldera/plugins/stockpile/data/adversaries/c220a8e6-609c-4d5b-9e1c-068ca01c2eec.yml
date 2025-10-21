@@ -1,0 +1,10 @@
+adversary_id: c220a8e6-609c-4d5b-9e1c-068ca01c2eec
+name: Lateral Movement - Certutil
+description: discovers lateral hosts,, encodes binary into certificate for stealthy
+  lateral-movement across the network
+atomic_ordering:
+- 74d1b640-7f1e-4b36-beba-23a8228f39e0 # Local FQDN
+- 13379ae1-d20e-4162-91f8-320d78a35e7f # Discover local hosts
+- 96d3c175-5e58-424c-8350-d7514b28a075 # Lateral Movement - Certutil
+objective: 495a9828-cab1-44dd-a0ca-66e58177d8cc
+tags: []

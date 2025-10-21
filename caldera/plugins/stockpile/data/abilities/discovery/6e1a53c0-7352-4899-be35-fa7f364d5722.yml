@@ -1,0 +1,22 @@
+---
+
+- id: 6e1a53c0-7352-4899-be35-fa7f364d5722 
+  name: Print Working Directory 
+  description: Print the current working directory on the system
+  tactic: discovery
+  technique:
+    attack_id: T1083
+    name: File and Directory Discovery
+  platforms:
+    darwin:
+      sh:
+        command: |
+          pwd
+    linux:
+      sh:
+        command: |
+          pwd
+    windows:
+      psh:
+        command: |
+          pwd

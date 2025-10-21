@@ -1,0 +1,9 @@
+index.html
+*.md
+*.json
+*.ico
+*.css
+*.png
+*.map
+*.sass
+dist/**

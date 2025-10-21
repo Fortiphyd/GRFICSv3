@@ -1,0 +1,33 @@
+---
+
+id: ed32b9c3-9593-4c33-b0db-e2007315096b
+name: basic
+facts:
+  - trait: file.sensitive.extension
+    value: wav
+  - trait: file.sensitive.extension
+    value: yml
+  - trait: file.sensitive.extension
+    value: png
+  - trait: server.malicious.url
+    value: keyloggedsite.com
+adjustments:
+    1b4fb81c-8090-426c-93ab-0a633e7a16a7:
+      host.installed.av:
+        - value: symantec
+          offset: 3
+        - value: mcafee
+          offset: 3
+rules:
+  - action: DENY
+    trait: file.sensitive.extension
+    match: .*
+  - action: ALLOW
+    trait: file.sensitive.extension
+    match: png
+  - action: ALLOW
+    trait: file.sensitive.extension
+    match: yml  
+  - action: ALLOW
+    trait: file.sensitive.extension
+    match: wav

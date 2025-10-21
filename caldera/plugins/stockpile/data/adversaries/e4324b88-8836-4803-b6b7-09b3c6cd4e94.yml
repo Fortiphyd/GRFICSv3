@@ -1,0 +1,7 @@
+name: Printer Queue
+description: Locate files that are queued for printing
+atomic_ordering:
+- 6c91884e-11ec-422f-a6ed-e76774b0daac #get printer queue
+- a41c2324-8c63-4b15-b3c5-84f920d1f226 #locate files that appear in the printer queue
+id: e4324b88-8836-4803-b6b7-09b3c6cd4e94
+objective: 495a9828-cab1-44dd-a0ca-66e58177d8cc

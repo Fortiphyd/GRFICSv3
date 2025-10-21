@@ -1,0 +1,21 @@
+---
+- id: 77272c88-ccf5-4225-a3d9-f9e171d1ca5b
+  name: Acquire suspicious files
+  description: Get information from AV about suspicious files
+  tactic: detection
+  technique:
+    attack_id: x
+    name: x
+  repeatable: True
+  platforms:
+    windows:
+      psh:
+        command: |
+          if (Test-Path C:\Users\Public\malicious_files.txt -PathType Leaf) {
+            $hashes = Get-Content C:\Users\Public\malicious_files.txt -Raw;
+            Remove-Item C:\Users\Public\malicious_files.txt;
+            $hashes;
+          }
+        parsers:
+          plugins.response.app.parsers.basic_strip:
+            - source: file.malicious.hash

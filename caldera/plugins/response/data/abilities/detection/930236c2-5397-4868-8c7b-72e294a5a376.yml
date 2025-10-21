@@ -1,0 +1,49 @@
+- id: 930236c2-5397-4868-8c7b-72e294a5a376
+  name: Modified Sensitive Files
+  description: Checks sensitive file hashes against previously stored hashes to determine if the file has been modified
+  tactic: detection
+  technique:
+    attack_id: x
+    name: x
+  repeatable: True
+  platforms:
+    linux:
+      sh:
+        command: |
+          filepath="#{file.sensitive.path}";
+          if [ ! -f $filepath ] || [ "$(sha256sum $filepath | cut -d' ' -f1)" != "#{file.sensitive.hash}" ];
+            then echo $filepath;
+          fi
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: file.sensitive.path
+              edge: has_property
+              target: has_been_modified
+    darwin:
+      sh:
+        command: |
+          filepath="#{file.sensitive.path}";
+          if [ ! -f $filepath ] || [ "$(shasum -a 256 $filepath | cut -d' ' -f1)" != "#{file.sensitive.hash}" ];
+            then echo $filepath;
+          fi
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: file.sensitive.path
+              edge: has_property
+              target: has_been_modified
+    windows:
+      psh:
+        command: |
+          if (-not (Test-Path -PathType Leaf #{file.sensitive.path}) -or (Get-FileHash #{file.sensitive.path}).Hash -ne "#{file.sensitive.hash}") { echo #{file.sensitive.path} }
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: file.sensitive.path
+              edge: has_property
+              target: has_been_modified
+  requirements:
+    - plugins.stockpile.app.requirements.basic:
+      - source: file.sensitive.path
+        edge: has_hash
+        target: file.sensitive.hash
+    - plugins.stockpile.app.requirements.paw_provenance:
+        - source: file.sensitive.hash

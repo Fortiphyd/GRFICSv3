@@ -1,0 +1,38 @@
+---
+
+- id: 90c2efaa-8205-480d-8bb6-61d90dbaf81b
+  name: Find files
+  description: Locate files deemed sensitive
+  tactic: collection
+  technique:
+    attack_id: T1005
+    name: Data from Local System
+  platforms:
+    darwin:
+      sh:
+        command: |
+          find /Users -name '*.#{file.sensitive.extension}' -type f -not -path '*/\.*' -size -500k 2>/dev/null | head -5
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: host.file.path
+              edge: has_extension
+              target: file.sensitive.extension
+    windows:
+      psh,pwsh:
+        command: |
+          Get-ChildItem C:\Users -Recurse -Include *.#{file.sensitive.extension} -ErrorAction 'SilentlyContinue' | foreach {$_.FullName} | Select-Object -first 5;
+          exit 0;
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: host.file.path
+              edge: has_extension
+              target: file.sensitive.extension
+    linux:
+      sh:
+        command: |
+          find / -name '*.#{file.sensitive.extension}' -type f -not -path '*/\.*' -size -500k 2>/dev/null | head -5
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: host.file.path
+              edge: has_extension
+              target: file.sensitive.extension

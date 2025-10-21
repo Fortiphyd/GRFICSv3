@@ -1,0 +1,42 @@
+---
+
+- id: 13d0d9cf-e31a-47b6-9217-f38e3f7c25ef
+  name: System Information from GUID
+  description: Collect system information from Sysmon event log given ProcessGUID. Ability timeout may need to be increased depending on Sysmon log size.
+  tactic: response
+  technique:
+    attack_id: x
+    name: Query Event Logs
+  platforms:
+    windows:
+      psh:
+        timeout: 300
+        command: |
+          $time_range = (Get-Date) - (New-TimeSpan -Seconds $(#{sysmon.time.range}/1000));
+          Get-WinEvent -FilterHashTable @{ Logname='Microsoft-Windows-Sysmon/Operational'; StartTime=$time_range; } | select TimeCreated,Id,ProviderName,RecordId,ProcessId,MachineName,Message | where -Property Message -Match "\bProcessGuid: {#{host.process.guid}}" | Format-List;
+        parsers:
+          plugins.response.app.parsers.sysmon:
+            - source: host.process.guid
+              edge: has_eventid
+              target: host.process.eventid
+            - source: host.process.guid
+              edge: has_recordid
+              target: host.process.recordid
+            - source: host.process.guid
+              edge: has_user
+              target: host.process.user
+      cmd:
+        timeout: 300
+        command: |
+          wevtutil qe Microsoft-Windows-Sysmon/Operational /q:"*/System/TimeCreated[timediff(@SystemTime) <= #{sysmon.time.range}] and */EventData/Data[@Name='ProcessGuid']='#{host.process.guid}'" /f:text
+        parsers:
+          plugins.response.app.parsers.sysmon:
+            - source: host.process.guid
+              edge: has_eventid
+              target: host.process.eventid
+            - source: host.process.guid
+              edge: has_recordid
+              target: host.process.recordid
+            - source: host.process.guid
+              edge: has_user
+              target: host.process.user

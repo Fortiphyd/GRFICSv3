@@ -1,0 +1,16 @@
+---
+
+- id: 5c65eec8-4839-4713-a4e1-86b2e75d1927
+  name: Application Window Discovery
+  description: Extracts the names of all open non-explorer windows, and the locations of all explorer windows.
+  tactic: discovery
+  technique:
+    attack_id: T1010
+    name: Application Window Discovery
+  platforms:
+    windows:
+      psh:
+        command: |
+          $x = Get-Process | Where-Object {$_.MainWindowTitle -ne ""} | Select-Object MainWindowTitle;
+          $a = New-Object -com "Shell.Application"; $b = $a.windows() | select-object LocationName;
+          write-host ($x | Format-List | Out-String) ($b | Format-List | Out-String)

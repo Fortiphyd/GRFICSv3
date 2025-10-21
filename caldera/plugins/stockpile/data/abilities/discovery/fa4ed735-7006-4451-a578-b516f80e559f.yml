@@ -1,0 +1,19 @@
+---
+
+- id: fa4ed735-7006-4451-a578-b516f80e559f
+  name: Reverse nslookup IP
+  description: Find hostname of remote IP in domain
+  tactic: discovery
+  technique:
+    attack_id: T1018
+    name: Remote System Discovery
+  platforms:
+    windows:
+      psh:
+        command: |
+          nslookup #{remote.host.ip}
+        parsers:
+          plugins.stockpile.app.parsers.reverse_nslookup:
+            - source: remote.host.fqdn
+              edge: has_ip
+              target: remote.host.ip

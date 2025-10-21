@@ -1,0 +1,8 @@
+---
+
+id: 4c28c132-d7d7-4a04-8908-d643b7cb1d58
+name: Stowaway
+description: Inject sandcat into a process (NOTE - Requires MinGW to be installed on Caldera Server)
+atomic_ordering:
+  - 05cda6f6-2b1b-462e-bff1-845af94343f7 # Discover injectable process
+  - a398986f-31b0-436a-87e9-c8e82c028f3c # Inject Sandcat into process

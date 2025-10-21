@@ -1,0 +1,28 @@
+---
+
+- id: 0fccf23f-6b1a-4ef3-8c89-e8bf27a1858f
+  name: Collect Grandchild Processes
+  description: Collect grandchild processes from Sysmon logs
+  tactic: response
+  technique:
+    attack_id: x
+    name: Query Event Logs
+  platforms:
+    windows:
+      psh:
+        command: |
+          $time_range = (Get-Date) - (New-TimeSpan -Seconds $(#{sysmon.time.range}/1000));
+          Get-WinEvent -FilterHashTable @{ Logname='Microsoft-Windows-Sysmon/Operational'; StartTime=$time_range; Id=1} | where -Property Message -Match '(?m)^ParentProcessId: #{host.process.childid}\b' | Format-List;
+        parsers:
+          plugins.response.app.parsers.childprocess:
+            - source: host.process.childid
+              edge: has_childprocess
+              target: host.process.grandchildid
+      cmd:
+        command: |
+          wevtutil qe Microsoft-Windows-Sysmon/Operational /q:"*/System/TimeCreated[timediff(@SystemTime) <= #{sysmon.time.range}] and */EventData/Data[@Name='ParentProcessId']=#{host.process.childid} and Event[System[EventID=1]]" /f:text
+        parsers:
+          plugins.response.app.parsers.childprocess:
+            - source: host.process.childid
+              edge: has_childprocess
+              target: host.process.grandchildid

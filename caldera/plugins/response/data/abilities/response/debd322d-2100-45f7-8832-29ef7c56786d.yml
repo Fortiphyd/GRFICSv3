@@ -1,0 +1,22 @@
+- id: debd322d-2100-45f7-8832-29ef7c56786d
+  name: Enable Inbound TCP/UDP firewall rule
+  description: Blocks inbound TCP and UDP traffic on a specific port
+  privilege: Elevated
+  tactic: response
+  technique:
+    attack_id: T1065
+    name: Uncommonly Used Port
+  platforms:
+    windows:
+      psh, pwsh:
+        command: |
+          New-NetFirewallRule -DisplayName "Block in-bound UDP traffic to port #{host.port.unauthorized} from PID #{host.pid.unauthorized}" -Group "Caldira" -Direction Inbound -Protocol UDP -Action Block -LocalPort #{host.port.unauthorized};
+          New-NetFirewallRule -DisplayName "Block in-bound TCP traffic to port #{host.port.unauthorized} from PID #{host.pid.unauthorized}" -Group "Caldira" -Direction Inbound -Protocol TCP -Action Block -LocalPort #{host.port.unauthorized};
+        cleanup: |
+          Remove-NetFirewallRule -DisplayName "Block in-bound UDP traffic to port #{host.port.unauthorized} from PID #{host.pid.unauthorized}";
+          Remove-NetFirewallRule -DisplayName "Block in-bound TCP traffic to port #{host.port.unauthorized} from PID #{host.pid.unauthorized}";
+  requirements:
+    - plugins.response.app.requirements.basic:
+        - source: host.port.unauthorized
+          edge: has_pid
+          target: host.pid.unauthorized

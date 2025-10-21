@@ -1,0 +1,13 @@
+---
+
+- id: c6607391-d02c-44b5-9b13-d3492ca58599
+  name: Discover system services
+  description: Identify system services
+  tactic: discovery
+  technique:
+    attack_id: T1007
+    name: System Service Discovery
+  platforms:
+    windows:
+      psh:
+        command: Get-Service

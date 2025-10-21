@@ -1,0 +1,22 @@
+---
+
+- id: b007fe0c-c6b0-4fda-915c-255bbc070de2
+  name: Copy Clipboard
+  description: copy the contents for the clipboard and print them
+  tactic: collection
+  technique:
+    attack_id: T1115
+    name: Clipboard Data
+  platforms:
+    darwin:
+      sh:
+        command: |
+          pbpaste
+    windows:
+      psh,pwsh:
+        command: |
+          Get-Clipboard -raw
+    linux:
+      sh:
+        command: |
+          xclip -o

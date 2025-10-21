@@ -1,0 +1,33 @@
+---
+
+- id: 5f844ac9-5f24-4196-a70d-17f0bd44a934
+  name: Deadman - Delete agent file
+  description: Deadman ability to delete agent file after termination.
+  tactic: defense-evasion
+  technique:
+    attack_id: T1070.004
+    name: "Indicator Removal on Host: File Deletion"
+  platforms:
+    windows:
+      psh:
+        # https://richardspowershellblog.wordpress.com/2014/01/20/win32_examplesstart-application-in-hidden-window/
+        command: |
+          $startupClass = Get-CimClass -ClassName Win32_ProcessStartup;
+          $startupInfo = New-CimInstance -CimClass $startupClass -Property @{ShowWindow = 0} -ClientOnly;
+          $processClass = Get-CimClass -ClassName Win32_Process;
+          Invoke-CimMethod -CimClass $processClass -MethodName Create -Arguments @{
+              Commandline = 'cmd.exe /c "timeout /nobreak /t 10 >nul 2>nul & del /f #{location}"';
+              ProcessStartupInformation = [CimInstance]$startupInfo
+          };
+    darwin:
+      sh:
+        command: |
+          path="$(pwd)/#{exe_name}";
+          num_processes=$(for id in $(pgrep -f #{exe_name}); do lsof -p $id 2> /dev/null | grep "$path"; done | wc -l);
+          if [ "$num_processes" -le 1 ]; then /bin/rm -f "$path"; fi;
+    linux:
+      sh:
+        command: |
+          path="$(pwd)/#{exe_name}";
+          num_processes=$(for id in $(pgrep -f #{exe_name}); do lsof -p $id 2> /dev/null | grep "$path"; done | wc -l);
+          if [ "$num_processes" -le 1 ]; then /bin/rm -f "$path"; fi;

@@ -1,0 +1,20 @@
+- id: a41c2324-8c63-4b15-b3c5-84f920d1f226
+  name: Locate file from printer queue
+  description: Locate file that appears in the printer queue
+  tactic: discovery
+  technique:
+    attack_id: T1083
+    name: File and Directory Discovery
+  platforms:
+    linux:
+      sh:
+        command: 'find ~ -type f -name #{host.print.file} 2>/dev/null'
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+          - source: host.system.path
+    darwin:
+      sh:
+        command: 'find ~ -type f -name #{host.print.file} 2>/dev/null'
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+          - source: host.system.path

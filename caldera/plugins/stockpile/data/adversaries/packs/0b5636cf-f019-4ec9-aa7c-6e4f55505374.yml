@@ -1,0 +1,17 @@
+---
+
+id: 0b5636cf-f019-4ec9-aa7c-6e4f55505374
+name: |
+  Windows Worm #1
+description: Move laterally any way possible
+atomic_ordering:
+# Initial discovery
+  - 85341c8c-4ecb-4579-8f53-43e3e91d7617 # arp -a
+# Resolve IP from arp output to fqdn
+  - fa4ed735-7006-4451-a578-b516f80e559f # reverse nslookup
+# View remote shares from fqdn
+  - deeac480-5c2a-42b5-90bb-41675ee53c7e # view remote shares
+# Copy remotely
+  - 65048ec1-f7ca-49d3-9410-10813e472b30 # SMB copy
+# Remote exec
+  - ece5dde3-d370-4c20-b213-a1f424aa8d03 # WMI exec

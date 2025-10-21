@@ -1,0 +1,16 @@
+---
+- id: 4744d99f-5fea-42a8-8ec4-c228db57caea
+  name: Remove Unauthorized Scheduled Task
+  description: Removes newly added scheduled tasks
+  tactic: response
+  technique:
+    attack_id: x
+    name: x
+  platforms:
+    windows:
+      psh:
+        command: |
+          Unregister-ScheduledTask -TaskName #{host.new.schtask} -Confirm:$false
+  requirements:
+    - plugins.stockpile.app.requirements.paw_provenance:
+        - source: host.new.schtask

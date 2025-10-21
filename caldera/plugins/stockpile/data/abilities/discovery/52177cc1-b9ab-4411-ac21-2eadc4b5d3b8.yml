@@ -1,0 +1,22 @@
+---
+
+- id: 52177cc1-b9ab-4411-ac21-2eadc4b5d3b8 
+  name: List Directory
+  description: List contents of current directory 
+  tactic: discovery
+  technique:
+    attack_id: T1083
+    name: File and Directory Discovery
+  platforms:
+    darwin:
+      sh:
+        command: |
+          ls
+    linux:
+      sh:
+        command: |
+          ls
+    windows:
+      psh:
+        command: |
+          dir

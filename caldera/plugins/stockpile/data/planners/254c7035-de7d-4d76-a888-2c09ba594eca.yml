@@ -1,0 +1,14 @@
+---
+
+id: 254c7035-de7d-4d76-a888-2c09ba594eca.yml
+name: look ahead
+description: |
+  The look ahead planner decides what abilities to use based on anticipated
+  future rewards.  It takes as input a table of ability rewards, a depth
+  parameter, and a discount factor.  The depth parameter effectively controls
+  the "look-ahead" for the planner as it's scoring each action, and the
+  discount factor controls how the planner weighs future rewards.
+module: plugins.stockpile.app.planners.look_ahead
+params:
+  ability_rewards:
+    4e97e699-93d7-4040-b5a3-2e906a58199e: 5 # stage files

@@ -1,0 +1,7 @@
+id: D21B9E7F-CFF5-4030-AD28-388085F8A815
+name: Elastic Hunter
+description: A basic threat hunting via ElasticSearch profile
+atomic_ordering:
+  - 4b283acc-45c0-4de8-b0ac-ac0699e5ab95  # Search for PowerShell ExecutionPolicy Bypass (elastic)
+  - bf565e6a-0037-4aa4-852f-1afa222c76db  # Search for Child Processes (elastic)
+  - b419604e-6f82-40a4-b215-12f8c8156c2f  # Search for Parent Processes (elastic)

@@ -1,0 +1,16 @@
+---
+
+- id: 3864fd22-5c63-41c9-bdbc-a66b5ffa3f5e
+  name: Bypass ExecutionPolicy
+  description: Ensure the ExecutionPolicy is turned to Bypass
+  tactic: defense-evasion
+  technique:
+    attack_id: T1562.001
+    name: "Impair Defenses: Disable or Modify Tools"
+  platforms:
+    windows:
+      psh:
+        command: |
+          Set-ItemProperty -Path HKLM:\Software\Policies\Microsoft\Windows\PowerShell -Name ExecutionPolicy -Value ByPass;
+                  $shell = New-Object -ComObject Wscript.Shell
+                  Set-ExecutionPolicy Bypass | echo $shell.sendkeys("Y`r`n")

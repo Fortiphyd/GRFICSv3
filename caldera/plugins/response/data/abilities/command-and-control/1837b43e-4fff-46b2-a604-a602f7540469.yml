@@ -1,0 +1,26 @@
+- id: 1837b43e-4fff-46b2-a604-a602f7540469
+  name: Elasticat
+  description: A Blue Python agent that executes elasticsearch queries.
+  tactic: command-and-control
+  technique:
+    attack_id: T1071
+    name: Standard Application Layer Protocol
+  platforms:
+    darwin:
+      sh:
+        command: |
+          server="#{app.contact.http}";
+          curl -s -X POST -H "file:elasticat.py" -H "platform:darwin" $server/file/download > elasticat.py;
+          pip install requests;
+          python elasticat.py --server=$server --es-host="http://127.0.0.1:9200" --group=blue --minutes-since=60
+        cleanup: |
+          pkill -f elasticat
+    linux:
+      sh:
+        command: |
+          server="#{app.contact.http}";
+          curl -s -X POST -H "file:elasticat.py" -H "platform:linux" $server/file/download > elasticat.py;
+          pip install requests;
+          python elasticat.py --server=$server --es-host="http://127.0.0.1:9200" --group=blue --minutes-since=60
+        cleanup: |
+          pkill -f elasticat

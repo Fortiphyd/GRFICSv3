@@ -1,0 +1,7 @@
+adversary: f61e3fc0-43d8-4b36-b5d3-710610b92974
+child_process_ability: f5fb8bce-4a79-466a-8187-ed0cd8e8dbe1
+collect_guid_ability: 90418255-b202-4fc3-b0ea-b105bff39ca5
+op_name: Auto-Collect
+search_time_range_msecs: 600000
+child_process_recursion_depth: 5
+auto_operation_enable: False

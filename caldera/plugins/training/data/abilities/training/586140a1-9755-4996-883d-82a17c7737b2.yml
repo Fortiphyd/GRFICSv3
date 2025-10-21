@@ -1,0 +1,14 @@
+---
+- id: 586140a1-9755-4996-883d-82a17c7737b2
+  name: Pretend Malicious File
+  description: Create a pretend malicious file to be acted on
+  tactic: training
+  technique:
+    attack_id: x
+    name: x
+  platforms:
+    windows:
+      psh:
+        command: |
+          echo 'Malicious file' > C:\Users\Public\malicious;
+          (Get-FileHash C:\Users\Public\malicious).Hash > C:\Users\Public\malicious_files.txt

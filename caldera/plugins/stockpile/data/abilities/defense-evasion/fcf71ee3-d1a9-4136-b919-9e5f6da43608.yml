@@ -1,0 +1,16 @@
+---
+
+- id: fcf71ee3-d1a9-4136-b919-9e5f6da43608
+  name: Clear Logs
+  description: Clear Sysmon logs [intended to trigger CAR-2016-04-002]
+  tactic: defense-evasion
+  technique:
+    attack_id: T1070.001
+    name: "Indicator Removal on Host: Clear Windows Event Logs"
+  privilege: Elevated
+  platforms:
+    windows:
+      psh,pwsh:
+        command: |
+          Clear-Eventlog Security;
+          Clear-Eventlog System;

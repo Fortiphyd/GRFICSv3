@@ -1,0 +1,23 @@
+---
+id: de07f52d-9928-4071-9142-cb1d3bd851e8
+name: Ransack
+description: Discover host details and steal sensitive files
+atomic_ordering:
+  - 90c2efaa-8205-480d-8bb6-61d90dbaf81b #find sensitive files
+  - c0da588f-79f0-4263-8998-7496b1a40596 #active user
+  - c1cd6388-3ced-48c7-a511-0434c6ba8f48 #local users
+  - feaced8f-f43f-452a-9500-a5219488abb8 #local users
+  - b6f545ef-f802-4537-b59d-2cb19831c8ed #broadcast IP
+  - 3b5db901-2cb8-4df7-8043-c4628a6a5d5a #processes per user
+  - 530e47c6-8592-42bf-91df-c59ffbd8541b #shared drives
+  - 26c8b8b5-7b5b-4de1-a128-7d37fb14f517 #discover DC
+  - 2dece965-37a0-4f70-a391-0f30e3331aba #determine AV
+  - 5c4dd985-89e3-4590-9b57-71fed66ff4e2 #see active user groups
+  - 8c06ebf8-bacf-486b-bd77-21ba8c5a5777 #discover firewall
+  - ce485320-41a4-42e8-a510-f5a8fe96a644 #find mail server
+  - b007fc38-9eb7-4320-92b3-9a3ad3e6ec25 #find chrome bookmarks
+  - 6469befa-748a-4b9c-a96d-f191fde47d89 #create staging dir
+  - 90c2efaa-8205-480d-8bb6-61d90dbaf81b #find sensitive files
+  - 4e97e699-93d7-4040-b5a3-2e906a58199e #stage files
+  - 300157e5-f4ad-4569-b533-9d1fa0e74d74 #compress staged dir
+  - ea713bc4-63f0-491c-9a6f-0b01d560b87e #exfil compressed dir

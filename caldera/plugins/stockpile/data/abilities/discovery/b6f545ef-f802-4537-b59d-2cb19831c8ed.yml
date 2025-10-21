@@ -1,0 +1,14 @@
+---
+
+- id: b6f545ef-f802-4537-b59d-2cb19831c8ed
+  name: Snag broadcast IP
+  description: Capture the local network broadcast IP address
+  tactic: discovery
+  technique:
+    attack_id: T1016
+    name: System Network Configuration Discovery
+  platforms:
+    darwin:
+      sh:
+        command: |
+          ifconfig | grep broadcast

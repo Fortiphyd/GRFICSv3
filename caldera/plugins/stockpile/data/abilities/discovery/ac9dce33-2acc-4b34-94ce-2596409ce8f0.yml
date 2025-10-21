@@ -1,0 +1,15 @@
+---
+
+- id: ac9dce33-2acc-4b34-94ce-2596409ce8f0
+  name: Ping network
+  description: Ping the network in order to build the ARP cache
+  tactic: discovery
+  technique:
+    attack_id: T1016
+    name: System Network Configuration Discovery
+  platforms:
+    darwin:
+      sh:
+        command: |
+          for ip in $(seq 190 199); do ping -c 1 $(echo #{domain.broadcast.ip} |
+          cut -d. -f-3).$ip -W 1; done

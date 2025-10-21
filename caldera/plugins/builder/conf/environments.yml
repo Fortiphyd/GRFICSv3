@@ -1,0 +1,43 @@
+enabled:
+  csharp:
+    docker: mono:latest
+    extension: cs
+    workdir: /opt/build
+    build_command: |
+      csc #{code} -out:#{build_target} #{references} -errorlog:error.log
+  cpp_windows_x64:
+    docker: dockcross/windows-static-x64:latest
+    extension: cpp
+    workdir: /opt/build
+    build_command: |
+      /bin/bash -c "$CXX -x c++ -o #{build_target} #{code} > error.log 2>&1"
+  cpp_windows_x86:
+    docker: dockcross/windows-static-x86:latest
+    extension: cpp
+    workdir: /opt/build
+    build_command: |
+      /bin/bash -c "$CXX -x c++ -o #{build_target} #{code} > error.log 2>&1"
+  c_windows_x64:
+    docker: dockcross/windows-static-x64:latest
+    extension: c
+    workdir: /opt/build
+    build_command: |
+      /bin/bash -c "$CC -x c -o #{build_target} #{code} > error.log 2>&1"
+  c_windows_x86:
+    docker: dockcross/windows-static-x86:latest
+    extension: c
+    workdir: /opt/build
+    build_command: |
+      /bin/bash -c "$CC -x c -o #{build_target} #{code} > error.log 2>&1"
+  go_windows:
+    docker: golang:latest
+    extension: go
+    workdir: /go/src
+    build_command: |
+      /bin/bash -c "#{modules} GOOS=windows GOARCH=amd64 GOCACHE=/go/src/.cache GO111MODULE=off go build -o #{build_target} > error.log 2>&1"
+  go_linux:
+    docker: golang:latest
+    extension: go
+    workdir: /go/src
+    build_command: |
+      /bin/bash -c "#{modules} GOOS=linux GOARCH=amd64 GOCACHE=/go/src/.cache GO111MODULE=off CGO_ENABLED=0 go build -o #{build_target} > error.log 2>&1"

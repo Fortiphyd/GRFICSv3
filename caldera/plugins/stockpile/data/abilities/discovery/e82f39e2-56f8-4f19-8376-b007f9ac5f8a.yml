@@ -1,0 +1,22 @@
+---
+
+- id: e82f39e2-56f8-4f19-8376-b007f9ac5f8a
+  name: Password Policy
+  description: Password Policy Discovery
+  tactic: discovery
+  technique:
+    attack_id: T1201
+    name: Password Policy Discovery
+  platforms:
+    darwin:
+      sh:
+        command: |
+          pwpolicy getaccountpolicies
+    linux:
+      sh:
+        command: |
+          cat /etc/pam.d/common-password
+    windows:
+      psh:
+        command: |
+          net accounts

@@ -1,0 +1,445 @@
+<div x-data="alpineAccess()" x-init="initPage()">
+
+    <!-- PAGE HEADER -->
+
+    <div x-ref="headerAccess">
+        <h2>Access</h2>
+        <p>
+            Here you can task any agent with any ability from the database - outside the scope of an operation. 
+            This is especially useful for conducting initial access attacks. To do this, deploy an agent locally 
+            and task it with either pre-ATT&CK or initial access tactics, pointed at any target. You can even deploy 
+            an agent remotely and use it as a proxy to conduct your initial access attacks. To the right, you'll 
+            see every ability directly tasked to an agent.
+        </p>
+    </div>
+    <hr>
+
+    <!-- AGENT SELECTION -->
+    
+    <div>
+        <form>
+            <div id="select-agent" class="field has-addons">
+                <label class="label">Select an agent &nbsp;&nbsp;&nbsp;</label>
+                <div class="control is-expanded">
+                    <div class="select is-small is-fullwidth">
+                        <select x-on:change="selectAgent()" x-model="selectedAgentPaw">
+                            <option value="" disabled selected>Select an agent</option>
+                            <template x-for="agent of agents" :key="agent.paw">
+                                <option x-bind:value="agent.paw" x-text="`${agent.host} - ${agent.paw}`"></option>
+                            </template>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="has-text-centered content" x-show="!selectedAgentPaw">
+        <p>Select an agent to get started</p> 
+    </div>
+    
+    <div x-show="selectedAgentPaw">
+        <div class="is-flex" x-show="selectedAgentPaw">
+            <button class="button is-primary is-small mr-4" @click="showRunModal = true">
+                <span class="icon"><i class="fas fa-running"></i></span>
+                <span>Run an Ability</span>
+            </button>
+            <span class="mr-4"><strong>Agent Platform</strong>: <span x-text="selectedAgent.platform"></span></span>
+            <span><strong>Compatible Abilities</strong>: <span x-text="filteredAbilities.length"></span></span>
+        </div>
+       <p class="has-text-centered content" x-show="!links.length">No links to show</p> 
+    </div>
+
+    <div x-show="selectedAgentPaw && links.length">
+        <table class="table is-striped is-fullwidth">
+            <thead>
+                <tr>
+                    <th>order</th>
+                    <th>name</th>
+                    <th>tactic</th>
+                    <th>status</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                <template x-for="(link, index) of links" :key="link.unique">
+                    <tr class="pointer">
+                        <td x-text="index + 1"></td>
+                        <td x-text="link.ability.name"></td>
+                        <td x-text="link.ability.tactic"></td>
+                        <td x-text="getLinkStatus(link)" x-bind:class="{ 'has-text-danger': getLinkStatus(link) === 'failed', 'has-text-success': getLinkStatus(link) === 'success' }"></td>
+                        <td>
+                            <button class="button is-small is-primary" @click="showOutput(link)">Output</button>
+                        </td>
+                    </tr>
+                </template>
+            </tbody>
+        </table>  
+    </div>
+
+    <!-- MODALS -->
+
+    <div class="modal" x-bind:class="{ 'is-active': showOutputModal }">
+        <div class="modal-background" @click="showOutputModal = false"></div>
+        <div class="modal-card wide">
+            <header class="modal-card-head">
+                <p class="modal-card-title">Link Output</p>
+            </header>
+            <section class="modal-card-body">
+                <label class="label">Command</label>
+                <pre x-text="outputCommand"></pre>
+                <label class="label">Standard Output</label>
+                <pre x-text="outputResult.stdout || '[ no output to show ]'"></pre>
+                <label class="label">Standard Error</label>
+                <pre x-text="outputResult.stderr || '[ no errors to show ]'"></pre>
+            </section>
+            <footer class="modal-card-foot">
+                <nav class="level">
+                    <div class="level-left"></div>
+                    <div class="level-right">
+                        <div class="level-item">
+                            <button class="button is-small" @click="showOutputModal = false">Close</button>
+                        </div>
+                    </div>
+                </nav>
+            </footer>
+        </div>
+    </div>
+
+    <div class="modal" x-bind:class="{ 'is-active': showRunModal }">
+        <div class="modal-background" @click="showRunModal = false"></div>
+        <div class="modal-card">
+            <header class="modal-card-head">
+                <p class="modal-card-title">Run an Ability</p>
+            </header>
+            <section class="modal-card-body">
+                <p class="has-text-centered">Select an Ability</p>
+                <form>
+                    <div class="field is-horizontal">
+                        <div class="field-label is-small">
+                            <label class="label"><span class="icon is-small"><i class="fas fa-search"></i></span></label>
+                        </div>
+                        <div class="field-body">
+                            <div class="field">
+                                <div class="control">
+                                    <input class="input is-small" x-model="searchQuery" placeholder="Search for an ability..." x-on:keyup="searchForAbility()">
+                                    <div class="search-results">
+                                        <template x-for="result of searchResults" :key="result.ability_id">
+                                            <p @click="selectAbility(result.ability_id)" x-text="result.name"></p>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+                <form>
+                    <div class="field is-horizontal">
+                        <div class="field-label is-small">
+                            <label class="label">Tactic</label>
+                        </div>
+                        <div class="field-body">
+                            <div class="field">
+                                <div class="control">
+                                    <div class="select is-small is-fullwidth">
+                                        <select x-model="selectedTactic" x-on:change="selectedAbilityId = ''">
+                                            <option default>Choose a tactic</option>
+                                            <template x-for="tactic of [...new Set(filteredAbilities.map((e) => e.tactic))]" :key="tactic">
+                                                <option x-bind:value="tactic" x-text="tactic"></option>
+                                            </template>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="field is-horizontal">
+                        <div class="field-label is-small">
+                            <label class="label">Technique</label>
+                        </div>
+                        <div class="field-body">
+                            <div class="field">
+                                <div class="control">
+                                    <div class="select is-small is-fullwidth">
+                                        <select x-model="selectedTechnique" x-bind:disabled="!selectedTactic" x-on:change="selectedAbilityId = ''">
+                                            <option default>Choose a technique</option>
+                                            <template :key="exploit.technique_id" x-for="exploit of [...new Set(filteredAbilities.filter((e) => selectedTactic === e.tactic).map((e) => e.technique_id))].map((t) => filteredAbilities.find((e) => e.technique_id === t))">
+                                                <option x-bind:value="exploit.technique_id" x-text="`${exploit.technique_id} | ${exploit.technique_name}`"></option>
+                                            </template>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="field is-horizontal is-fullwidth">
+                        <div class="field-label is-small">
+                            <label class="label">Ability</label>
+                        </div>
+                        <div class="field-body">
+                            <div class="field">
+                                <div class="control">
+                                    <div class="select is-small is-fullwidth">
+                                        <select x-model="selectedAbilityId" x-bind:disabled="!selectedTechnique" x-on:change="selectAbility(selectedAbilityId)">
+                                            <option default>Choose an ability</option>
+                                            <template :key="ability.ability_id" x-for="ability of filteredAbilities.filter((e) => selectedTactic === e.tactic && selectedTechnique === e.technique_id)">
+                                                <option x-bind:value="ability.ability_id" x-text="ability.name"></option>
+                                            </template>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+                <template x-if="selectedAbilityId">
+                    <div class="content">
+                        <hr>
+                        <h3 x-text="selectedAbility.name"></h3>
+                        <p x-text="selectedAbility.description"></p>
+
+                        <form>
+                            <div class="field is-horizontal">
+                                <div class="field-label is-small">
+                                    <label class="label">Obfuscator</label>
+                                </div>
+                                <div class="field-body">
+                                    <div class="field is-narrow">
+                                        <div class="control is-expanded">
+                                            <div class="select is-fullwidth is-small">
+                                                <select x-model="selectedObfuscator">
+                                                    <template x-for="obf of obfuscators" :key="obf.name">
+                                                        <option x-bind:value="obf.name" x-text="obf.name"></option>
+                                                    </template>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <template x-for="fact of facts" :key="fact.trait">
+                                <div class="field is-horizontal">
+                                    <div class="field-label is-small">
+                                        <label class="label" x-text="fact.trait"></label>
+                                    </div>
+                                    <div class="field-body">
+                                        <div class="field">
+                                            <div class="control">
+                                                <input class="input is-small is-fullwidth" x-model="fact.value" placeholder="Enter a value...">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </form>
+                        
+                        <button class="button is-small is-primary is-fullwidth" @click="execute()">Execute</button>
+                    </div>
+                </template>
+            </section>
+            <footer class="modal-card-foot">
+                <nav class="level">
+                    <div class="level-left"></div>
+                    <div class="level-right">
+                        <div class="level-item">
+                            <button class="button is-small" @click="showRunModal = false">Close</button>
+                        </div>
+                    </div>
+                </nav>
+            </footer>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    function alpineAccess() {
+        return {
+            // Core variables
+            agents: [],
+            links: [],
+            obfuscators: [],
+            selectedObfuscator: 'base64',
+            selectedAgent: {},
+            selectedAgentPaw: '',
+
+            abilities: [],
+            filteredAbilities: [],
+            selectedAbility: {},
+            selectedAbilityId: '',
+
+            tactics: [],
+            selectedTactic: '',
+            techniques: [],
+            selectedTechnique: '',
+            searchQuery: '',
+            searchResults: [],
+
+            // Modals
+            showOutputModal: false,
+            outputCommand: '',
+            outputResult: '',
+
+            showRunModal: false,
+            facts: [],
+
+            initPage() {
+                apiV2('GET', '/api/v2/agents').then((agents) => {
+                    this.agents = agents;
+                    return apiV2('GET', '/api/v2/abilities');
+                }).then((abilities) => {
+                    this.abilities = abilities;
+                    return apiV2('GET', '/api/v2/obfuscators');
+                }).then(async (obfuscators) => {
+                    this.obfuscators = obfuscators;
+
+                    while (this.$refs.headerAccess) {
+                        await sleep(3000);
+                        this.refreshAgents();
+                    }
+                }).catch((error) => {
+                    toast('There was an error initializing the page', false);
+                    console.error(error);
+                });
+            },
+
+            selectAgent() {
+                this.selectedAgent = this.agents.find((agent) => agent.paw === this.selectedAgentPaw);
+                this.links = this.selectedAgent.links;
+                this.filterAbilitiesByPlatform();
+            },
+
+            filterAbilitiesByPlatform() {
+                let platform = this.selectedAgent.platform;
+                this.filteredAbilities = [];
+                this.abilities.forEach((ability) => {
+                    let execPlatforms = ability.executors.map((exec) => exec.platform);
+                    if (execPlatforms.includes(platform)) {
+                        this.filteredAbilities.push(ability);
+                    }
+                });
+            },
+
+            refreshAgents() {
+                apiV2('GET', '/api/v2/agents').then((agents) => {
+                    this.agents = agents;
+                    if (this.selectedAgentPaw) {
+                        this.selectAgent();
+                    }
+                }).catch((error) => {
+                    toast('There was an error refreshing the page', false);
+                    console.error(error);
+                });
+            },
+
+            getLinkStatus(link) {
+                if (link.status === 0) {
+                    return 'success';
+                } else if (link.status > 0) {
+                    return 'failed';
+                } else {
+                    return 'in progress';
+                }
+            },
+
+            showOutput(link) {
+                restRequest('POST', { 'index': 'result', 'link_id': link.unique }, (data) => {
+                    this.outputCommand = b64DecodeUnicode(link.command);
+                    try {
+                        this.outputResult = JSON.parse(b64DecodeUnicode(data.output));
+                    } catch (SyntaxError) {
+                        this.outputResult = ""
+                    }
+                    this.showOutputModal = true;
+                });
+            },
+
+            searchForAbility() {
+                this.searchResults = [];
+                if (!this.searchQuery) return;
+                this.filteredAbilities.forEach((ability) => {
+                    if (ability.name.toLowerCase().indexOf(this.searchQuery.toLowerCase()) > -1) {
+                        this.searchResults.push({
+                            ability_id: ability.ability_id,
+                            name: ability.name
+                        });
+                    }
+                });
+            },
+
+            selectAbility(id) {
+                this.searchQuery = [];
+                this.searchResults = [];
+                this.selectedAbility = this.abilities.find((ability) => ability.ability_id === id);
+                this.selectedTactic = this.selectedAbility.tactic;
+                this.selectedTechnique = this.selectedAbility.technique_id;
+                this.selectedAbilityId = id;
+                
+                this.findFacts();
+            },
+
+            findFacts() {
+                let rxp = /#{([^}]+)}/g;
+                let match;
+                let matches = [];
+
+                let commands = this.selectedAbility.executors.map((exec) => exec.command);
+                commands.forEach((command) => {
+                    while (match = rxp.exec(command)) {
+                        matches.push(match[1]);
+                    }
+                });
+                this.facts = [...new Set(matches)].map((fact) => { 
+                    return { trait: fact, value: '' };
+                });
+            },
+            
+            execute() {
+                if (this.facts.length && this.facts.filter((fact) => !fact.value).length) {
+                    toast('Fact values cannot be empty!', false);
+                    return;
+                }
+
+                let requestBody = {
+                    paw: this.selectedAgentPaw,
+                    ability_id: this.selectedAbilityId,
+                    facts: this.facts,
+                    obfuscator: this.selectedObfuscator
+                };
+
+                apiV2('POST', '/plugin/access/exploit', requestBody).then((data) => {
+                    this.showRunModal = false;
+                    this.refreshAgents();
+                    toast('Executed ability', true);
+                }).catch((error) => {
+                    console.error(error);
+                })
+            }
+
+        };
+    }
+
+    // # sourceURL=access.js
+</script>
+
+<style scoped>
+#select-agent {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.search-results {
+    overflow-y: scroll;
+    max-height: 200px;
+    background-color: #010101;
+    border-radius: 0 4px;
+}
+.search-results p {
+    margin-bottom: 0 !important;
+    padding: 5px;
+    cursor: pointer;
+}
+.search-results p:hover {
+    background-color: #484848;
+}
+</style>

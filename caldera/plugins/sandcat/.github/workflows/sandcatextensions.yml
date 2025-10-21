@@ -1,0 +1,52 @@
+name: Sandcat Extensions
+
+on: [push, pull_request]
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 1
+
+    - name: Set up Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.19
+
+    - name: Setup Extensions
+      run: |
+        cp -R gocat-extensions/* gocat/
+        cd gocat
+        go mod tidy
+
+    - name: Build Windows Extensions
+      run: |
+        cd gocat
+        go build -o sandcatextended.go-windows -ldflags="-s -w" sandcat.go
+        file sandcatextended.go-windows && ls -al sandcatextended.go-windows
+      env:
+        GOOS: windows
+
+    - name: Build Darwin Extensions
+      run: |
+          cd gocat
+          go build -o sandcatextended.go-darwin -ldflags="-s -w" sandcat.go
+          file sandcatextended.go-darwin && ls -al sandcatextended.go-darwin
+      env:
+        GOOS: darwin
+
+    - name: Build Linux Extensions
+      run: |
+        cd gocat
+        go build -o sandcatextended.go-linux -ldflags="-s -w" sandcat.go
+        file sandcatextended.go-linux && ls -al sandcatextended.go-linux && ./sandcatextended.go-linux -help
+      env:
+        GOOS: linux
+
+    - name: Golang Unit Tests
+      run: |
+        cd gocat
+        go test -v ./...

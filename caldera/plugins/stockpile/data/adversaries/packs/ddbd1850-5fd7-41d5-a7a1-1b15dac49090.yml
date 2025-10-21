@@ -1,0 +1,10 @@
+id: ddbd1850-5fd7-41d5-a7a1-1b15dac49090
+name: |
+  Windows Worm #3
+description: Move laterally with SMB and WinRM
+atomic_ordering:
+  - 85341c8c-4ecb-4579-8f53-43e3e91d7617 # arp -a
+  - fa4ed735-7006-4451-a578-b516f80e559f # nslookup
+  - deeac480-5c2a-42b5-90bb-41675ee53c7e # view remote shares
+  - 65048ec1-f7ca-49d3-9410-10813e472b30 # smb copy
+  - 41bb2b7a-75af-49fd-bd15-6c827df25921 # winrm exec

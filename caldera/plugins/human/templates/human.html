@@ -1,0 +1,531 @@
+<link rel="stylesheet" href="/human/css/human.css" />
+
+<div x-data="alpineHuman" x-init="initHuman()">
+  <div id="human-section-1" class="section-profile">
+    <div class="row">
+      <div
+        class="column section-border"
+        style="flex: 25%; text-align: left; padding: 15px"
+      >
+        <h1 style="font-size: 70px; margin-top: -20px">Human</h1>
+        <h2 style="margin-top: -55px">emulate human behavior</h2>
+        <p>
+          This plugin allows you to design a human that will emulate user
+          behavior on an endpoint. Use the following instructions to build and
+          deploy your own human.
+        </p>
+        <br />
+      </div>
+      <div
+        class="column"
+        style="
+          flex: 75%;
+          margin-right: -25px;
+          align-items: stretch;
+          display: flex;
+        "
+      >
+        <div class="row row-interior install-list">
+          <div
+            class="column column-interior install-container"
+            style="text-align: left; flex: 25%"
+          >
+            <div class="background-text">1</div>
+            <span>Install Python3 on the target workstation</span>
+          </div>
+          <div
+            class="column column-interior install-container"
+            style="text-align: left; flex: 25%"
+          >
+            <div class="background-text">2</div>
+            <span>Install Python3 Virtualenv on the target workstation</span>
+          </div>
+          <div
+            class="column column-interior install-container"
+            style="text-align: left; flex: 25%"
+          >
+            <div class="background-text">3</div>
+            <span>Install Chrome on the target workstation</span>
+          </div>
+          <div
+            class="column column-interior install-container"
+            style="text-align: left; flex: 25%"
+          >
+            <div class="background-text">4</div>
+            <span
+              >Build a human below and run the download cradle on the target
+              workstation</span
+            >
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="human-section-2" class="section-profile human-basic">
+    <div class="row">
+      <div class="topright duk-icon"></div>
+      <div
+        class="column section-border"
+        style="flex: 25%; text-align: left; padding: 15px"
+      >
+        <h1
+          x-text="humans[selectedHuman] ? humans[selectedHuman].name : 'Name...'"
+          id="human-name-header"
+          style="font-size: 70px; margin-top: -20px"
+        >
+          Name...
+        </h1>
+        <h2 style="margin-top: -55px">build your human</h2>
+        <p>
+          Design and generate your human here, or select a pre-existing human to
+          deploy. Use the download command to install and start your human.
+        </p>
+        <br />
+      </div>
+      <div
+        class="column"
+        style="flex: 75%; text-align: left; margin-right: -25px"
+      >
+        <div class="row row-interior">
+          <div id="behavior-options" class="column column-interior human-box">
+            <table>
+              <tr>
+                <td><p>Name:</p></td>
+                <td>
+                  <input
+                    x-model="humanName"
+                    id="human-name"
+                    type="text"
+                    placeholder="Enter human's name..."
+                  />
+                </td>
+              </tr>
+              <tr>
+                <td><p>Platform:</p></td>
+                <td>
+                  <select x-model="selectedPlatform" id="base-platform">
+                    <option value="" disabled>Select target OS</option>
+                    <option value="darwin">MacOS</option>
+                    <option value="linux">Linux</option>
+                    <option value="windows-psh">Windows (PowerShell)</option>
+                  </select>
+                </td>
+              </tr>
+            </table>
+            <hr />
+            <h4>Select your human's behaviors:</h4>
+            <ul id="human-tasks">
+              <template x-for="workflow in workflows">
+                <li>
+                  <input
+                    type="checkbox"
+                    :value="workflow.name"
+                    x-model="selectedWorkflows"
+                  />
+                  <span x-text="workflow.description"> </span>
+                </li>
+              </template>
+            </ul>
+            <hr />
+            <h4>Custom Commands:</h4>
+            <button
+              id="append-command"
+              class="command-button atomic-button"
+              style="width: 30%; background-color: green"
+            >
+              Add Command
+            </button>
+            <button
+              id="clear-commands"
+              class="command-button atomic-button"
+              style="width: 30%; background-color: firebrick"
+            >
+              Clear Commands
+            </button>
+            <br /><br />
+            <div id="input-command">
+              <!-- Place holder for appended custom commands -->
+            </div>
+            <hr />
+            <h4>Human behavior configuration:</h4>
+            <table>
+              <tr>
+                <td><p>Task Sleep Interval</p></td>
+                <td class="duk-icon duk-table-icon">
+                  <img id="duk-task-sleep-interval" src="/gui/img/duk.png" />
+                </td>
+                <td>
+                  <div>
+                    <input
+                      x-model="sleepInterval"
+                      class="queueOption"
+                      type="range"
+                      min="5"
+                      max="50"
+                      class="slider"
+                      id="human-task-interval"
+                      name="human-task-interval"
+                    />
+                  </div>
+                </td>
+                <td>
+                  <input
+                    x-model="sleepInterval"
+                    type="number"
+                    id="human-task-interval-text"
+                  />
+                </td>
+              </tr>
+              <tr>
+                <td><p>Task Cluster Sleep Interval</p></td>
+                <td class="duk-icon duk-table-icon">
+                  <img id="duk-cluster-sleep-interval" src="/gui/img/duk.png" />
+                </td>
+                <td>
+                  <input
+                    x-model="clusterSleepInterval"
+                    class="queueOption"
+                    type="range"
+                    min="5"
+                    max="1000"
+                    class="slider"
+                    id="human-cluster-interval"
+                    name="human-cluster-interval"
+                  />
+                </td>
+                <td>
+                  <input
+                    x-model="clusterSleepInterval"
+                    type="number"
+                    id="human-cluster-interval-text"
+                  />
+                </td>
+              </tr>
+              <tr>
+                <td><p>Tasks per Cluster</p></td>
+                <td class="duk-icon duk-table-icon">
+                  <img id="duk-task-per-cluster" src="/gui/img/duk.png" />
+                </td>
+                <td>
+                  <input
+                    x-model="tasksPerCluster"
+                    class="queueOption"
+                    type="range"
+                    min="1"
+                    max="20"
+                    class="slider"
+                    id="human-task-count"
+                    name="human-task-count"
+                  />
+                </td>
+                <td>
+                  <input
+                    x-model="tasksPerCluster"
+                    type="number"
+                    id="human-task-count-text"
+                  />
+                </td>
+              </tr>
+            </table>
+            <button
+              id="generateLayer"
+              type="button"
+              class="button-success"
+              style=""
+              x-on:click="generateHuman2()"
+            >
+              Generate Human
+            </button>
+            <div id="human-built">
+              <span id="message"></span>
+            </div>
+          </div>
+          <div
+            class="column column-interior human-box"
+            style="text-align: left"
+          >
+            <table>
+              <tr>
+                <td><p>Caldera Server IP:</p></td>
+                <td>
+                  <input
+                    x-model="serverIp"
+                    id="server-ip"
+                    type="text"
+                    placeholder="http://localhost:8888"
+                    oninput="updateRenderedHuman();"
+                  />
+                </td>
+              </tr>
+              <tr>
+                <td><p>Select existing human:</p></td>
+                <td>
+                  <select
+                    x-model="selectedHuman"
+                    style="width: 100%; margin-left: 0"
+                  >
+                    <option disable value="">Select existing human...</option>
+                    <template x-for="(h, index) in humans">
+                      <option
+                        :value="index"
+                        :id="'human-' + h.name"
+                        x-text="h.name"
+                      ></option>
+                    </template>
+                  </select>
+                </td>
+              </tr>
+            </table>
+            <hr />
+            <div class="box container">
+              <div x-show="window.isSecureContext">
+                <a
+                  class="button is-small is-outlined cmd-copy-button"
+                  x-on:click="copyCommand()"
+                >
+                  <span class="icon"><i class="far fa-lg fa-copy"></i></span>
+                  <span>Copy</span>
+                </a>
+                <br /><br />
+              </div>
+              <code
+                x-text="commandBlock"
+                id="delivery-commands"
+                style="text-align: left; font-size: 14px"
+              ></code>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  function alpineHuman() {
+    return {
+      workflows: null,
+      selectedWorkflows: [],
+      commands: [],
+      humans: [],
+      selectedHuman: -1,
+      humanName: "",
+      selectedPlatform: "",
+      serverIp: "",
+      sleepInterval: 10,
+      clusterSleepInterval: 500,
+      tasksPerCluster: 5,
+      commandBlock: "",
+
+      initHuman() {
+        this.serverIp = `${location.protocol}//${location.hostname}:${location.port}`;
+
+        apiV2("GET", "plugin/human/workflows")
+          .then((workflows) => {
+            this.workflows = workflows;
+            return apiV2("GET", "plugin/human/humans").then((humans) => {
+              this.humans = humans;
+            });
+          })
+          .catch((error) => {
+            console.error(error);
+            toast("Error loading workflows", false);
+          });
+
+        this.$watch("selectedHuman", () => {
+          this.renderCommandBlock();
+        });
+
+        this.$watch("serverIp", () => {
+          this.renderCommandBlock();
+        });
+      },
+
+      generateHuman2() {
+        if (this.humanName == "") {
+          toast("Please enter a name for your human", false);
+          return;
+        }
+
+        if (
+          this.selectedPlatform != "linux" &&
+          this.selectedPlatform != "windows-psh" &&
+          this.selectedPlatform != "darwin"
+        ) {
+          toast("Please select a platform", false);
+          return;
+        }
+
+        if (this.selectedWorkflows.length == 0) {
+          toast("Please select at least one workflow", false);
+          return;
+        }
+        const payload = {
+          index: "build_human",
+          platform: this.selectedPlatform,
+          name: this.humanName,
+          task_cluster_interval: this.clusterSleepInterval,
+          task_interval: this.sleepInterval,
+          task_count: this.tasksPerCluster,
+          tasks: this.selectedWorkflows,
+          extra: this.commands,
+        };
+        apiV2("POST", "plugin/human/api", payload)
+          .then((response) => {
+            this.humans.push(response);
+            this.selectedHuman = this.humans.length - 1;
+            this.humanName = "";
+            this.selectedPlatform = "";
+            this.selectedWorkflows = [];
+            this.commands = [];
+            toast("Human created", true);
+          })
+          .catch((error) => {
+            console.error(error);
+            toast("Error creating human", false);
+          });
+      },
+
+      copyCommand() {
+        navigator.clipboard.writeText(this.commandBlock).then(function () {
+          toast("Copied to clipboard", true);
+        });
+      },
+
+      renderCommandBlock() {
+        if (!this.humans[this.selectedHuman]) {
+          this.commandBlock = ``;
+          return;
+        }
+        const extra = this.formatExtra(
+          this.humans[this.selectedHuman].extra,
+          this.humans[this.selectedHuman].platform
+        );
+        switch (this.humans[this.selectedHuman].platform) {
+          case "darwin":
+            this.commandBlock =
+              "curl -sk -o '" +
+              this.humans[this.selectedHuman].name +
+              ".tar.gz' -X POST -H 'file:" +
+              this.humans[this.selectedHuman].name +
+              ".tar.gz' " +
+              this.serverIp +
+              "/file/download 2>&1 && mkdir '" +
+              this.humans[this.selectedHuman].name +
+              "' && tar -C '" +
+              this.humans[this.selectedHuman].name +
+              "' -zxvf '" +
+              this.humans[this.selectedHuman].name +
+              ".tar.gz' " +
+              " && virtualenv -p python3 '" +
+              this.humans[this.selectedHuman].name +
+              "' && '" +
+              this.humans[this.selectedHuman].name +
+              "/bin/pip' install -r '" +
+              this.humans[this.selectedHuman].name +
+              "/requirements.txt' && '" +
+              this.humans[this.selectedHuman].name +
+              "/bin/python' '" +
+              this.humans[this.selectedHuman].name +
+              "/human.py' --clustersize " +
+              this.humans[this.selectedHuman].tasks_per_cluster +
+              " " +
+              "--taskinterval " +
+              this.humans[this.selectedHuman].task_interval +
+              " --taskgroupinterval " +
+              this.humans[this.selectedHuman].task_cluster_interval +
+              " --extra " +
+              extra;
+
+            break;
+          case "linux":
+            this.commandBlock =
+              "curl -sk -o '" +
+              this.humans[this.selectedHuman].name +
+              ".tar.gz' -X POST -H 'file:" +
+              this.humans[this.selectedHuman].name +
+              ".tar.gz' " +
+              this.serverIp +
+              "/file/download 2>&1 && mkdir '" +
+              this.humans[this.selectedHuman].name +
+              "' && tar -C '" +
+              this.humans[this.selectedHuman].name +
+              "' -zxvf '" +
+              this.humans[this.selectedHuman].name +
+              ".tar.gz' " +
+              " && virtualenv -p python3 '" +
+              this.humans[this.selectedHuman].name +
+              "' && '" +
+              this.humans[this.selectedHuman].name +
+              "/bin/pip' install -r '" +
+              this.humans[this.selectedHuman].name +
+              "/requirements.txt' && '" +
+              this.humans[this.selectedHuman].name +
+              "/bin/python' '" +
+              this.humans[this.selectedHuman].name +
+              "/human.py' --clustersize " +
+              this.humans[this.selectedHuman].tasks_per_cluster +
+              " " +
+              "--taskinterval " +
+              this.humans[this.selectedHuman].task_interval +
+              " --taskgroupinterval " +
+              this.humans[this.selectedHuman].task_cluster_interval +
+              " --extra " +
+              extra;
+            break;
+          case "windows-psh":
+            this.commandBlock =
+              '$server="' +
+              this.serverIp +
+              '"; $url="$server/file/download"; $wc=New-Object System.Net.WebClient; $wc.Headers.add("file","' +
+              this.humans[this.selectedHuman].name +
+              '.zip"); $wc.DownloadFile($url, "$pwd\\' +
+              this.humans[this.selectedHuman].name +
+              '.zip"); ' +
+              'Expand-Archive "' +
+              this.humans[this.selectedHuman].name +
+              '.zip" -DestinationPath "' +
+              this.humans[this.selectedHuman].name +
+              '" -Force; python.exe -m venv "' +
+              this.humans[this.selectedHuman].name +
+              '";' +
+              'Start-Process -FilePath ".\\' +
+              this.humans[this.selectedHuman].name +
+              '\\Scripts\\pip.exe" -ArgumentList "install -r ' +
+              this.humans[this.selectedHuman].name +
+              '\\requirements.txt" -Wait; Start-Process -FilePath ".\\\\' +
+              this.humans[this.selectedHuman].name +
+              '\\\\Scripts\\\\python.exe" -ArgumentList "' +
+              this.humans[this.selectedHuman].name +
+              "/human.py' --clustersize " +
+              this.humans[this.selectedHuman].tasks_per_cluster +
+              " " +
+              "--taskinterval " +
+              this.humans[this.selectedHuman].task_interval +
+              " --taskgroupinterval " +
+              this.humans[this.selectedHuman].task_cluster_interval +
+              " --extra " +
+              extra +
+              '"';
+            break;
+        }
+      },
+      formatExtra(extra, platform) {
+        let formatted_commands = "";
+        extra.forEach((command) => {
+          switch (platform) {
+            case "darwin":
+              command = command.replace(/\\/g, "\\\\");
+              command = command.replace(/"/g, '\\"');
+              break;
+            case "linux":
+              command = command.replace(/\\/g, "\\\\");
+              command = command.replace(/"/g, '\\"');
+              break;
+          }
+          formatted_commands += '"' + command + '" ';
+        });
+        return formatted_commands;
+      },
+    };
+  }
+</script>

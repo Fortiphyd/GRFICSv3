@@ -1,0 +1,26 @@
+- id: 9a30740d-3aa8-4c23-8efa-d51215e8a5b9
+  name: Scan WIFI networks
+  description: View all potential WIFI networks on host
+  tactic: discovery
+  technique:
+    attack_id: T1016
+    name: System Network Configuration Discovery
+  platforms:
+    darwin:
+      sh:
+        command: |
+          ./#{payload:9f639067-370a-40ba-b7ac-6f1c15d5a158} scan
+        payloads:
+        - 9f639067-370a-40ba-b7ac-6f1c15d5a158
+    linux:
+      sh:
+        command: |
+          ./#{payload:9f639067-370a-40ba-b7ac-6f1c15d5a158} scan
+        payloads:
+        - 9f639067-370a-40ba-b7ac-6f1c15d5a158
+    windows:
+      psh:
+        command: |
+          .\#{payload:28f9bf43-4f14-4965-9bd9-b70fd6993d8e} -Scan
+        payloads:
+        - 28f9bf43-4f14-4965-9bd9-b70fd6993d8e

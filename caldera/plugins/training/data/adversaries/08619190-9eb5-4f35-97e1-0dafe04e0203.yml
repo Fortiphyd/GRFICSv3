@@ -1,0 +1,7 @@
+---
+
+id: 08619190-9eb5-4f35-97e1-0dafe04e0203
+name: Blue Certification 5 - Shell Profile
+description: Xth adversary for blue certification
+atomic_ordering:
+  - 18702cd3-8e98-4eb7-99d4-0d2816926af1

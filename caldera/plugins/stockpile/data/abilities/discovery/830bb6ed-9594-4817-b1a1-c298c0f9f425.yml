@@ -1,0 +1,18 @@
+---
+
+- id: 830bb6ed-9594-4817-b1a1-c298c0f9f425
+  name: Check Chrome
+  description: Check to see if Gooogle Chrome browser is installed
+  tactic: discovery
+  technique:
+    attack_id: T1518
+    name: Software Discovery
+  platforms:
+    darwin:
+      sh:
+        command: |
+          which google-chrome
+    linux:
+      sh:
+        command: |
+          which google-chrome

@@ -1,0 +1,14 @@
+---
+
+- id: 7c42a30c-c8c7-44c5-80a8-862d364ac1e4
+  name: UAC Status
+  description: Determine whether or not UAC is enabled
+  tactic: discovery
+  technique:
+    attack_id: T1518.001
+    name: "Software Discovery: Security Software Discovery"
+  platforms:
+    windows:
+      psh,pwsh:
+        command: |
+            echo $(get-uac)

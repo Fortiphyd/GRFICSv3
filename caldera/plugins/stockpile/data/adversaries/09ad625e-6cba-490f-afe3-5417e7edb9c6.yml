@@ -1,0 +1,9 @@
+---
+
+id: 09ad625e-6cba-490f-afe3-5417e7edb9c6
+name: Advanced Thief via GitHub Repo
+description: Find, stage, and exfiltrate sensitive files to GitHub Repository
+atomic_ordering:
+  - 10fad81e-3f68-47be-83b6-fbee7711c6a9 # Advanced File Search and Stager
+  - 30a8cf10-73dc-497c-8261-a64cc9e91505 # Package Staged Files to Password-Protected Archive
+  - 4a1120a5-971c-457f-bb07-60641b4723fd # Exfil Compressed Archive to Github Repository

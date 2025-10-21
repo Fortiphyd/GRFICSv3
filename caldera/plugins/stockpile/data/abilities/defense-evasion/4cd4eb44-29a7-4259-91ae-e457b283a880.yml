@@ -1,0 +1,22 @@
+---
+
+- id: 4cd4eb44-29a7-4259-91ae-e457b283a880
+  name: Delete payload
+  description: Remove a downloaded payload file
+  tactic: defense-evasion
+  technique:
+    attack_id: T1070.004
+    name: "Indicator Removal on Host: File Deletion"
+  platforms:
+    darwin:
+      sh:
+        cleanup: |
+          rm #{payload}
+    linux:
+      sh:
+        cleanup: |
+          rm #{payload}
+    windows:
+      psh,pwsh:
+        cleanup: |
+          Remove-Item -Force -Path "#{payload}"

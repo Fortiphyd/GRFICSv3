@@ -1,0 +1,7 @@
+---
+
+id: 2c99958e-36e0-4fab-bcdf-977926a58cd6
+name: Blue Certification 3
+description: Third adversary for blue certification
+atomic_ordering:
+  - f0d77555-fa79-4884-8afd-73d39f887879

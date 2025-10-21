@@ -1,0 +1,24 @@
+---
+
+- id: 02de522f-7e0a-4544-8afc-0c195f400f5f
+  name: Parse SSH config
+  description: Search for valid SSH commands in the config file
+  tactic: collection
+  technique:
+    attack_id: T1005
+    name: Data from Local System
+  platforms:
+    darwin:
+      sh:
+        command: |
+          pip install stormssh && storm list
+        parsers:
+          plugins.stockpile.app.parsers.ssh:
+            - source: remote.ssh.cmd
+    linux:
+      sh:
+        command: |
+          pip install -q stormssh 2> /dev/null && storm list | sed 's/\x1b\[[0-9;]*m//g'
+        parsers:
+          plugins.stockpile.app.parsers.ssh:
+            - source: remote.ssh.cmd

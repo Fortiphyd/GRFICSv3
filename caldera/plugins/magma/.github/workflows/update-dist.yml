@@ -1,0 +1,41 @@
+name: Update dist
+
+on:
+  pull_request:
+    branches: [ "master" ]
+  
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [18.x]
+        
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: '0'
+        ref: ${{ github.event.pull_request.head.ref }}
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+      
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Build dist folder
+      run: npm run build --if-present
+      
+#     - name: Commit dist if it has changed
+#       run: |
+#           git config --global user.name 'github-actions'
+#           git config --global user.email 'github-actions@github.com'
+#           git add dist
+#           if ! git diff-index --quiet --cached HEAD; then
+#             git commit -m "Build dist"
+#             git push
+#           fi

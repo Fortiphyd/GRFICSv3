@@ -1,0 +1,306 @@
+<div x-data="alpineObjectives()" x-init="initPage()">
+    <div>
+        <h2>Objectives</h2>
+        <p>
+            Objectives are groups of goals (a.k.a. fact targets) that an adversary will accomplish.
+        </p>
+    </div>
+    <hr>
+    <div>
+
+        <!-- OBJECTIVE SELECTION -->
+
+        <form>
+            <div id="select-objective" class="field has-addons">
+                <label class="label">Select an objective &nbsp;&nbsp;&nbsp;</label>
+                <div class="control is-expanded">
+                    <div class="select is-small is-fullwidth">
+                        <select id="planner-select" x-on:change="selectedObjective = objectives.find((o) => o.id === selectedObjectiveId)" x-model="selectedObjectiveId">
+                            <option value="" disabled selected>Select one...</option>
+                            <template x-for="objective of objectives" :key="objective.id">
+                                <option x-bind:value="objective.id" x-text="objective.name" x-bind:title="objective.description"></option>
+                            </template>
+                        </select>
+                    </div>
+                </div>
+                <div class="control">
+                    <button type="button" class="button is-primary is-small" @click="createObjective()">+ New</button>
+                </div>
+            </div>
+        </form>
+
+        <!-- OBJECTIVE CONTROLS -->
+
+        <div class="content" x-show="selectedObjective.id">
+            <div x-show="!isEditing">
+                <h3 x-text="selectedObjective.name"></h3>
+                <p x-text="selectedObjective.description"></p>
+            </div>
+            <br>
+            <form x-show="isEditing">
+                <div class="field">
+                    <div class="control">
+                        <input class="input" x-model="selectedObjective.name" placeholder="Objective Name" x-bind:class="{ 'is-danger': fieldErrors.includes('name') }">
+                        <p x-show="fieldErrors.includes('name')" class="help is-danger">This field is required.</p>
+                    </div>
+                </div>
+                <div class="field">
+                    <div class="control">
+                        <input class="input is-small" x-model="selectedObjective.description" placeholder="Objective Description" x-bind:class="{ 'is-danger': fieldErrors.includes('description') }">
+                        <p x-show="fieldErrors.includes('description')" class="help is-danger">This field is required.</p>
+                    </div>
+                </div>
+            </form>
+            <div class="control-buttons is-flex is-flex-direction-row">
+                <button class="button is-small" @click="isEditing = true" x-show="!isEditing">
+                    <span class="icon"><i class="fas fa-pencil-alt"></i></span>
+                    <span>Edit</span>
+                </button>
+                <button class="button is-small" @click="showAssignmentsModal = true" x-show="!isEditing" x-bind:disabled="!adversaries.filter((a) => a.objective === selectedObjective.id).length">
+                    <span class="icon"><i class="fas fa-tasks"></i></span>
+                    <span>
+                        Show Assignments
+                        (<span x-text="adversaries.filter((a) => a.objective === selectedObjective.id).length"></span>)
+                    </span>
+                </button>
+                <div class="mt-3">
+                    <button class="button is-small" @click="cancelEditing()" x-show="isEditing">
+                        <span class="icon"><i class="fas fa-times-circle"></i></span>
+                        <span>Cancel Changes</span>
+                    </button>
+                    <button class="button is-success is-small" @click="saveObjective()" x-show="isEditing">
+                        <span class="icon"><i class="fas fa-save"></i></span>
+                        <span>Save</span>
+                    </button>
+                </div>
+            </div>
+            <br>
+            <h4>Goals</h4>
+        </div>
+
+        <!-- GOALS TABLE -->
+        
+        <div x-show="selectedObjective.id">
+            <table class="table is-striped">
+                <thead>
+                    <tr>
+                        <th> 
+                            <span class="has-tooltip-multiline" data-tooltip="The fact associated with this goal, i.e. host.user.name">target</span>
+                        </th>
+                        <th>
+                            <span class="has-tooltip-multiline" data-tooltip="The relationship to validate between the target and value.">operator</span>
+                        </th>
+                        <th>
+                            <span class="has-tooltip-multiline" data-tooltip="The value this fact should have">value</span>
+                        </th>
+                        <th>
+                            <span class="has-tooltip-multiline" data-tooltip="The number of times this goal should be met in the fact database to be satisfied, defaults to infinity (2^20)">count</span>
+                        </th>
+                        <th>
+                            <span class="has-tooltip-multiline" data-tooltip="The relationship to validate between the target and value.">achieved</span>
+                        </th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="(goal, index) of selectedObjective.goals || []" :key="index">
+                        <tr x-show="!isEditing">
+                            <td x-text="goal.target"></td>
+                            <td x-text="goal.operator"></td>
+                            <td x-text="goal.value"></td>
+                            <td x-text="goal.count"></td>
+                            <td>
+                                <span class="icon has-text-success" x-show="goal.achieved">
+                                    <i class="fas fa-check"></i>
+                                </span>
+                                <span class="icon has-text-danger" x-show="!goal.achieved">
+                                    <i class="fas fa-times"></i>
+                                </span>
+                            </td>
+                            <td></td>
+                        </tr>
+                    </template>
+                    <template x-for="(goal, index) of selectedObjective.goals || []" :key="index">
+                        <tr x-show="isEditing">
+                            <td>
+                                <input class="input is-small" x-model="goal.target">
+                            </td>
+                            <td>
+                                <div class="select is-small">
+                                    <select x-model="goal.operator">
+                                        <template x-for="op of OPERATOR_TYPES" :key="op">
+                                            <option x-bind:value="op" x-text="op" x-bind:selected="goal.operator === op"></option>
+                                        </template>
+                                    </select>
+                                </div>
+                            </td>
+                            <td>
+                                <input class="input is-small" x-model="goal.value">
+                            </td>
+                            <td>
+                                <input class="input is-small" type="number" x-model="goal.count" min="0">
+                            </td>
+                            <td>
+                                <span class="icon has-text-success" x-show="goal.achieved">
+                                    <i class="fas fa-check"></i>
+                                </span>
+                                <span class="icon has-text-danger" x-show="!goal.achieved">
+                                    <i class="fas fa-times"></i>
+                                </span>
+                            </td>
+                            <td class="has-text-centered">
+                                <button class="delete is-danger" @click.stop="selectedObjective.goals.splice(index, 1)"></button>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+            <button class="button is-primary is-small" @click="addGoal()" x-show="isEditing">
+                <span class="icon"><i class="fas fa-plus"></i></span>
+                <span>Add Goal</span>
+            </button>
+        </div>
+
+    </div>
+
+    <!-- MODALS -->
+
+    <div class="modal" x-bind:class="{ 'is-active': showAssignmentsModal }">
+        <div class="modal-background" @click="showAssignmentsModal = false"></div>
+        <div class="modal-card">
+            <header class="modal-card-head">
+                <p class="modal-card-title">Objective Assignments</p>
+            </header>
+            <section class="modal-card-body">
+                <p>
+                    Below are the adversary profiles that have the <b x-text="selectedObjective.name"></b> objective linked:
+                </p>
+                <ul>
+                    <template x-for="adversary of adversaries.filter((a) => a.objective === selectedObjective.id)" :key="adversary.adversary_id">
+                        <li x-text="adversary.name"></li>
+                    </template>
+                </ul>
+            </section>
+            <footer class="modal-card-foot">
+                <nav class="level">
+                    <div class="level-left">
+                        <div class="level-item">
+                            <button class="button is-small" @click="showAssignmentsModal = false">Close</button>
+                        </div>
+                    </div>
+                </nav>
+            </footer>
+        </div>
+    </div>
+
+</div>
+
+<script>
+function alpineObjectives() {
+    return {
+        objectives: [],
+        adversaries: [],
+        selectedObjectiveId: '',
+        selectedObjective: {},
+        isEditing: false,
+        isCreating: false,
+
+        OPERATOR_TYPES: ['<', '>', '<=', '>=', 'in', '*', '=='],
+
+        showAssignmentsModal: false,
+
+        // Input validation
+        requiredFields: ['name', 'description', 'goals'],
+        fieldErrors: [],
+
+        initPage() {
+            apiV2('GET', '/api/v2/objectives').then((objectives) => {
+                this.objectives = objectives;
+                return apiV2('GET', '/api/v2/adversaries');
+            }).then((adversaries) => {
+                this.adversaries = adversaries;
+            }).catch((error) => {
+                toast('Error loading page', false);
+                console.error(error);
+            });
+        },
+
+        createObjective() {
+            this.objectives.push({
+                id: uuidv4(),
+                name: '',
+                description: '',
+                goals: []
+            });
+            this.selectedObjective = this.objectives[this.objectives.length - 1];
+            this.selectedObjectiveId = this.selectedObjective.id;
+            this.addGoal();
+            this.isCreating = true;
+            this.isEditing = true;
+        },
+
+        addGoal() {
+            this.selectedObjective.goals.push({
+                achieved: false,
+                count: 0,
+                operator: this.OPERATOR_TYPES[0],
+                target: '',
+                value: ''
+            });
+        },
+
+        saveObjective() {
+            this.fieldErrors = validateInputs(this.selectedObjective, this.requiredFields);
+            if (this.fieldErrors.length) return;
+
+            apiV2('PUT', `/api/v2/objectives/${this.selectedObjective.id}`, this.selectedObjective).then((response) => {
+                this.isEditing = false;
+                this.isCreating = false;
+                toast('Saved objective', true);
+            }).catch((error) => {
+                toast('Error saving objective', false);
+                console.error(error);
+            });
+        },
+
+        cancelEditing() {
+            this.isEditing = false;
+
+            if (this.isCreating) {
+                this.selectedObjectiveId = '';
+                this.selectedObjective = {};
+                this.objectives.splice(this.objectives.length - 1, 1);
+                return;
+            }
+
+            apiV2('GET', `/api/v2/objectives/${this.selectedObjective.id}`).then((objective) => {
+                this.selectedObjective = objective;
+            }).catch((error) => {
+                toast('Error canceling changes, please close and reopen this page', false);
+                console.error(error);
+            });
+        }
+
+    };
+}
+
+// # sourceURL=objectives.js
+</script>
+
+<style>
+    #select-objective {
+        max-width: 800px;
+        margin: 0 auto;
+    }
+
+    .control-buttons>.button {
+        margin: 0 10px 10px 0;
+    }
+
+    .vr {
+        width: 1px;
+        height: 30px;
+        margin: 0 20px 0 10px;
+        background-color: grey;
+    }
+</style>

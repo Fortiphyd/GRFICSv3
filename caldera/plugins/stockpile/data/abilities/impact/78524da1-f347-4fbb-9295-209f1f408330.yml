@@ -1,0 +1,16 @@
+---
+
+- id: 78524da1-f347-4fbb-9295-209f1f408330
+  name: Record microphone
+  description: Install sox and record microphone for n-seconds
+  tactic: impact
+  technique:
+    attack_id: T1496
+    name: Resource Hijacking
+  platforms:
+    darwin:
+      sh:
+        command: |
+          brew install sox >/dev/null 2>&1;
+          sox -d recording.wav trim 0 15 >/dev/null 2>&1;
+        timeout: 120

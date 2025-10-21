@@ -1,0 +1,21 @@
+- id: 6d90e6fa-9324-4eb5-93be-9f737245bd7z
+  name: Discover Domain Admins
+  description: Use PowerView to query the Active Directory server to determine remote admins
+  tactic: discovery
+  technique:
+    attack_id: T1069.002
+    name: "Permission Groups Discovery: Domain Groups"
+  platforms:
+    windows:
+      psh:
+        command: |
+          Import-Module .\powerview.ps1;
+          Get-NetLocalGroupMember -ComputerName #{remote.host.fqdn}
+        parsers:
+          plugins.stockpile.app.parsers.netlocalgroup:
+          - source: remote.host.fqdn
+            edge: has_admin
+            target: domain.user.name
+        payloads:
+        - powerview.ps1
+  singleton: True

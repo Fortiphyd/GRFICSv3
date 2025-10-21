@@ -1,0 +1,30 @@
+- id: 47abe1f5-55a5-46cc-8cad-506dac8ea6d9
+  name: Scan IP for ports
+  description: Use dropped scanner to find open popular ports
+  tactic: discovery
+  technique:
+    attack_id: T1046
+    name: Network Service Scanning
+  platforms:
+    darwin:
+      sh:
+        command: |
+          python3 scanner.py -i #{remote.host.ip}
+        parsers:
+          plugins.stockpile.app.parsers.scan:
+          - source: remote.host.ip
+            edge: has_open_port
+            target: remote.host.port
+        payloads:
+        - scanner.py
+    linux:
+      sh:
+        command: |
+          python3 scanner.py -i #{remote.host.ip}
+        parsers:
+          plugins.stockpile.app.parsers.scan:
+          - source: remote.host.ip
+            edge: has_open_port
+            target: remote.host.port
+        payloads:
+        - scanner.py

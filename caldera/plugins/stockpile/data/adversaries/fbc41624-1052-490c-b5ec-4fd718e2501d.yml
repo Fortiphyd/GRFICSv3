@@ -1,0 +1,9 @@
+---
+
+id: fbc41624-1052-490c-b5ec-4fd718e2501d
+name: Advanced Thief via FTP
+description: Find, stage, and exfiltrate sensitive files over FTP
+atomic_ordering:
+  - 10fad81e-3f68-47be-83b6-fbee7711c6a9 # Advanced File Search and Stager
+  - 30a8cf10-73dc-497c-8261-a64cc9e91505 # Package Staged Files to Password-Protected Archive
+  - d754878c-17dd-46dc-891c-a993f8a10336 # Exfil Compressed Archive to FTP Server

@@ -1,0 +1,53 @@
+- id: f313a0d7-2327-4f69-8da4-a6efd6135121
+  name: Hash Sensitive Files
+  description: Acquire hashes of sensitive files as a baseline to check if they are changed in the future
+  tactic: setup
+  technique:
+    attack_id: x
+    name: x
+  repeatable: False
+  platforms:
+    linux:
+      sh:
+        command: |
+          output="";
+          filepath=$(echo "#{file.sensitive.path}" | sed 's/\\\*/\*/g');
+          files=$(find $filepath -maxdepth 0 -type f 2>/dev/null);
+          for file in $files;
+            do hash=$(sha256sum $file | cut -d' ' -f1);
+            output="${output}${file}>${hash}\n";
+          done;
+          echo $output | sed '/^[[:space:]]*$/d'
+        parsers:
+          plugins.response.app.parsers.key_value:
+            - source: file.sensitive.path
+              edge: has_hash
+              target: file.sensitive.hash
+    darwin:
+      sh:
+        command: |
+          output="";
+          filepath=$(echo "#{file.sensitive.path}" | sed 's/\\\*/\*/g');
+          files=$(find $filepath -maxdepth 0 -type f 2>/dev/null);
+          for file in $files;
+            do hash=$(shasum -a 256 $file | cut -d' ' -f1);
+            output="${output}${file}>${hash}\n";
+          done;
+          echo $output | sed '/^[[:space:]]*$/d'
+        parsers:
+          plugins.response.app.parsers.key_value:
+            - source: file.sensitive.path
+              edge: has_hash
+              target: file.sensitive.hash
+    windows:
+      psh:
+        command: |
+          Get-FileHash #{file.sensitive.path} -EA silentlycontinue | foreach-object {$_.Path + '>' + $_.Hash}
+        parsers:
+          plugins.response.app.parsers.key_value:
+            - source: file.sensitive.path
+              edge: has_hash
+              target: file.sensitive.hash
+  requirements:
+    - plugins.response.app.requirements.source_fact:
+      - source: file.sensitive.path

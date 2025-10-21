@@ -1,0 +1,23 @@
+---
+
+id: 78e7504d-968f-477d-8806-4d6c04b94431
+name: Worm
+description: Move laterally any way possible
+atomic_ordering:
+# Initial discovery
+  - 02de522f-7e0a-4544-8afc-0c195f400f5f # ssh parse
+  - 422526ec-27e9-429a-995b-c686a29561a4 # ssh
+  - 530e47c6-8592-42bf-91df-c59ffbd8541b # find admin shares
+  - 85341c8c-4ecb-4579-8f53-43e3e91d7617 # arp -a
+  - baac2c6d-4652-4b7e-ab0a-f1bf246edd12 # Invoke-Mimikatz
+# Get FQDNs and Hostname
+  - fdf8bf36-797f-4157-805b-fe7c1c6fc903  # nbtstat hostname lookup
+  - fa4ed735-7006-4451-a578-b516f80e559f # nslookup names
+# Copy remotely
+  - aa6ec4dd-db09-4925-b9b9-43adeb154686 # Net use
+  - 65048ec1-f7ca-49d3-9410-10813e472b30 # SMB copy
+  - 4908fdc4-74fc-4d7c-8935-26d11ad26a8d # WinRM and SCP
+# Remote exec
+  - ece5dde3-d370-4c20-b213-a1f424aa8d03 # WMI exec
+  - 41bb2b7a-75af-49fd-bd15-6c827df25921 # WinRM start
+  - 10a9d979-e342-418a-a9b0-002c483e0fa6 # SSH remote

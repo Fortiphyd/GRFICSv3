@@ -1,0 +1,7 @@
+---
+
+id: 890508db-9646-4a2d-8d1a-4ea25b3ce02a
+name: Blue Certification 2
+description: Second adversary for blue certification
+atomic_ordering:
+  - 586140a1-9755-4996-883d-82a17c7737b2

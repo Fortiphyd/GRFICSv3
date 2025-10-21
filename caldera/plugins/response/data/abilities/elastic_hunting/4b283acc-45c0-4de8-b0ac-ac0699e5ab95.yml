@@ -1,0 +1,36 @@
+---
+- id: 4b283acc-45c0-4de8-b0ac-ac0699e5ab95
+  name: Search for PowerShell ExecutionPolicy Bypass (elastic)
+  description: Search for Sysmon Event 1 powershell records with "ExecutionPolicy" and "Bypass"
+  tactic: hunt
+  technique:
+    attack_id: x
+    name: x
+  platforms:
+    windows:
+      elasticsearch: &cmd
+        command: |
+          process.name:powershell.exe AND process.args:*Bypass* AND process.args:*ExecutionPolicy*
+        parsers:
+          plugins.response.app.parsers.ecs_sysmon:
+            - source: host.process.guid
+              edge: has_user
+              target: host.process.user
+            - source: host.process.guid
+              edge: has_pid
+              target: host.unauthorized.pid
+            - source: host.process.guid
+              edge: has_process_name
+              target: host.process.name
+            - source: host.process.guid
+              edge: has_interesting
+              target: investigate.process.parent_guid
+            - source: host.process.guid
+              edge: has_interesting
+              target: investigate.process.guid
+    linux:
+      elasticsearch:
+        *cmd
+    darwin:
+      elasticsearch:
+        *cmd

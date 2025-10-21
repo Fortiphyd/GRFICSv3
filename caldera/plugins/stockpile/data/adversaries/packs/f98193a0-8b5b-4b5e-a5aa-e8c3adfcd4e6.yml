@@ -1,0 +1,8 @@
+---
+
+id: f98193a0-8b5b-4b5e-a5aa-e8c3adfcd4e6
+name: Undercover
+description: Adversary to swap from built-in PowerShell to Core
+atomic_ordering:
+  - 60f63260-39bb-4136-87a0-b6c2dca799fc #install PowerShell Core
+  - 134b49a3-3f93-41bd-85f4-563eadbb6055 #stop PowerShell

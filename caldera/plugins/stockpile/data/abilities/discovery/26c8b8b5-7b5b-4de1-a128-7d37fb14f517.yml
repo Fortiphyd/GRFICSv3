@@ -1,0 +1,17 @@
+---
+
+- id: 26c8b8b5-7b5b-4de1-a128-7d37fb14f517
+  name: Discover domain controller
+  description: Identify the remote domain controllers
+  tactic: discovery
+  technique:
+    attack_id: T1018
+    name: Remote System Discovery
+  platforms:
+    windows:
+      cmd:
+        command: |
+          nltest /dsgetdc:%USERDOMAIN%
+      psh:
+        command: |
+          nltest /dsgetdc:$env:USERDOMAIN

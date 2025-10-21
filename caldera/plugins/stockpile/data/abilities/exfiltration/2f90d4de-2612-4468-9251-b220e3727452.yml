@@ -1,0 +1,26 @@
+- id: 2f90d4de-2612-4468-9251-b220e3727452
+  name: Compress Git Repository
+  description: This ability will compress a given git repository.
+  tactic: exfiltration
+  technique:
+    attack_id: T1560.001
+    name: 'Archive Collected Data: Archive via Utility'
+  platforms:
+    linux:
+      sh:
+        command: |
+          tar -czf #{host.dir.git}.tar.gz -C "#{host.dir.git}" .; printf #{host.dir.git}.tar.gz;
+        cleanup: |
+          rm #{host.dir.git}.tar.gz;
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: host.dir.compress
+    windows:
+      psh:
+        command: |
+          tar -czf #{host.dir.git}.tar.gz -C #{host.dir.git} *; Write-Host #{host.dir.git}.tar.gz; exit 0;
+        cleanup: |
+          Remove-Item -Path #{host.dir.git}.tar.gz;
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: host.dir.compress

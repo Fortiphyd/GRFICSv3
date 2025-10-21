@@ -1,0 +1,9 @@
+---
+
+id: e89a10d3-004f-4c15-b0eb-d1ba76a4b67f
+name: Advanced Thief via GitHub Gist
+description: Exfil a compressed archive to a GitHub Gist (Base64 Encoded)
+atomic_ordering:
+  - 10fad81e-3f68-47be-83b6-fbee7711c6a9 # Advanced File Search and Stager
+  - 30a8cf10-73dc-497c-8261-a64cc9e91505 # Package Staged Files to Password-Protected Archive
+  - 0582dc26-e0cf-4645-88cf-f37a02279976 # Exfil Compressed Archive to GitHub Gist

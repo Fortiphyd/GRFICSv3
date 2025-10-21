@@ -1,0 +1,71 @@
+- id: 9bc10f37-0853-4d73-b547-019c11eda22f
+  name: Modified Sensitive Directory
+  description: Checks sensitive directory hashes against previously stored hashes to determine if the directory has been modified
+  tactic: detection
+  technique:
+    attack_id: x
+    name: x
+  repeatable: True
+  platforms:
+    linux:
+      sh:
+        command: |
+          directory="#{directory.sensitive.path}";
+          if [ -d $directory ];
+            then tar -czf /tmp/dir_sens_comp -C $directory .;
+            hash=$(sha256sum /tmp/dir_sens_comp | cut -d' ' -f1);
+            rm -f /tmp/dir_sens_comp;
+            if [ "$hash" != "#{directory.sensitive.hash}" ];
+              then echo $directory;
+            fi;
+          else echo $directory;
+          fi;
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: directory.sensitive.path
+              edge: has_property
+              target: has_been_modified
+    darwin:
+      sh:
+        command: |
+          directory="#{directory.sensitive.path}";
+          if [ -d $directory ];
+            then tar -cf - -C $directory . | gzip --no-name > /tmp/dir_sens_comp;
+            hash=$(shasum -a 256 /tmp/dir_sens_comp | cut -d' ' -f1);
+            rm -f /tmp/dir_sens_comp;
+            if [ "$hash" != "#{directory.sensitive.hash}" ];
+              then echo $directory;
+            fi;
+          else echo $directory;
+          fi;
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: directory.sensitive.path
+              edge: has_property
+              target: has_been_modified
+    windows:
+      psh:
+        command: |
+          $directory = "#{directory.sensitive.path}";
+          if (Test-Path -PathType Container $directory) {
+            Compress-Archive -Force -Path $($directory + "\*") -DestinationPath C:\Users\Public\dir_sens_comp.zip;
+            $hash = (Get-FileHash C:\Users\Public\dir_sens_comp.zip).Hash;
+            Remove-Item -Force C:\Users\Public\dir_sens_comp.zip;
+            if ($hash -ne "#{directory.sensitive.hash}") {
+              echo $directory;
+            }
+          } else {
+            echo $directory;
+          }
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: directory.sensitive.path
+              edge: has_property
+              target: has_been_modified
+  requirements:
+    - plugins.stockpile.app.requirements.basic:
+        - source: directory.sensitive.path
+          edge: has_hash
+          target: directory.sensitive.hash
+    - plugins.stockpile.app.requirements.paw_provenance:
+        - source: directory.sensitive.hash

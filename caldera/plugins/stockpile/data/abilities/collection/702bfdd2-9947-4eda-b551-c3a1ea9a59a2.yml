@@ -1,0 +1,14 @@
+---
+
+- id: 702bfdd2-9947-4eda-b551-c3a1ea9a59a2
+  description: System Information Gathering Script
+  name: PowerShell information gathering
+  tactic: collection
+  technique:
+    attack_id: T1059.001
+    name: "Command and Scripting Interpreter: PowerShell"
+  platforms:
+    windows:
+      psh,pwsh:
+        command: |
+          powershell.exe -c "Get-WmiObject -class win32_operatingsystem | select -property * | export-csv msdebug.log";

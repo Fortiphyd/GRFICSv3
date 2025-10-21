@@ -1,0 +1,14 @@
+---
+
+- id: 0df4d46e-e202-4b29-9a19-c2540982002d
+  name: GameBoard Plugin Manual Detection - GUID
+  description: GameBoard plugin guid detection placeholder ability
+  tactic: verification
+  technique:
+    attack_id: x
+    name: x
+  platforms:
+    windows:
+      psh:
+        command: |
+          ;

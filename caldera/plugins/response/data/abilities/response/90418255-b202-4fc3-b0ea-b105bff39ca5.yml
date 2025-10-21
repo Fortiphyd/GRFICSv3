@@ -1,0 +1,40 @@
+---
+
+- id: 90418255-b202-4fc3-b0ea-b105bff39ca5
+  name: Collect GUID from PID
+  description: Collect process GUIDs by querying Sysmon for all events associated with the given PID
+  tactic: response
+  technique:
+    attack_id: x
+    name: Query Event Logs
+  platforms:
+    windows:
+      psh:
+        command: |
+          $time_range = (Get-Date) - (New-TimeSpan -Seconds $(#{sysmon.time.range}/1000));
+          Get-WinEvent -FilterHashTable @{ Logname='Microsoft-Windows-Sysmon/Operational'; StartTime=$time_range; Id=1} | where -Property Message -Match '(?m)^ProcessId: #{host.process.id}\b' | Format-List;
+        parsers:
+          plugins.response.app.parsers.processguids:
+            - source: host.process.id
+              edge: has_guid
+              target: host.process.guid
+            - source: host.process.guid
+              edge: has_parentid
+              target: host.process.parentid
+            - source: host.process.parentid
+              edge: has_guid
+              target: host.process.parentguid
+      cmd:
+        command: |
+          wevtutil qe Microsoft-Windows-Sysmon/Operational /q:"*/System/TimeCreated[timediff(@SystemTime) <= #{sysmon.time.range}] and */EventData/Data[@Name='ProcessId']=#{host.process.id} /f:text
+        parsers:
+          plugins.response.app.parsers.processguids:
+            - source: host.process.id
+              edge: has_guid
+              target: host.process.guid
+            - source: host.process.guid
+              edge: has_parentid
+              target: host.process.parentid
+            - source: host.process.parentid
+              edge: has_guid
+              target: host.process.parentguid

@@ -1,0 +1,43 @@
+<div x-data="alpineObfuscators()" x-init="initPage()">
+    <div>
+        <h2>Obfuscators</h2>
+        <p>
+            </b>Obfuscators are designed for evasion.</b> When running an operation, you can select an obfuscator. By default, plain-text is
+            selected. During the operation, before the agent collects an instruction, the server will wrap it
+            with the obfuscation technique chosen - including instructions for how to unpack it
+            before execution.
+        </p>
+    </div>
+    <hr>
+    <div>
+        <table class="table is-striped">
+            <tbody>
+                <template x-for="obfuscator of obfuscators" :key="obfuscator.name">
+                    <tr>
+                        <th x-text="obfuscator.name"></th>
+                        <td x-text="obfuscator.description"></td>
+                    </tr>
+                </template>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    function alpineObfuscators() {
+        return {
+            obfuscators: [],
+
+            initPage() {
+                apiV2('GET', '/api/v2/obfuscators').then((obfuscators) => {
+                    this.obfuscators = obfuscators;
+                }).catch((error) => {
+                    toast('Error loading page', false);
+                    console.error(error);
+                });
+            },
+        };
+    }
+
+    // # sourceURL=obfuscators.js
+</script>

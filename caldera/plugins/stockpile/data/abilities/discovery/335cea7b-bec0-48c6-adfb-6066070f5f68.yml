@@ -1,0 +1,22 @@
+---
+
+- id: 335cea7b-bec0-48c6-adfb-6066070f5f68  
+  name: View Processes
+  description: Display information about current system processes 
+  tactic: discovery
+  technique:
+    attack_id: T1057
+    name: Process Discovery
+  platforms:
+    darwin:
+      sh:
+        command: |
+          ps
+    linux:
+      sh:
+        command: |
+          ps
+    windows:
+      psh:
+        command: |
+          get-process

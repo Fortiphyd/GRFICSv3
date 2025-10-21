@@ -1,0 +1,24 @@
+- id: 6c91884e-11ec-422f-a6ed-e76774b0daac
+  name: View printer queue
+  description: View details of queued documents in printer queue
+  tactic: discovery
+  technique:
+    attack_id: T1120
+    name: Peripheral Device Discovery
+  platforms:
+    darwin:
+      sh:
+        command: lpq -a
+        parsers:
+          plugins.stockpile.app.parsers.printer_queue:
+          - source: host.print.file
+            edge: has_size
+            target: host.print.size
+    linux:
+      sh:
+        command: lpq -a
+        parsers:
+          plugins.stockpile.app.parsers.printer_queue:
+          - source: host.print.file
+            edge: has_size
+            target: host.print.size

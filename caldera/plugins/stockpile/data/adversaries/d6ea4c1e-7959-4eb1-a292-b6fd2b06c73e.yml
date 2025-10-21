@@ -1,0 +1,10 @@
+---
+id: d6ea4c1e-7959-4eb1-a292-b6fd2b06c73e
+name:  Enumerator
+description: Enumerate Processes in all the ways
+atomic_ordering:
+  - 94f21386-9547-43c4-99df-938ab05d45ce # wmic and dump to disk
+  - 8adf02e8-6e71-4244-886c-98c402857404 # tasklist /m and dump to disk
+  - 4d9b079c-9ede-4116-8b14-72ad3a5533af # get process via powershell and dump to disk
+  - 7c42a30c-c8c7-44c5-80a8-862d364ac1e4 # get uac status and dump to disk
+  - cc191baa-7472-4386-a2f4-42f203f1acfd # download pstool and execute it + cleanup

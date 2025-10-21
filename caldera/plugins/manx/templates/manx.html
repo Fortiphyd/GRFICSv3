@@ -1,0 +1,181 @@
+<meta id="websocket-data" data-websocket="{{ websocket }}">
+
+<script type="module" src="/manx/js/terminal.js"></script>
+<link rel="stylesheet" href="/manx/css/basic.css">
+<link rel="stylesheet" href="/manx/css/xterm.css"/>
+
+<div id="manxPage" x-data="alpineManx()" x-init="initPage(); $watch('selectedSessionID', () => resetFields())">
+    <div x-ref="header">
+        <h2>Manx</h2>
+        <p class="has-text-weight-bold">
+            A coordinated access trojan (CAT)
+        </p>
+        <p>
+            The Manx agent, written in GoLang, connects to the server over the TCP <i>contact point</i>.
+            This raw TCP socket connection allows Manx to keep a persistent connection between host-and-server.
+            Bundled with Manx is a reverse-shell management tool, called the <i>terminal</i>
+            - below - which allows you to establish a local shell on an agent.
+        </p>
+        <p class="has-text-weight-bold">
+            To deploy a Manx agent, go to the Agents tab.
+        </p>
+    </div>
+    <hr>
+    <div class="is-flex is-flex-direction-column">
+        <h3>Terminal</h3>
+        <div class="is-flex is-flex-direction-row is-justify-content-space-around mb-5">
+            <div class="select is-small">
+                <select id="session-id"
+                        x-model="selectedSessionID"
+                        x-on:change="getTactics()">
+                    <option value="" disabled selected>Select a session</option>
+                    <template x-for="s in sessions" :key="s.id">
+                        <option x-bind:value="s.id" x-bind:data-paw="s.info"
+                                x-bind:data-platform="s.platform"
+                                x-bind:data-executor="s.executors ? s.executors[0] : 'sh'"
+                                x-text="s.id + ' - ' + s.info"></option>
+                    </template>
+                </select>
+            </div>
+            <div class="select is-small">
+                <select x-model="selectedTacticName" id="tactic-filter" x-on:change="getTechniques()">
+                    <option value="" disabled selected>Select a tactic</option>
+                    <template x-for="a in tactics" :key="a.ability_id">
+                        <option x-text="a.tactic"></option>
+                    </template>
+                </select>
+            </div>
+            <div class="select is-small">
+                <select x-model="selectedTechniqueID" x-on:change="getProcedures()">
+                    <option value="" disabled selected>Select a technique</option>
+                    <template x-for="t in techniques" :key="t.technique_id">
+                        <option x-bind:value="t.technique_id"
+                                x-text="t.technique_id + ' | ' + t.technique_name"></option>
+                    </template>
+                </select>
+            </div>
+            <div class="select is-small">
+                <select id="procedure-filter" x-model="selectedProcedureID" x-on:change="getProcedure();">
+                    <option value="" disabled selected>Select a procedure</option>
+                    <template x-for="p in procedures">
+                        <option x-text="p.name" x-bind:value="p.ability_id"></option>
+                    </template>
+                </select>
+            </div>
+        </div>
+        <div style="visibility:hidden;position:absolute" id="xterminal-command" x-text="terminalCommand"></div>
+        <div id="xterminal"></div>
+    </div>
+</div>
+
+<script>
+    function alpineManx() {
+        return {
+            DEFAULT_EXECUTORS: ['sh'],
+            DEFAULT_PLATFORM: 'darwin',
+
+            sessions: JSON.parse('{{ sessions | tojson }}'),
+            tactics: [],
+            techniques: [],
+            procedures: [],
+            selectedSessionID: '',
+            selectedTacticName: '',
+            selectedTechniqueID: '',
+            selectedProcedureID: '',
+            terminalCommand: '',
+
+            get sessionIDs() {
+                return this.sessions ? this.sessions.flatMap((s) => s.id) : [];
+            },
+
+            get selectedSession() {
+                return this.sessions ? (this.sessions.find((s) => s.id.toString() === this.selectedSessionID.toString())) : null;
+            },
+
+            async initPage() {
+                while (this.$refs.header) {
+                    if (!document.querySelector('.xterm-cursor-layer') && window.loadManxTerm) {
+                        window.loadManxTerm();
+                    }
+                    await sleep(3000);
+                    this.refreshManx();
+                }
+            },
+
+            refreshManx() {
+                apiV2('POST', '/plugin/manx/sessions').then((sessions) => {
+                    // Join new manx agents in array, and assign default platform and executors if DNE
+                    this.sessions = this.sessions.concat(sessions.map((s) => ({ ...s, platform: s.platform || this.DEFAULT_PLATFORM, executors: s.executors || [this.DEFAULT_EXECUTORS] })).filter((s) => !this.sessionIDs.includes(s.id)));
+                }).catch((error) => {
+                    toast('Error refreshing manx', false);
+                    console.error(error);
+                });
+            },
+
+            resetFields() {
+                this.selectedTacticName = '';
+                this.selectedTechniqueID = '';
+                this.selectedProcedureID = '';
+            },
+
+            getTactics() {
+                const getUniqueAbilities = (self, data) => {
+                    if (data.abilities) {
+                        const seen = [];
+                        self.tactics = data.abilities.filter((a) => {
+                            if (!seen.includes(a.tactic)) {
+                                seen.push(a.tactic);
+                                return true;
+                            }
+                            return false;
+                        });
+                    }
+                };
+
+                restRequest('POST', { paw: this.selectedSession.info }, (data) => {
+                    getUniqueAbilities(this, data);
+                }, '/plugin/manx/ability');
+            },
+
+            getTechniques() {
+                this.selectedTechniqueID = '';
+                this.selectedProcedureID = '';
+
+                let seenIDs = [];
+                this.techniques = this.tactics.filter((a) => {
+                    if (a.tactic === this.selectedTacticName && !seenIDs.includes(a.technique_id)) {
+                        seenIDs.push(a.technique_id);
+                        return true;
+                    }
+                    return false;
+                });
+            },
+
+            getProcedures() {
+                this.selectedProcedureID = '';
+
+                this.procedures = this.techniques.filter((t) => t.technique_id === this.selectedTechniqueID);
+            },
+
+            getProcedure() {
+                const getCommands = (self, data) => {
+                    if (data && data.length > 0) {
+                        data = JSON.parse(data);
+                        data.forEach((ability) => {
+                            const executor = ability.executors.find((e) => e.platform === self.selectedSession.platform && e.name === self.selectedSession.executors[0]);
+                            self.terminalCommand = executor ? executor.command : '';
+                        });
+                    } else toast('No ability available for this agent\'s platform and executor combination');
+                };
+                restRequest('POST', {
+                    index: 'abilities',
+                    ability_id: this.selectedProcedureID
+                }, (data) => {
+                    getCommands(this, data);
+                });
+            }
+        };
+    }
+
+    // # sourceURL=manx.js
+</script>

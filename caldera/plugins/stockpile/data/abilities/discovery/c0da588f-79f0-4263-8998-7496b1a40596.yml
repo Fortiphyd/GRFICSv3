@@ -1,0 +1,38 @@
+---
+
+- id: c0da588f-79f0-4263-8998-7496b1a40596
+  name: Identify active user
+  description: Find user running agent
+  tactic: discovery
+  technique:
+    attack_id: T1033
+    name: System Owner/User Discovery
+  platforms:
+    darwin:
+      sh:
+        command: whoami
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: host.user.name
+            - source: domain.user.name
+    linux:
+      sh:
+        command: whoami
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: host.user.name
+            - source: domain.user.name
+    windows:
+      psh:
+        command: |
+          $env:username
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: host.user.name
+            - source: domain.user.name
+      cmd:
+        command: echo %username%
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: host.user.name
+            - source: domain.user.name

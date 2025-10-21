@@ -1,0 +1,14 @@
+lorem
+certifi
+chardet
+colorama
+configparser
+crayons
+idna
+pyautogui
+requests
+selenium
+urllib3
+webdriver-manager
+beautifulsoup4
+lxml

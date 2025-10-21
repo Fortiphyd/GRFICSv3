@@ -1,0 +1,21 @@
+---
+
+- id: 43b3754c-def4-4699-a673-1d85648fda6a
+  name: Avoid logs
+  description: Stop terminal from logging history
+  tactic: defense-evasion
+  technique:
+    attack_id: T1070.003
+    name: "Indicator Removal on Host: Clear Command History"
+  platforms:
+    darwin:
+      sh:
+        command: |
+          > $HOME/.bash_history && unset HISTFILE
+    linux:
+      sh:
+        command: |
+          > $HOME/.bash_history && unset HISTFILE
+    windows:
+      psh:
+        command: Clear-History;Clear

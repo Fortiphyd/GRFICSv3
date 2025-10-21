@@ -1,0 +1,15 @@
+---
+- id: f0d77555-fa79-4884-8afd-73d39f887879
+  name: Pretend Malicious Mail
+  description: Send an email with a pretend evil domain to be acted on
+  tactic: training
+  technique:
+    attack_id: x
+    name: x
+  platforms:
+    linux:
+      sh:
+        command: |
+          mv ./phish_email.txt /var/mail/victim
+        payloads:
+          - phish_email.txt

@@ -1,0 +1,22 @@
+- description: Identify AV
+  id: 2dece965-37a0-4f70-a391-0f30e3331aba
+  name: Discover antivirus programs
+  platforms:
+    darwin:
+      sh:
+        command: |
+          find /Applications/ -maxdepth 2 -iname *.app | grep -io "[a-z ]*\.app" | grep -Ei -- "symantec|norton|bitdefender|kapersky|eset|avast|avira|malwarebytes|sophos|(trend micro)"
+        parsers:
+          plugins.stockpile.app.parsers.antivirus:
+            - source: host.installed.av
+    windows:
+      psh:
+        command: |
+          wmic /NAMESPACE:\\root\SecurityCenter2 PATH AntiVirusProduct GET /value
+        parsers:
+          plugins.stockpile.app.parsers.basic:
+            - source: host.installed.av
+  tactic: discovery
+  technique:
+    attack_id: T1518.001
+    name: "Software Discovery: Security Software Discovery"

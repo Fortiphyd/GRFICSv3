@@ -1,0 +1,20 @@
+---
+- id: 8bc73098-54d1-4f69-abd5-271e3e2da5df
+  name: New Scheduled Tasks
+  description: Checks to see if a new (unauthorized) scheduled task has been added
+  tactic: detection
+  technique:
+    attack_id: x
+    name: x
+  repeatable: True
+  platforms:
+    windows:
+      psh:
+        command: |
+          Get-ScheduledTask > C:\Users\Public\new_schtasks_list.txt;
+          $new_schtasks =  $(Get-Content .\new_schtasks_list.txt) | Where-Object {$_ -notIn $(Get-Content .\baseline_schtasks_list.txt)} |foreach-object {(-split $_)[1]};
+          Remove-Item -Path C:\Users\Public\new_schtasks_list.txt -Force;
+          $new_schtasks
+        parsers:
+          plugins.response.app.parsers.basic_strip:
+            - source: host.new.schtask

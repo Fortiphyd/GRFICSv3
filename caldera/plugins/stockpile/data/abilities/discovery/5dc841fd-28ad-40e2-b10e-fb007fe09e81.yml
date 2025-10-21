@@ -1,0 +1,14 @@
+---
+
+- id: 5dc841fd-28ad-40e2-b10e-fb007fe09e81
+  name: Virtual or Real
+  description: Determine if the system is virtualized or physical
+  tactic: discovery
+  technique:
+    attack_id: T1497.001
+    name: "Virtualization/Sandbox Evasion: System Checks"
+  platforms:
+    windows:
+      psh:
+        command: |
+          get-wmiobject win32_computersystem | fl model
