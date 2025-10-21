@@ -1,5 +1,5 @@
 # ---- Stage 1: Build stage ----
-FROM python:3.11-slim as build
+FROM python:3.11-slim@sha256:7a3ed1226224bcc1fe5443262363d42f48cf832a540c1836ba8ccbeaadf8637c as build
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -16,7 +16,7 @@ RUN make
 
 
 # ---- Stage 2: Runtime image ----
-FROM python:3.11-slim
+FROM python:3.11-slim@sha256:7a3ed1226224bcc1fe5443262363d42f48cf832a540c1836ba8ccbeaadf8637c
 
 # Install runtime libraries and network tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
