@@ -11,8 +11,6 @@
 <!-- Existing table, modals, and buttons go here -->
   <div class="container">
 <nav class="d-flex justify-content-between align-items-center mb-3">
-  <div>
-    <strong>Firewall UI</strong>
   </div>
 </nav>
 
@@ -146,22 +144,6 @@
   </button>
 
     <hr>
-
-<table class="table table-sm table-striped">
-  <thead><tr><th>Time</th><th>Action</th><th>Proto</th><th>Source</th><th>Destination</th><th>Interfaces</th></tr></thead>
-  <tbody>
-    {% for e in entries %}
-    <tr>
-      <td>{{ e.time }}</td>
-      <td><span class="badge bg-{{ 'danger' if e.action=='DROP' else 'warning' }}">{{ e.action }}</span></td>
-      <td>{{ e.proto }}</td>
-      <td>{{ e.src }}</td>
-      <td>{{ e.dst }}</td>
-      <td>{{ e.iface }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
 
 <script>
 document.querySelectorAll('form[action="/delete"]').forEach(form => {

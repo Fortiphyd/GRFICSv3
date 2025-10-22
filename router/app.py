@@ -36,13 +36,14 @@ def parse_firewall_logs(limit=100):
         with open(LOG_FILE) as f:
             for line in f:
                 data = json.loads(line)
+                in_iface = INTERFACE_LABELS.get(data.get("oob.in"), data.get("oob.in", "?"))
                 entries.append({
                     "time": datetime.fromisoformat(data.get("timestamp")).strftime("%H:%M:%S"),
                     "action": data.get("oob.prefix", "").replace("FW ", "").strip(": "),
                     "proto": {6:"TCP",17:"UDP",1:"ICMP"}.get(data.get("ip.protocol"), str(data.get("ip.protocol"))),
                     "src": f"{data.get('src_ip','?')}:{data.get('src_port','')}",
                     "dst": f"{data.get('dest_ip','?')}:{data.get('dest_port','')}",
-                    "iface": f"{data.get('oob.in','?')} → {data.get('oob.out','?')}",
+                    "iface": f"{in_iface}",
                 })
         entries = entries[-limit:]  # last N lines
     except FileNotFoundError:
@@ -344,6 +345,14 @@ def save_rules():
 
     return redirect(url_for("ids"))
 
+
+
+@app.route("/firewall/logs")
+@login_required
+def firewall_logs():
+    entries = parse_firewall_logs(limit=200)
+    user = session.get("username")
+    return render_template("firewall_logs.html", entries=entries, user=user)
 
 
 

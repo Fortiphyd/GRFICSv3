@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Firewall Logs</h2>
+
+<table class="table table-sm table-striped align-middle">
+  <thead>
+    <tr>
+      <th>Time</th>
+      <th>Action</th>
+      <th>Proto</th>
+      <th>Source</th>
+      <th>Destination</th>
+      <th>Interface</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for e in entries %}
+    <tr>
+      <td>{{ e.time }}</td>
+      <td><span class="badge bg-{{ 'danger' if e.action == 'DROP' else 'warning' }}">{{ e.action }}</span></td>
+      <td>{{ e.proto }}</td>
+      <td>{{ e.src }}</td>
+      <td>{{ e.dst }}</td>
+      <td>{{ e.iface }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="text-muted text-center">No recent logs found.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

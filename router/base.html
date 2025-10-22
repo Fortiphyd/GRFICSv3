@@ -21,6 +21,11 @@
         <li class="nav-item">
           <a class="nav-link {% if active_page == 'ids' %}active{% endif %}" href="{{ url_for('ids') }}">IDS</a>
         </li>
+        <li class="nav-item">
+         <a class="nav-link" href="{{ url_for('firewall_logs') }}">Firewall Logs</a>
+        </li>
+
+
       </ul>
       {% if session.get('username') %}
       <span class="navbar-text me-3 text-light">Logged in as {{ session['username'] }}</span>
