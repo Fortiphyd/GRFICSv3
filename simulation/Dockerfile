@@ -60,6 +60,8 @@ RUN pip install --upgrade pip && pip install --no-cache-dir pymodbus==3.9.2
 
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
+RUN find . -type f -name "*.sh" -exec chmod +x {} \;
+
 # Use custom entrypoint to bring up interfaces before running services
 ENTRYPOINT ["/entrypoint.sh"]
 
