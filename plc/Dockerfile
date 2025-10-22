@@ -7,8 +7,7 @@ COPY webserver /workdir/webserver/
 
 WORKDIR /workdir
 
-RUN chmod +x install.sh
-RUN chmod +x background_installer.sh
+RUN find . -type f -name "*.sh" -exec chmod +x {} \;
 
 # 1. Install dependencies (runs once, cached unless package list changes)
 
