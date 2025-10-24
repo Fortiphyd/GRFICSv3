@@ -46,8 +46,8 @@ VOLUME /var/lib/mysql
 
 # Add configs
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-COPY db-init.sh /db-init.sh
-RUN chmod +x /db-init.sh
+COPY init.sh /init.sh
+RUN chmod +x /init.sh
 
 
 # Add Tomcat JNDI DataSource for SCADA-LTS
