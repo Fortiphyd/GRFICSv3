@@ -64,6 +64,9 @@ services:
     image: scadalts
     container_name: HMI
     build: ./scadalts
+    dns:
+     - 8.8.8.8
+     - 1.1.1.1
     cap_add:
       - NET_ADMIN
     ports:
