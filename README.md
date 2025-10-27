@@ -28,4 +28,4 @@ docker compose up.
 
 If building fails with a message about being unable to create a network interface, edit docker-compose.yml lines 140 and 149 to match the name of your network interface.
 
-Open a web browser and visit localhost. If GRFICS is built correctly, you should see visualization of a chemical plant.
+Open a web browser and visit localhost. If GRFICS is built correctly, you should see a visualization of a chemical plant.
