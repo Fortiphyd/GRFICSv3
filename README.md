@@ -23,7 +23,7 @@ docker compose build
 and then run
 
 ```
-docker compose up.
+docker compose up
 ```
 
 If building fails with a message about being unable to create a network interface, edit docker-compose.yml lines 140 and 149 to match the name of your network interface.
