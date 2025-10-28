@@ -70,7 +70,7 @@ services:
     cap_add:
       - NET_ADMIN
     ports:
-      - "6081:80"
+      - "6081:8080"
     networks:
       a-grfics-admin:  # gets random bridge IP (e.g., 172.18.x.x)
       c-dmz-net:
