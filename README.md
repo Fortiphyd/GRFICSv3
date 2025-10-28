@@ -1,6 +1,8 @@
 # GRFICSv3
 Cyberphysical simulation of a chemical plant
 
+![Chemical plant screenshot](/images/tanks.png)
+
 # Installation
 
 ## Installing Docker
@@ -40,12 +42,19 @@ to stop all running containers
 
 ## Containers
  - Simulation: Accessible in your browser at localhost
+   ![Simulation screenshot](/images/sim.png)
  - Kali: Accessible over noVNC in your browser at localhost:6088/vnc.html, with credentials kali:kali
+   ![Kali screenshot](/images/kali.png)
  - Caldera: Accessible in your browser at localhost:8888, with credentials red:fortiphyd-red
+   ![Caldera screenshot](/images/caldera.png)
  - Engineering Workstation: Accessible over noVNC in your browser at localhost:6080/vnc.html
+ ![EW screenshot](/images/ew.png)
  - Router: Accessible from inside either simulated network at 192.168.90.200:5000 or 192.168.95.200:5000 with credentials admin:password
+   ![Router screenshot](/images/firewall.png)
  - PLC: Accessible in your browser at localhost:8080 or in the network at 192.168.95.2:8080 with credentials openplc:openplc
+   ![PLC screenshot](/images/plc.png)
  - HMI: Accessible in your browser at localhost:6081 or in the network at 192.168.90.107:8080 with credentials admin:admin
+   ![HMI screenshot](/images/hmi.png)
 
 ## Connecting to containers
 In Docker Desktop, each container will have a link that you can click on to connect to that container. The simulation VM link will display the 3d graphical model of the chemical plant. The PLC and HMI link will lead to a login page to those devices.
