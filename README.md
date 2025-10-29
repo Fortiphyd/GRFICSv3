@@ -7,18 +7,25 @@ Cyberphysical simulation of a chemical plant
 
 ## Installing Docker
 
-GRFICS uses Docker and Docker Compose. We recommend installing Docker Desktop, which includes the Docker engine as well as Docker Compose.
+GRFICS uses Docker and Docker Compose. For a more efficient, lighter-weight installation, use Linux (either VM or WSL). There is currently a known issue with Docker Desktop on Windows that we are working on resolving, so it is not recommended at this time.
 
-https://docs.docker.com/compose/install/
+On Linux, run the following commands
+```
+sudo apt-get install docker git git-lfs
+```
 
 ## Installing GRFICS
-First, clone this repo.
 
-In Windows, if the Docker engine is not already running, start the Docker Desktop application using the Start menu.
+First, clone this repo.
+```
+git clone https://github.com/Fortiphyd/GRFICSv3
+```
+
 
 In the command line, change directories to the top-level directory of the cloned repo. Now run
 
 ```
+cd GRFICSv3
 docker compose build
 ```
 
