@@ -1,0 +1,13 @@
+[Unit]
+Description=GRFICSv3 Suricata IDS
+After=grfics-router-init.service network-online.target
+Requires=grfics-router-init.service
+
+[Service]
+ExecStart=/usr/bin/suricata -i eth2 -c /etc/suricata/suricata.yaml
+Restart=on-failure
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

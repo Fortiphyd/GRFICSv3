@@ -1,0 +1,28 @@
+#!/bin/bash
+set -e
+
+# Create runtime directories
+mkdir -p /etc/firewall \
+         /var/log/flask \
+         /var/log/arpmon \
+         /var/log/suricata \
+         /var/log/ulog \
+         /var/lib/arpmon
+
+# Initialize config files if not already present (preserves state on upgrade)
+[ -f /etc/firewall/dns_hosts ] || touch /etc/firewall/dns_hosts
+[ -f /etc/firewall/dns_blocked.conf ] || touch /etc/firewall/dns_blocked.conf
+[ -f /etc/suricata/rules/local.rules ] || touch /etc/suricata/rules/local.rules
+
+# Prevent the suricata package's own service from conflicting with ours
+systemctl stop suricata.service 2>/dev/null || true
+systemctl mask suricata.service 2>/dev/null || true
+
+systemctl daemon-reload
+
+systemctl enable --now grfics-router-init.service
+systemctl enable --now grfics-flask.service
+systemctl enable --now grfics-suricata.service
+systemctl enable --now grfics-arpmon.service
+systemctl enable --now dnsmasq
+systemctl enable --now ulogd2

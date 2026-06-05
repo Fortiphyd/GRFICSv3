@@ -1,0 +1,14 @@
+[Unit]
+Description=GRFICSv3 router web UI
+After=grfics-router-init.service network-online.target
+Requires=grfics-router-init.service
+
+[Service]
+ExecStart=python3 /opt/fwui/app.py
+WorkingDirectory=/opt/fwui
+Restart=on-failure
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
