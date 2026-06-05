@@ -1,0 +1,14 @@
+[Unit]
+Description=GRFICSv3 Modbus device drivers
+After=grfics-simulation.service
+Requires=grfics-simulation.service
+
+[Service]
+ExecStart=/app/modbus/run_all.sh
+WorkingDirectory=/app/modbus
+Restart=on-failure
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

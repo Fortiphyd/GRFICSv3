@@ -1,0 +1,23 @@
+#!/bin/bash
+set -e
+
+# Install pymodbus — apt package is an incompatible older version
+pip3 install --quiet pymodbus==3.9.2
+
+# Create log directories
+mkdir -p /var/log/simulation
+
+# Enable grfics nginx vhost, disable default if present
+ln -sf /etc/nginx/sites-available/grfics-simulation /etc/nginx/sites-enabled/grfics-simulation
+rm -f /etc/nginx/sites-enabled/default
+
+# Make run_all.sh executable (source repo may not preserve +x through dpkg)
+chmod +x /app/modbus/run_all.sh
+
+systemctl daemon-reload
+
+systemctl enable --now grfics-simulation-init.service
+systemctl enable --now grfics-simulation.service
+systemctl enable --now grfics-modbus.service
+systemctl enable --now nginx
+systemctl enable --now php8.1-fpm

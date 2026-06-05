@@ -1,0 +1,12 @@
+#!/bin/bash
+set -e
+
+systemctl stop grfics-modbus.service 2>/dev/null || true
+systemctl stop grfics-simulation.service 2>/dev/null || true
+systemctl stop grfics-simulation-init.service 2>/dev/null || true
+
+systemctl disable grfics-modbus.service 2>/dev/null || true
+systemctl disable grfics-simulation.service 2>/dev/null || true
+systemctl disable grfics-simulation-init.service 2>/dev/null || true
+
+rm -f /etc/nginx/sites-enabled/grfics-simulation

@@ -1,0 +1,13 @@
+[Unit]
+Description=GRFICSv3 process simulation engine
+After=grfics-simulation-init.service
+Requires=grfics-simulation-init.service
+
+[Service]
+ExecStart=/app/simulation/simulation
+Restart=on-failure
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
