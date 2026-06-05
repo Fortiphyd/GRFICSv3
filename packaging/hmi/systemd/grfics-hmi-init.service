@@ -1,0 +1,13 @@
+[Unit]
+Description=GRFICSv3 HMI database initialization
+After=mariadb.service network-online.target
+Requires=mariadb.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/grfics/hmi-init.sh
+
+[Install]
+WantedBy=multi-user.target
