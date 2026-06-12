@@ -1,0 +1,12 @@
+[Unit]
+Description=GRFICSv3 PLC (OpenPLC Runtime)
+After=grfics-plc-init.service
+Requires=grfics-plc-init.service
+
+[Service]
+ExecStart=/opt/openplc/start_openplc.sh
+WorkingDirectory=/opt/openplc/webserver
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
