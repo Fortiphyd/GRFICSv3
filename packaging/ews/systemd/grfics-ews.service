@@ -1,0 +1,11 @@
+[Unit]
+Description=GRFICSv3 EWS desktop (Xvfb + Xfce4 + x11vnc + noVNC)
+After=grfics-ews-init.service
+Requires=grfics-ews-init.service
+
+[Service]
+ExecStart=/usr/bin/supervisord -n -c /etc/grfics/ews-supervisord.conf
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
