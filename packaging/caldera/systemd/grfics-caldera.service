@@ -1,0 +1,13 @@
+[Unit]
+Description=GRFICSv3 Caldera C2 server
+After=grfics-caldera-init.service network-online.target
+Requires=grfics-caldera-init.service
+
+[Service]
+WorkingDirectory=/usr/src/caldera
+ExecStart=/usr/bin/python3 server.py --insecure
+Environment=PATH=/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

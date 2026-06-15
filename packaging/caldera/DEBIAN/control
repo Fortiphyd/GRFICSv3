@@ -1,0 +1,7 @@
+Package: grfics-caldera
+Version: 1.3
+Architecture: amd64
+Maintainer: Fortiphyd Logic <info@fortiphyd.com>
+Description: GRFICSv3 OT lab Caldera C2 server with MITRE caldera-ot modbus plugin
+Depends: git, curl, unzip, python3-dev, python3-pip, gcc, zlib1g-dev,
+ mingw-w64, iproute2, ca-certificates
