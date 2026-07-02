@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Interfaces</h2>
+
+{% if current_role == "admin" %}
+{% set ns = namespace(lan_iface='none', dmz_iface='none') %}
+{% for k, v in interface_labels.items() %}{% if v == 'LAN' %}{% set ns.lan_iface = k %}{% endif %}{% if v == 'DMZ' %}{% set ns.dmz_iface = k %}{% endif %}{% endfor %}
+
+<div class="card mb-4">
+  <div class="card-header">Network Zones</div>
+  <div class="card-body p-0">
+    <table class="table table-sm table-striped mb-0 align-middle">
+      <thead>
+        <tr><th>Zone</th><th>Interface</th><th>Subnet</th><th>IDS Monitor</th><th></th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>LAN <span class="badge bg-secondary">built-in</span></td>
+          <td>
+            {% if ns.lan_iface != 'none' %}
+            <code>{{ ns.lan_iface }}</code>
+            {% elif available_ifaces %}
+            <form method="post" action="{{ url_for('bind_builtin_zone') }}" class="d-flex gap-1">
+              <input type="hidden" name="zone" value="LAN">
+              <select name="iface" class="form-select form-select-sm" style="width:auto">
+                {% for iface in available_ifaces %}
+                <option value="{{ iface }}">{{ iface }}</option>
+                {% endfor %}
+              </select>
+              <button type="submit" class="btn btn-sm btn-outline-primary">Bind</button>
+            </form>
+            {% else %}
+            <span class="text-muted">none</span>
+            {% endif %}
+          </td>
+          <td><code>192.168.95.0/24</code></td>
+          <td>
+            <form method="post" action="{{ url_for('set_ids_monitor') }}">
+              <input type="hidden" name="key" value="LAN">
+              <input type="checkbox" name="ids_monitor" onchange="this.form.submit()" {% if ids_monitor.get('LAN') %}checked{% endif %}>
+            </form>
+          </td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>DMZ <span class="badge bg-secondary">built-in</span></td>
+          <td>
+            {% if ns.dmz_iface != 'none' %}
+            <code>{{ ns.dmz_iface }}</code>
+            {% elif available_ifaces %}
+            <form method="post" action="{{ url_for('bind_builtin_zone') }}" class="d-flex gap-1">
+              <input type="hidden" name="zone" value="DMZ">
+              <select name="iface" class="form-select form-select-sm" style="width:auto">
+                {% for iface in available_ifaces %}
+                <option value="{{ iface }}">{{ iface }}</option>
+                {% endfor %}
+              </select>
+              <button type="submit" class="btn btn-sm btn-outline-primary">Bind</button>
+            </form>
+            {% else %}
+            <span class="text-muted">none</span>
+            {% endif %}
+          </td>
+          <td><code>192.168.90.0/24</code></td>
+          <td>
+            <form method="post" action="{{ url_for('set_ids_monitor') }}">
+              <input type="hidden" name="key" value="DMZ">
+              <input type="checkbox" name="ids_monitor" onchange="this.form.submit()" {% if ids_monitor.get('DMZ') %}checked{% endif %}>
+            </form>
+          </td>
+          <td></td>
+        </tr>
+        {% for z in zones %}
+        <tr>
+          <td>{{ z.label }}</td>
+          <td><code>{{ z.iface }}</code></td>
+          <td><code>{{ z.subnet }}</code></td>
+          <td>
+            <form method="post" action="{{ url_for('set_ids_monitor') }}">
+              <input type="hidden" name="key" value="{{ loop.index0 }}">
+              <input type="checkbox" name="ids_monitor" onchange="this.form.submit()" {% if z.ids_monitor %}checked{% endif %}>
+            </form>
+          </td>
+          <td class="text-end">
+            <form method="post" action="{{ url_for('delete_zone') }}" onsubmit="return confirm('Remove zone {{ z.label }}?')">
+              <input type="hidden" name="idx" value="{{ loop.index0 }}">
+              <button class="btn btn-sm btn-outline-danger">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">Add Zone</div>
+  <div class="card-body">
+    {% if available_ifaces %}
+    <form method="post" action="{{ url_for('add_zone') }}" class="row g-2 align-items-end" style="max-width:800px">
+      <div class="col-auto">
+        <label class="form-label">Interface</label>
+        <select name="iface" class="form-select form-select-sm">
+          {% for iface in available_ifaces %}
+          <option value="{{ iface }}">{{ iface }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-auto">
+        <label class="form-label">Subnet (CIDR)</label>
+        <input type="text" name="subnet" class="form-control form-control-sm" placeholder="192.168.50.0/24" required>
+      </div>
+      <div class="col-auto">
+        <label class="form-label">Zone Label</label>
+        <input type="text" name="label" class="form-control form-control-sm" placeholder="Zone3">
+      </div>
+      <div class="col-auto form-check mb-1">
+        <input type="checkbox" name="ids_monitor" class="form-check-input" id="new-zone-ids">
+        <label class="form-check-label" for="new-zone-ids">IDS Monitor</label>
+      </div>
+      <div class="col-auto">
+        <button type="submit" class="btn btn-sm btn-success">Add Zone</button>
+      </div>
+    </form>
+    {% else %}
+    <p class="text-muted mb-0">No unconfigured interfaces detected. Plug in another NIC (no IP assigned) to add a zone.</p>
+    {% endif %}
+  </div>
+</div>
+{% else %}
+<p class="text-muted">Admin access required to view or configure network interfaces.</p>
+{% endif %}
+{% endblock %}

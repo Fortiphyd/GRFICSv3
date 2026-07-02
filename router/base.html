@@ -23,6 +23,9 @@
           <a class="nav-link {% if active_page == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">Dashboard</a>
         </li>
         <li class="nav-item">
+          <a class="nav-link {% if active_page == 'interfaces' %}active{% endif %}" href="{{ url_for('interfaces') }}">Interfaces</a>
+        </li>
+        <li class="nav-item">
           <a class="nav-link {% if active_page == 'firewall' %}active{% endif %}" href="{{ url_for('index') }}">Firewall</a>
         </li>
         <li class="nav-item">

@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/lib/grfics/router-init.sh
+ExecStart=/usr/bin/python3 /usr/lib/grfics/network-init.py
 
 [Install]
 WantedBy=multi-user.target

@@ -1,12 +1,41 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 import subprocess
-import json, os, functools, time, glob, re
+import json, os, functools, time, glob, re, ipaddress
 from werkzeug.security import generate_password_hash, check_password_hash
 from collections import Counter
 from pathlib import Path
 from datetime import datetime
 
 app = Flask(__name__)
+
+# Admin-configured extra interfaces (beyond the auto-detected LAN/DMZ),
+# and per-zone IDS monitor toggles. Populated by load_config() below —
+# declared here so _detect_interface_labels() can reference them.
+zones = []
+DEFAULT_IDS_MONITOR = {"LAN": False, "DMZ": True}
+ids_monitor = DEFAULT_IDS_MONITOR.copy()
+
+# Explicit LAN/DMZ -> interface bindings for hosts where nothing pre-assigns
+# an address on those NICs (bare-metal/VM installs — Docker's macvlan config
+# used to do this automatically). {"LAN": "eth1", "DMZ": "eth2"}
+zone_iface_overrides = {}
+
+BUILTIN_ZONE_NETWORKS = [
+    ("LAN", ipaddress.ip_network("192.168.95.0/24")),
+    ("DMZ", ipaddress.ip_network("192.168.90.0/24")),
+]
+
+
+def _configured_zone_networks():
+    """[(label, ipaddress.ip_network), ...] for admin-added zones with a valid subnet."""
+    result = []
+    for z in zones:
+        try:
+            result.append((z.get("label", z.get("iface", "Zone")), ipaddress.ip_network(z["subnet"], strict=False)))
+        except (KeyError, ValueError):
+            continue
+    return result
+
 
 def _detect_interface_labels():
     _FALLBACK = {"eth0": "Admin", "eth1": "LAN", "eth2": "DMZ"}
@@ -25,19 +54,69 @@ def _detect_interface_labels():
         if ip_m and current and current != 'lo':
             iface_ips.setdefault(current, []).append(ip_m.group(1))
 
+    zone_networks = BUILTIN_ZONE_NETWORKS + _configured_zone_networks()
+
     labels = {}
     for iface, ips in iface_ips.items():
         if iface in ('lo', 'wg0'):
             continue
         for ip in ips:
-            if ip.startswith('192.168.95.'):
-                labels[iface] = 'LAN'
-            elif ip.startswith('192.168.90.'):
-                labels[iface] = 'DMZ'
+            addr = ipaddress.ip_address(ip)
+            matched = next((label for label, network in zone_networks if addr in network), None)
+            if matched:
+                labels[iface] = matched
             else:
                 labels.setdefault(iface, 'Admin')
 
     return labels if labels else _FALLBACK
+
+
+def _list_unconfigured_ifaces():
+    """Interfaces with no IPv4 address at all — free NICs the admin can turn into a zone."""
+    try:
+        link_out = subprocess.check_output(["ip", "-o", "link", "show"], text=True)
+        addr_out = subprocess.check_output(["ip", "-o", "-4", "addr", "show"], text=True)
+    except Exception:
+        return []
+
+    all_ifaces = []
+    for line in link_out.splitlines():
+        m = re.match(r'^\d+:\s+(\S+):', line)
+        if m:
+            iface = m.group(1).split('@')[0]
+            if iface not in ('lo', 'wg0'):
+                all_ifaces.append(iface)
+
+    has_ip = set()
+    for line in addr_out.splitlines():
+        m = re.match(r'^\d+:\s+(\S+)\s', line)
+        if m:
+            has_ip.add(m.group(1).split('@')[0])
+
+    configured = {z.get("iface") for z in zones if z.get("iface")}
+    configured |= set(zone_iface_overrides.values())
+    return [i for i in all_ifaces if i not in has_ip and i not in configured]
+
+
+def _apply_network():
+    """Re-run network-init.py so a zone change takes effect without a reboot.
+
+    A saved config change (the zones/overrides list) and a *live* network
+    change are two different things — this makes a network-init.py failure
+    visible in the UI instead of silently leaving the OS state unchanged.
+    """
+    global INTERFACE_LABELS
+    proc = subprocess.run(
+        ["python3", "/usr/lib/grfics/network-init.py"],
+        capture_output=True, text=True,
+    )
+    INTERFACE_LABELS = _detect_interface_labels()
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "").strip().splitlines()
+        flash("Saved, but applying it to the live network failed: "
+              + (detail[-1] if detail else f"network-init.py exited {proc.returncode}"), "danger")
+    return proc
+
 
 INTERFACE_LABELS = _detect_interface_labels()
 
@@ -192,11 +271,14 @@ DEFAULT_RULES = [
 ]
 
 def load_config():
-    global pending_rules, dirty, users
+    global pending_rules, dirty, users, zones, ids_monitor, zone_iface_overrides, INTERFACE_LABELS
     if os.path.exists(CONFIG_PATH):
         with open(CONFIG_PATH) as f:
             data = json.load(f)
             pending_rules = data.get("rules", [])
+            zones = data.get("zones", [])
+            ids_monitor = {**DEFAULT_IDS_MONITOR, **data.get("ids_monitor", {})}
+            zone_iface_overrides = data.get("zone_iface_overrides", {})
             if "users" in data:
                 users = data["users"]
             elif "auth" in data:
@@ -208,12 +290,17 @@ def load_config():
                 save_config()
     else:
         pending_rules = DEFAULT_RULES.copy()
+        zones = []
+        ids_monitor = DEFAULT_IDS_MONITOR.copy()
+        zone_iface_overrides = {}
         save_config()
     dirty = False
+    INTERFACE_LABELS = _detect_interface_labels()
 
 
 def save_config():
-    data = {"rules": pending_rules, "users": users}
+    data = {"rules": pending_rules, "users": users, "zones": zones,
+            "ids_monitor": ids_monitor, "zone_iface_overrides": zone_iface_overrides}
     with open(CONFIG_PATH, "w") as f:
         json.dump(data, f, indent=2)
 
@@ -1225,6 +1312,16 @@ def settings_users():
                            current_role=session.get("role"))
 
 
+@app.route("/interfaces")
+@login_required
+def interfaces():
+    return render_template("interfaces.html", active_page="interfaces",
+                           current_role=session.get("role"),
+                           zones=zones, ids_monitor=ids_monitor,
+                           interface_labels=INTERFACE_LABELS,
+                           available_ifaces=_list_unconfigured_ifaces())
+
+
 @app.route("/settings/change_password", methods=["POST"])
 @login_required
 def change_password():
@@ -1280,6 +1377,98 @@ def delete_user():
         save_config()
         flash(f"User '{username}' deleted.", "success")
     return redirect(url_for("settings_users"))
+
+
+@app.route("/settings/zones/bind_builtin", methods=["POST"])
+@login_required
+@admin_required
+def bind_builtin_zone():
+    zone = request.form.get("zone", "")
+    iface = request.form.get("iface", "").strip()
+    if zone not in ("LAN", "DMZ"):
+        flash("Invalid zone.", "danger")
+    elif iface not in _list_unconfigured_ifaces():
+        flash("That interface is unavailable — pick an unconfigured NIC.", "danger")
+    else:
+        zone_iface_overrides[zone] = iface
+        save_config()
+        _apply_network()
+        flash(f"{zone} bound to {iface}.", "success")
+    return redirect(url_for("interfaces"))
+
+
+@app.route("/settings/zones/add", methods=["POST"])
+@login_required
+@admin_required
+def add_zone():
+    iface = request.form.get("iface", "").strip()
+    label = request.form.get("label", "").strip() or iface
+    monitor = request.form.get("ids_monitor") == "on"
+
+    try:
+        network = ipaddress.ip_network(request.form.get("subnet", "").strip(), strict=False)
+    except ValueError:
+        network = None
+
+    known_networks = [n for _, n in BUILTIN_ZONE_NETWORKS] + [n for _, n in _configured_zone_networks()]
+
+    if iface not in _list_unconfigured_ifaces():
+        flash("That interface is unavailable — pick an unconfigured NIC.", "danger")
+    elif network is None:
+        flash("Invalid subnet — use CIDR notation, e.g. 192.168.50.0/24.", "danger")
+    elif any(network.overlaps(n) for n in known_networks):
+        flash("Subnet overlaps with an existing zone.", "danger")
+    else:
+        zones.append({"iface": iface, "subnet": str(network), "label": label, "ids_monitor": monitor})
+        save_config()
+        _apply_network()
+        flash(f"Zone '{label}' added on {iface}.", "success")
+    return redirect(url_for("interfaces"))
+
+
+@app.route("/settings/zones/delete", methods=["POST"])
+@login_required
+@admin_required
+def delete_zone():
+    global zones
+    try:
+        idx = int(request.form.get("idx", -1))
+    except ValueError:
+        idx = -1
+    if 0 <= idx < len(zones):
+        removed = zones.pop(idx)
+        save_config()
+        try:
+            network = ipaddress.ip_network(removed["subnet"], strict=False)
+            hosts = list(network.hosts())  # generator normally, but a plain list for /31 and /32
+            if hosts:
+                subprocess.run(["ip", "addr", "del", f"{hosts[0]}/{network.prefixlen}", "dev", removed["iface"]],
+                                check=False, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
+        _apply_network()
+        flash(f"Zone '{removed.get('label', removed.get('iface'))}' removed.", "success")
+    return redirect(url_for("interfaces"))
+
+
+@app.route("/settings/zones/ids_monitor", methods=["POST"])
+@login_required
+@admin_required
+def set_ids_monitor():
+    key = request.form.get("key", "")
+    monitor = request.form.get("ids_monitor") == "on"
+    if key in ("LAN", "DMZ"):
+        ids_monitor[key] = monitor
+    else:
+        try:
+            idx = int(key)
+            if 0 <= idx < len(zones):
+                zones[idx]["ids_monitor"] = monitor
+        except ValueError:
+            pass
+    save_config()
+    _apply_network()
+    return redirect(url_for("interfaces"))
 
 
 load_config()

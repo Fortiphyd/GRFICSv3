@@ -25,27 +25,38 @@ sed -i "s/^Version:.*/Version: $VERSION/" "$STAGING/DEBIAN/control"
 chmod 755 "$STAGING/DEBIAN/postinst" "$STAGING/DEBIAN/prerm"
 
 # --- Application files ---
-mkdir -p "$STAGING/opt/fwui/static"
+# Flask's default loader (app.py sets no template_folder) expects templates/
+# under the app root, same layout the Docker build uses.
+mkdir -p "$STAGING/opt/fwui/templates" "$STAGING/opt/fwui/static"
 cp "$REPO_ROOT/router/app.py" "$STAGING/opt/fwui/"
 cp "$REPO_ROOT/router/arpmon.py" "$STAGING/opt/fwui/"
-cp "$REPO_ROOT/router"/*.html "$STAGING/opt/fwui/"
+cp "$REPO_ROOT/router"/*.html "$STAGING/opt/fwui/templates/"
 cp -r "$REPO_ROOT/router/static/"* "$STAGING/opt/fwui/static/"
 
 # --- Configuration files ---
-mkdir -p "$STAGING/etc/suricata/rules"
-cp "$REPO_ROOT/router/suricata.yaml" "$STAGING/etc/suricata/suricata.yaml"
+# suricata.yaml/dnsmasq.conf/ulogd.conf are NOT shipped at their live /etc
+# paths — those paths are already owned by the suricata/dnsmasq/ulogd2
+# packages we depend on, and dpkg refuses to let two packages own the same
+# file. Ship them under /usr/lib/grfics/config/ instead; postinst copies
+# them into place after the dependency packages have unpacked their own
+# defaults there.
+mkdir -p "$STAGING/etc/suricata/rules" "$STAGING/usr/lib/grfics/config"
 cp "$REPO_ROOT/router/quickdraw.rules" "$STAGING/etc/suricata/rules/quickdraw.rules"
-cp "$REPO_ROOT/router/dnsmasq.conf" "$STAGING/etc/dnsmasq.conf"
-cp "$REPO_ROOT/router/ulogd.conf" "$STAGING/etc/ulogd.conf"
+cp "$REPO_ROOT/router/suricata.yaml" "$STAGING/usr/lib/grfics/config/suricata.yaml"
+cp "$REPO_ROOT/router/dnsmasq.conf" "$STAGING/usr/lib/grfics/config/dnsmasq.conf"
+cp "$REPO_ROOT/router/ulogd.conf" "$STAGING/usr/lib/grfics/config/ulogd.conf"
 
 # --- Systemd units ---
 mkdir -p "$STAGING/lib/systemd/system"
 cp "$SCRIPT_DIR/router/systemd/"*.service "$STAGING/lib/systemd/system/"
 
-# --- Init script ---
+# --- Init scripts ---
 mkdir -p "$STAGING/usr/lib/grfics"
-cp "$SCRIPT_DIR/router/usr/lib/grfics/router-init.sh" "$STAGING/usr/lib/grfics/"
-chmod 755 "$STAGING/usr/lib/grfics/router-init.sh"
+cp "$SCRIPT_DIR/router/usr/lib/grfics/network-init.py" "$STAGING/usr/lib/grfics/"
+cp "$SCRIPT_DIR/router/usr/lib/grfics/suricata-start.sh" "$STAGING/usr/lib/grfics/"
+cp "$SCRIPT_DIR/router/usr/lib/grfics/zone-iface-tool.py" "$STAGING/usr/lib/grfics/"
+chmod 755 "$STAGING/usr/lib/grfics/network-init.py" "$STAGING/usr/lib/grfics/suricata-start.sh" \
+          "$STAGING/usr/lib/grfics/zone-iface-tool.py"
 
 # --- Build ---
 mkdir -p "$DIST"
