@@ -20,6 +20,13 @@ ids_monitor = DEFAULT_IDS_MONITOR.copy()
 # used to do this automatically). {"LAN": "eth1", "DMZ": "eth2"}
 zone_iface_overrides = {}
 
+# Needed by _detect_interface_labels() below (via load_wg_config(), which
+# may run its old-schema migration) before the full constants block further
+# down the file is defined.
+WG_CONFIG_PATH = "/etc/firewall/wg_config.json"
+DEFAULT_TUNNEL_SUBNET = "10.100.0.0/24"
+DEFAULT_TUNNEL_PORT = 51820
+
 BUILTIN_ZONE_NETWORKS = [
     ("LAN", ipaddress.ip_network("192.168.95.0/24")),
     ("DMZ", ipaddress.ip_network("192.168.90.0/24")),
@@ -35,6 +42,62 @@ def _configured_zone_networks():
         except (KeyError, ValueError):
             continue
     return result
+
+
+# load_wg_config/save_wg_config/find_tunnel need to exist before
+# _detect_interface_labels() below, which reads tunnel labels.
+def load_wg_config():
+    try:
+        with open(WG_CONFIG_PATH) as f:
+            config = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {"tunnels": []}
+
+    if "tunnels" not in config and "server" in config:
+        # Migrate the old single-tunnel {server, peers} schema into one
+        # tunnel named wg0, preserving its keys/port/peers so nothing about
+        # an existing deployment changes until the admin touches it.
+        server = config.get("server", {})
+        if server.get("private_key"):
+            config = {"tunnels": [{
+                "name": "wg0",
+                "label": "VPN",
+                "listen_port": server.get("listen_port", DEFAULT_TUNNEL_PORT),
+                "subnet": DEFAULT_TUNNEL_SUBNET,
+                "private_key": server["private_key"],
+                "public_key": server["public_key"],
+                "client_routes": "192.168.95.0/24, 192.168.90.0/24",
+                "peers": config.get("peers", []),
+            }]}
+        else:
+            config = {"tunnels": []}
+        save_wg_config(config)
+
+    config.setdefault("tunnels", [])
+    return config
+
+
+def save_wg_config(config):
+    os.makedirs(os.path.dirname(WG_CONFIG_PATH), exist_ok=True)
+    with open(WG_CONFIG_PATH, "w") as f:
+        json.dump(config, f, indent=2)
+
+
+def find_tunnel(config, name):
+    return next((t for t in config.get("tunnels", []) if t["name"] == name), None)
+
+
+def _suggest_tunnel_defaults(config):
+    """Next free 10.100.<N>.0/24 subnet and 51820+N port, not colliding with an existing tunnel."""
+    used_subnets = {t["subnet"] for t in config.get("tunnels", [])}
+    used_ports = {t.get("listen_port") for t in config.get("tunnels", [])}
+    n = 0
+    while True:
+        subnet = f"10.100.{n}.0/24"
+        port = DEFAULT_TUNNEL_PORT + n
+        if subnet not in used_subnets and port not in used_ports:
+            return subnet, port
+        n += 1
 
 
 def _detect_interface_labels():
@@ -55,10 +118,18 @@ def _detect_interface_labels():
             iface_ips.setdefault(current, []).append(ip_m.group(1))
 
     zone_networks = BUILTIN_ZONE_NETWORKS + _configured_zone_networks()
+    tunnel_labels = {t["name"]: t.get("label", t["name"]) for t in load_wg_config().get("tunnels", [])}
 
     labels = {}
     for iface, ips in iface_ips.items():
-        if iface in ('lo', 'wg0'):
+        if iface == 'lo':
+            continue
+        if iface in tunnel_labels:
+            # Each WireGuard tunnel is its own interface (pfSense-style) so
+            # it shows up in the Firewall rule builder like any other zone —
+            # scoping a tunnel's access is then just an ordinary rule, not a
+            # separate VPN-specific mechanism.
+            labels[iface] = tunnel_labels[iface]
             continue
         for ip in ips:
             addr = ipaddress.ip_address(ip)
@@ -79,12 +150,13 @@ def _list_unconfigured_ifaces():
     except Exception:
         return []
 
+    tunnel_names = {t["name"] for t in load_wg_config().get("tunnels", [])}
     all_ifaces = []
     for line in link_out.splitlines():
         m = re.match(r'^\d+:\s+(\S+):', line)
         if m:
             iface = m.group(1).split('@')[0]
-            if iface not in ('lo', 'wg0'):
+            if iface != 'lo' and iface not in tunnel_names:
                 all_ifaces.append(iface)
 
     has_ip = set()
@@ -98,6 +170,11 @@ def _list_unconfigured_ifaces():
     return [i for i in all_ifaces if i not in has_ip and i not in configured]
 
 
+def _refresh_interface_labels():
+    global INTERFACE_LABELS
+    INTERFACE_LABELS = _detect_interface_labels()
+
+
 def _apply_network():
     """Re-run network-init.py so a zone change takes effect without a reboot.
 
@@ -105,12 +182,18 @@ def _apply_network():
     change are two different things — this makes a network-init.py failure
     visible in the UI instead of silently leaving the OS state unchanged.
     """
-    global INTERFACE_LABELS
     proc = subprocess.run(
         ["python3", "/usr/lib/grfics/network-init.py"],
         capture_output=True, text=True,
     )
-    INTERFACE_LABELS = _detect_interface_labels()
+    _refresh_interface_labels()
+    # network-init.py flushes and rebuilds the whole nat POSTROUTING chain,
+    # which wipes the WireGuard masquerade rule each tunnel's apply_wg_tunnel()
+    # sets up separately — re-assert every active tunnel's so an unrelated
+    # zone change doesn't silently cut VPN peers off from the internet.
+    for tunnel in load_wg_config().get("tunnels", []):
+        if wg_iface_up(tunnel["name"]):
+            _ensure_wg_masquerade(tunnel["subnet"])
     if proc.returncode != 0:
         detail = (proc.stderr or proc.stdout or "").strip().splitlines()
         flash("Saved, but applying it to the live network failed: "
@@ -141,10 +224,7 @@ ARPMON_STATE = "/var/lib/arpmon/state.json"
 ARPMON_LOG   = "/var/log/arpmon/events.json"
 
 DNS_CONFIG_PATH = "/etc/firewall/dns_config.json"
-WG_CONFIG_PATH = "/etc/firewall/wg_config.json"
-WG_CONF_PATH = "/etc/wireguard/wg0.conf"
-WG_VPN_SUBNET = "10.100.0.0/24"
-WG_SERVER_ADDR = "10.100.0.1/24"
+WG_CONF_DIR = "/etc/wireguard"
 DNS_HOSTS_PATH = "/etc/firewall/dns_hosts"
 DNS_BLOCKED_PATH = "/etc/firewall/dns_blocked.conf"
 DNSMASQ_LOG = "/var/log/dnsmasq/dnsmasq.log"
@@ -453,20 +533,13 @@ def get_dns_queries(limit=100):
 
 
 # --- wireguard helpers ---
-
-def load_wg_config():
-    try:
-        with open(WG_CONFIG_PATH) as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {"server": {}, "peers": []}
-
-
-def save_wg_config(config):
-    os.makedirs(os.path.dirname(WG_CONFIG_PATH), exist_ok=True)
-    with open(WG_CONFIG_PATH, "w") as f:
-        json.dump(config, f, indent=2)
-
+#
+# Each tunnel is an independent WireGuard interface (own keys/port/subnet),
+# matching pfSense's model of assigning each VPN tunnel as its own
+# interface -- that's what lets "Interfaces > Firewall" scope different
+# tunnels to different zones instead of one blanket-trusted wg0.
+# (load_wg_config/save_wg_config/find_tunnel live earlier in the file,
+# above _detect_interface_labels(), since that needs them at import time.)
 
 def wg_genkey():
     priv = subprocess.check_output(["wg", "genkey"], text=True).strip()
@@ -474,16 +547,17 @@ def wg_genkey():
     return priv, pub
 
 
-def write_wg_conf(config):
-    server = config.get("server", {})
+def write_wg_conf(tunnel):
+    network = ipaddress.ip_network(tunnel["subnet"], strict=False)
+    address = list(network.hosts())[0]  # generator normally, list for /31 and /32
     lines = [
         "[Interface]",
-        f"PrivateKey = {server['private_key']}",
-        f"ListenPort = {server.get('listen_port', 51820)}",
-        f"Address = {server.get('address', WG_SERVER_ADDR)}",
+        f"PrivateKey = {tunnel['private_key']}",
+        f"ListenPort = {tunnel.get('listen_port', DEFAULT_TUNNEL_PORT)}",
+        f"Address = {address}/{network.prefixlen}",
         "",
     ]
-    for peer in config.get("peers", []):
+    for peer in tunnel.get("peers", []):
         lines += [
             f"# {peer.get('name', 'peer')}",
             "[Peer]",
@@ -491,37 +565,37 @@ def write_wg_conf(config):
             f"AllowedIPs = {peer['allowed_ips']}",
             "",
         ]
-    os.makedirs("/etc/wireguard", exist_ok=True)
-    with open(WG_CONF_PATH, "w") as f:
+    os.makedirs(WG_CONF_DIR, exist_ok=True)
+    with open(os.path.join(WG_CONF_DIR, f"{tunnel['name']}.conf"), "w") as f:
         f.write("\n".join(lines))
 
 
-def _ensure_wg_masquerade():
+def _ensure_wg_masquerade(subnet):
     r = subprocess.run(
-        ["iptables", "-t", "nat", "-C", "POSTROUTING", "-s", WG_VPN_SUBNET, "-j", "MASQUERADE"],
+        ["iptables", "-t", "nat", "-C", "POSTROUTING", "-s", subnet, "-j", "MASQUERADE"],
         capture_output=True,
     )
     if r.returncode != 0:
         subprocess.run(
-            ["iptables", "-t", "nat", "-A", "POSTROUTING", "-s", WG_VPN_SUBNET, "-j", "MASQUERADE"],
+            ["iptables", "-t", "nat", "-A", "POSTROUTING", "-s", subnet, "-j", "MASQUERADE"],
             check=False,
         )
 
 
-def apply_wg(config):
-    write_wg_conf(config)
-    subprocess.run(["wg-quick", "down", "wg0"], capture_output=True)
-    result = subprocess.run(["wg-quick", "up", "wg0"], capture_output=True, text=True)
+def apply_wg_tunnel(tunnel):
+    write_wg_conf(tunnel)
+    subprocess.run(["wg-quick", "down", tunnel["name"]], capture_output=True)
+    result = subprocess.run(["wg-quick", "up", tunnel["name"]], capture_output=True, text=True)
     if result.returncode == 0:
-        _ensure_wg_masquerade()
+        _ensure_wg_masquerade(tunnel["subnet"])
     return result
 
 
-def parse_wg_show():
-    """Parse `wg show wg0 dump` into a dict keyed by peer public key."""
+def parse_wg_show(name):
+    """Parse `wg show <name> dump` into a dict keyed by peer public key."""
     try:
         out = subprocess.check_output(
-            ["wg", "show", "wg0", "dump"], text=True, stderr=subprocess.DEVNULL
+            ["wg", "show", name, "dump"], text=True, stderr=subprocess.DEVNULL
         )
     except subprocess.CalledProcessError:
         return {}
@@ -542,8 +616,8 @@ def parse_wg_show():
     return status
 
 
-def wg_iface_up():
-    return subprocess.run(["ip", "link", "show", "wg0"], capture_output=True).returncode == 0
+def wg_iface_up(name):
+    return subprocess.run(["ip", "link", "show", name], capture_output=True).returncode == 0
 
 
 # --- login helpers/decorators ---
@@ -767,9 +841,10 @@ def build_iptables_rules(rules):
         else:
             line += f" -j {r['action']}"
         lines.append(line)
-    # Allow forwarding to/from WireGuard VPN interface when it's up
-    lines.append("-A FORWARD -i wg0 -j ACCEPT")
-    lines.append("-A FORWARD -o wg0 -j ACCEPT")
+    # No blanket accept for WireGuard interfaces: each tunnel is a normal,
+    # selectable interface (see _detect_interface_labels), so VPN traffic is
+    # scoped by the same per-interface rules above as any other zone —
+    # matches pfSense's model instead of trusting all decrypted VPN traffic.
     # Default allow for ICS-originated traffic (trusted → untrusted).
     # Match on source subnet rather than interface name — interface assignment
     # is not deterministic in Docker containers.
@@ -956,151 +1031,264 @@ def api_dns_queries():
 
 # --- wireguard routes ---
 
+def _client_routes_include(client_routes, target_network):
+    for part in (client_routes or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            net = ipaddress.ip_network(part, strict=False)
+        except ValueError:
+            continue
+        if net.overlaps(target_network):
+            return True
+    return False
+
+
 @app.route("/vpn")
 @login_required
 def vpn():
     config = load_wg_config()
-    peer_status = parse_wg_show()
+    tunnels = [
+        {**t, "up": wg_iface_up(t["name"]), "peer_count": len(t.get("peers", []))}
+        for t in config.get("tunnels", [])
+    ]
+    suggested_subnet, suggested_port = _suggest_tunnel_defaults(config)
     return render_template(
         "wireguard.html",
         active_page="vpn",
-        config=config,
-        peer_status=peer_status,
-        iface_up=wg_iface_up(),
+        tunnels=tunnels,
+        suggested_subnet=suggested_subnet,
+        suggested_port=suggested_port,
     )
 
 
-@app.route("/vpn/setup", methods=["POST"])
+@app.route("/vpn/add_tunnel", methods=["POST"])
 @login_required
 @admin_required
-def vpn_setup():
+def vpn_add_tunnel():
     config = load_wg_config()
-    if config.get("server", {}).get("private_key"):
-        flash("WireGuard is already initialized.", "info")
-        return redirect(url_for("vpn"))
-    priv, pub = wg_genkey()
-    config["server"] = {
-        "private_key": priv,
-        "public_key": pub,
-        "listen_port": 51820,
-        "address": WG_SERVER_ADDR,
-    }
-    config.setdefault("peers", [])
-    save_wg_config(config)
-    result = apply_wg(config)
-    if result.returncode == 0:
-        flash("WireGuard initialized and started.", "success")
-    else:
-        flash(f"Initialized but failed to start: {result.stderr}", "danger")
-    return redirect(url_for("vpn"))
-
-
-@app.route("/vpn/toggle", methods=["POST"])
-@login_required
-@admin_required
-def vpn_toggle():
-    if wg_iface_up():
-        subprocess.run(["wg-quick", "down", "wg0"], check=False)
-        flash("WireGuard stopped.", "info")
-    else:
-        config = load_wg_config()
-        result = apply_wg(config)
-        if result.returncode == 0:
-            flash("WireGuard started.", "success")
-        else:
-            flash(f"Failed to start: {result.stderr}", "danger")
-    return redirect(url_for("vpn"))
-
-
-@app.route("/vpn/add_peer", methods=["POST"])
-@login_required
-@admin_required
-def vpn_add_peer():
-    config = load_wg_config()
-    if not config.get("server", {}).get("private_key"):
-        flash("Initialize WireGuard server first.", "danger")
-        return redirect(url_for("vpn"))
     name = request.form.get("name", "").strip()
+    label = request.form.get("label", "").strip() or name
+    client_routes = request.form.get("client_routes", "").strip()
+    try:
+        port = int(request.form.get("listen_port", "").strip())
+    except ValueError:
+        port = None
+    try:
+        network = ipaddress.ip_network(request.form.get("subnet", "").strip(), strict=False)
+    except ValueError:
+        network = None
+
+    if not name or not re.match(r'^[a-zA-Z0-9_-]{1,15}$', name):
+        flash("Tunnel name must be a short alphanumeric identifier, e.g. wg1.", "danger")
+    elif find_tunnel(config, name):
+        flash(f"Tunnel '{name}' already exists.", "danger")
+    elif network is None:
+        flash("Invalid subnet — use CIDR notation, e.g. 10.100.1.0/24.", "danger")
+    elif port is None or not (1 <= port <= 65535):
+        flash("Invalid listen port.", "danger")
+    elif any(network.overlaps(ipaddress.ip_network(t["subnet"], strict=False)) for t in config["tunnels"]):
+        flash("Subnet overlaps with an existing tunnel.", "danger")
+    elif any(t.get("listen_port") == port for t in config["tunnels"]):
+        flash("Listen port already used by another tunnel.", "danger")
+    else:
+        priv, pub = wg_genkey()
+        tunnel = {
+            "name": name,
+            "label": label,
+            "listen_port": port,
+            "subnet": str(network),
+            "private_key": priv,
+            "public_key": pub,
+            "client_routes": client_routes,
+            "peers": [],
+        }
+        config["tunnels"].append(tunnel)
+        save_wg_config(config)
+        result = apply_wg_tunnel(tunnel)
+        _refresh_interface_labels()
+        if result.returncode == 0:
+            flash(f"Tunnel '{name}' created and started. Add firewall rules on this "
+                  f"interface to grant it access — it has none by default.", "success")
+        else:
+            flash(f"Tunnel saved but failed to start: {result.stderr}", "danger")
+    return redirect(url_for("vpn"))
+
+
+@app.route("/vpn/<name>/delete", methods=["POST"])
+@login_required
+@admin_required
+def vpn_delete_tunnel(name):
+    config = load_wg_config()
+    tunnel = find_tunnel(config, name)
+    if tunnel:
+        subprocess.run(["wg-quick", "down", name], capture_output=True)
+        try:
+            os.remove(os.path.join(WG_CONF_DIR, f"{name}.conf"))
+        except OSError:
+            pass
+        subprocess.run(
+            ["iptables", "-t", "nat", "-D", "POSTROUTING", "-s", tunnel["subnet"], "-j", "MASQUERADE"],
+            check=False, stderr=subprocess.DEVNULL,
+        )
+        config["tunnels"] = [t for t in config["tunnels"] if t["name"] != name]
+        save_wg_config(config)
+        _refresh_interface_labels()
+        flash(f"Tunnel '{name}' deleted.", "success")
+    return redirect(url_for("vpn"))
+
+
+@app.route("/vpn/<name>")
+@login_required
+def vpn_tunnel(name):
+    config = load_wg_config()
+    tunnel = find_tunnel(config, name)
+    if not tunnel:
+        flash("Tunnel not found.", "danger")
+        return redirect(url_for("vpn"))
+    return render_template(
+        "vpn_tunnel.html",
+        active_page="vpn",
+        tunnel=tunnel,
+        peer_status=parse_wg_show(name),
+        iface_up=wg_iface_up(name),
+    )
+
+
+@app.route("/vpn/<name>/toggle", methods=["POST"])
+@login_required
+@admin_required
+def vpn_toggle_tunnel(name):
+    config = load_wg_config()
+    tunnel = find_tunnel(config, name)
+    if not tunnel:
+        flash("Tunnel not found.", "danger")
+        return redirect(url_for("vpn"))
+    if wg_iface_up(name):
+        subprocess.run(["wg-quick", "down", name], check=False)
+        flash(f"Tunnel '{name}' stopped.", "info")
+    else:
+        result = apply_wg_tunnel(tunnel)
+        if result.returncode == 0:
+            flash(f"Tunnel '{name}' started.", "success")
+        else:
+            flash(f"Failed to start '{name}': {result.stderr}", "danger")
+    _refresh_interface_labels()
+    return redirect(url_for("vpn_tunnel", name=name))
+
+
+@app.route("/vpn/<name>/add_peer", methods=["POST"])
+@login_required
+@admin_required
+def vpn_add_peer(name):
+    config = load_wg_config()
+    tunnel = find_tunnel(config, name)
+    if not tunnel:
+        flash("Tunnel not found.", "danger")
+        return redirect(url_for("vpn"))
+    peer_name = request.form.get("name", "").strip()
     public_key = request.form.get("public_key", "").strip()
     allowed_ips = request.form.get("allowed_ips", "").strip()
     comment = request.form.get("comment", "").strip()
-    if not name or not public_key or not allowed_ips:
+    if not peer_name or not public_key or not allowed_ips:
         flash("Name, public key, and allowed IPs are required.", "danger")
-        return redirect(url_for("vpn"))
-    config["peers"].append({
-        "name": name,
-        "public_key": public_key,
-        "allowed_ips": allowed_ips,
-        "comment": comment,
-    })
-    save_wg_config(config)
-    result = apply_wg(config)
-    if result.returncode == 0:
-        flash(f"Peer '{name}' added.", "success")
     else:
-        flash(f"Peer saved but apply failed: {result.stderr}", "warning")
-    return redirect(url_for("vpn"))
+        tunnel["peers"].append({
+            "name": peer_name,
+            "public_key": public_key,
+            "allowed_ips": allowed_ips,
+            "comment": comment,
+        })
+        save_wg_config(config)
+        result = apply_wg_tunnel(tunnel)
+        if result.returncode == 0:
+            flash(f"Peer '{peer_name}' added.", "success")
+        else:
+            flash(f"Peer saved but apply failed: {result.stderr}", "warning")
+    return redirect(url_for("vpn_tunnel", name=name))
 
 
-@app.route("/vpn/delete_peer", methods=["POST"])
+@app.route("/vpn/<name>/delete_peer", methods=["POST"])
 @login_required
 @admin_required
-def vpn_delete_peer():
-    idx = int(request.form["idx"])
+def vpn_delete_peer(name):
     config = load_wg_config()
-    peers = config.get("peers", [])
+    tunnel = find_tunnel(config, name)
+    if not tunnel:
+        flash("Tunnel not found.", "danger")
+        return redirect(url_for("vpn"))
+    try:
+        idx = int(request.form.get("idx", -1))
+    except ValueError:
+        idx = -1
+    peers = tunnel.get("peers", [])
     if 0 <= idx < len(peers):
         removed = peers.pop(idx)
         save_wg_config(config)
-        apply_wg(config)
+        apply_wg_tunnel(tunnel)
         flash(f"Peer '{removed['name']}' removed.", "success")
-    return redirect(url_for("vpn"))
+    return redirect(url_for("vpn_tunnel", name=name))
 
 
-@app.route("/vpn/client_config/<int:idx>")
+@app.route("/vpn/<name>/client_config/<int:idx>")
 @login_required
-def vpn_client_config(idx):
-    import re
+def vpn_client_config(name, idx):
     config = load_wg_config()
-    server = config.get("server", {})
-    peers = config.get("peers", [])
+    tunnel = find_tunnel(config, name)
+    if not tunnel:
+        flash("Tunnel not found.", "danger")
+        return redirect(url_for("vpn"))
+    peers = tunnel.get("peers", [])
     if idx >= len(peers):
         flash("Peer not found.", "danger")
-        return redirect(url_for("vpn"))
+        return redirect(url_for("vpn_tunnel", name=name))
     peer = peers[idx]
     try:
-        wan_iface = next((k for k, v in INTERFACE_LABELS.items() if v == 'DMZ'), 'eth2')
+        wan_iface = next((k for k, v in INTERFACE_LABELS.items() if v == 'DMZ'), None)
         wan_info = subprocess.check_output(["ip", "-4", "addr", "show", wan_iface], text=True)
         match = re.search(r"inet (\d+\.\d+\.\d+\.\d+)", wan_info)
-        endpoint = match.group(1) if match else "192.168.90.200"
+        endpoint = match.group(1) if match else "YOUR_ROUTER_WAN_IP"
     except Exception:
-        endpoint = "192.168.90.200"
+        endpoint = "YOUR_ROUTER_WAN_IP"
+
+    client_routes = tunnel.get("client_routes", "").strip()
+    dns_line = ""
+    ics_net = ipaddress.ip_network(ICS_SUBNET)
+    if _client_routes_include(client_routes, ics_net):
+        dns_line = f"DNS = {list(ics_net.hosts())[0]}\n"
+
     client_conf = (
-        f"# Client config for: {peer['name']}\n"
+        f"# Client config for: {peer['name']} (tunnel: {tunnel.get('label', name)})\n"
         f"# Run 'wg genkey | tee privkey | wg pubkey > pubkey' to generate your keys,\n"
         f"# then replace <your-private-key> below.\n\n"
         f"[Interface]\n"
         f"PrivateKey = <your-private-key>\n"
         f"Address = {peer['allowed_ips'].split(',')[0].strip()}\n"
-        f"DNS = 192.168.95.200\n\n"
+        f"{dns_line}\n"
         f"[Peer]\n"
-        f"PublicKey = {server['public_key']}\n"
-        f"Endpoint = {endpoint}:{server.get('listen_port', 51820)}\n"
-        f"AllowedIPs = 192.168.95.0/24, 192.168.90.0/24\n"
+        f"PublicKey = {tunnel['public_key']}\n"
+        f"Endpoint = {endpoint}:{tunnel.get('listen_port', DEFAULT_TUNNEL_PORT)}\n"
+        f"AllowedIPs = {client_routes or tunnel['subnet']}\n"
         f"PersistentKeepalive = 25\n"
     )
     from flask import Response
     return Response(
         client_conf,
         mimetype="text/plain",
-        headers={"Content-Disposition": f"attachment; filename=wg0-{peer['name']}.conf"},
+        headers={"Content-Disposition": f"attachment; filename={name}-{peer['name']}.conf"},
     )
 
 
 @app.route("/api/vpn/status")
 @login_required
 def api_vpn_status():
-    return jsonify({"up": wg_iface_up(), "peers": parse_wg_show()})
+    config = load_wg_config()
+    tunnels = {
+        t["name"]: {"up": wg_iface_up(t["name"]), "peers": parse_wg_show(t["name"])}
+        for t in config.get("tunnels", [])
+    }
+    return jsonify({"tunnels": tunnels})
 
 
 # --- diagnostics routes ---
@@ -1474,11 +1662,8 @@ def set_ids_monitor():
 load_config()
 _apply_rules_now(pending_rules)
 
-_wg_startup = load_wg_config()
-if _wg_startup.get("server", {}).get("private_key"):
-    write_wg_conf(_wg_startup)
-    subprocess.run(["wg-quick", "down", "wg0"], capture_output=True)
-    subprocess.run(["wg-quick", "up", "wg0"], capture_output=True)
-    _ensure_wg_masquerade()
+for _tunnel in load_wg_config().get("tunnels", []):
+    apply_wg_tunnel(_tunnel)
+_refresh_interface_labels()
 
 app.run(host="0.0.0.0", port=5000)

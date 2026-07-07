@@ -55,7 +55,9 @@ COPY dashboard.html /opt/fwui/templates/dashboard.html
 COPY states.html /opt/fwui/templates/states.html
 COPY dns.html /opt/fwui/templates/dns.html
 COPY wireguard.html /opt/fwui/templates/wireguard.html
+COPY vpn_tunnel.html /opt/fwui/templates/vpn_tunnel.html
 COPY settings.html /opt/fwui/templates/settings.html
+COPY interfaces.html /opt/fwui/templates/interfaces.html
 COPY arp.html /opt/fwui/templates/arp.html
 COPY diagnostics.html /opt/fwui/templates/diagnostics.html
 COPY base.html /opt/fwui/templates/base.html

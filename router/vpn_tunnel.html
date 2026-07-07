@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="mb-1"><a href="{{ url_for('vpn') }}">&larr; Tunnels</a></p>
+<h2 class="mb-4">{{ tunnel.label }} <small class="text-muted fs-6">({{ tunnel.name }})</small></h2>
+
+<div class="row g-4">
+
+  <!-- ── Tunnel Status ─────────────────────────────────────────────── -->
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Tunnel</span>
+        <span id="iface-badge" class="badge {% if iface_up %}bg-success{% else %}bg-secondary{% endif %}">
+          {% if iface_up %}Up{% else %}Down{% endif %}
+        </span>
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-8">
+            <label class="form-label text-muted small mb-1">Public Key</label>
+            <div class="input-group input-group-sm">
+              <input type="text" class="form-control font-monospace"
+                     value="{{ tunnel.public_key }}" id="server-pubkey" readonly>
+              <button class="btn btn-outline-secondary" type="button"
+                      onclick="navigator.clipboard.writeText(document.getElementById('server-pubkey').value)">
+                Copy
+              </button>
+            </div>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label text-muted small mb-1">Listen Port</label>
+            <div class="form-control-plaintext fw-bold">{{ tunnel.listen_port }}</div>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label text-muted small mb-1">Subnet</label>
+            <div class="form-control-plaintext font-monospace small">{{ tunnel.subnet }}</div>
+          </div>
+          <div class="col-12">
+            <label class="form-label text-muted small mb-1">Client Routes</label>
+            <div class="form-control-plaintext font-monospace small">{{ tunnel.client_routes or '(none set)' }}</div>
+            <div class="form-text mt-0">
+              Access is controlled by firewall rules on the <code>{{ tunnel.name }}</code> interface,
+              not by this setting — see the <a href="{{ url_for('index') }}">Firewall</a> page.
+            </div>
+          </div>
+        </div>
+        <div class="mt-3">
+          <form action="{{ url_for('vpn_toggle_tunnel', name=tunnel.name) }}" method="POST" class="d-inline">
+            {% if iface_up %}
+              <button class="btn btn-sm btn-outline-warning">Stop Tunnel</button>
+            {% else %}
+              <button class="btn btn-sm btn-success">Start Tunnel</button>
+            {% endif %}
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Peers ─────────────────────────────────────────────────────── -->
+  <div class="col-12">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h5 class="mb-0">Peers
+        <span class="badge bg-secondary ms-1">{{ tunnel.peers | length }}</span>
+      </h5>
+      <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addPeerModal">
+        + Add Peer
+      </button>
+    </div>
+
+    <table class="table table-bordered table-sm align-middle">
+      <thead class="table-dark">
+        <tr>
+          <th>Name</th>
+          <th>Public Key</th>
+          <th>Allowed IPs</th>
+          <th>Last Handshake</th>
+          <th>Rx / Tx</th>
+          <th style="width:9rem"></th>
+        </tr>
+      </thead>
+      <tbody id="peers-tbody">
+        {% if tunnel.peers %}
+          {% for peer in tunnel.peers %}
+          {% set st = peer_status.get(peer.public_key, {}) %}
+          <tr data-pubkey="{{ peer.public_key }}">
+            <td>
+              {{ peer.name }}
+              {% if peer.comment %}<br><span class="text-muted small fst-italic">{{ peer.comment }}</span>{% endif %}
+            </td>
+            <td class="font-monospace small text-truncate" style="max-width:12rem" title="{{ peer.public_key }}">
+              {{ peer.public_key[:24] }}…
+            </td>
+            <td class="font-monospace small">{{ peer.allowed_ips }}</td>
+            <td class="small peer-hs">
+              {% if st.last_handshake %}
+                <span data-ts="{{ st.last_handshake }}"></span>
+              {% else %}
+                <span class="text-muted">Never</span>
+              {% endif %}
+            </td>
+            <td class="small peer-io font-monospace">
+              {% if st %}
+                {{ (st.rx_bytes / 1024) | round(1) }} KB /
+                {{ (st.tx_bytes / 1024) | round(1) }} KB
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="text-center">
+              <a href="{{ url_for('vpn_client_config', name=tunnel.name, idx=loop.index0) }}"
+                 class="btn btn-sm btn-outline-secondary me-1" title="Download client config">
+                Config
+              </a>
+              <form action="{{ url_for('vpn_delete_peer', name=tunnel.name) }}" method="POST" class="d-inline"
+                    onsubmit="return confirm('Remove peer {{ peer.name }}?')">
+                <input type="hidden" name="idx" value="{{ loop.index0 }}">
+                <button class="btn btn-sm btn-outline-danger">Delete</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="6" class="text-center text-muted py-3">No peers yet — add one above</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── Client Setup Guide ────────────────────────────────────────── -->
+  <div class="col-12">
+    <div class="accordion" id="setupGuide">
+      <div class="accordion-item">
+        <h2 class="accordion-header">
+          <button class="accordion-button collapsed" type="button"
+                  data-bs-toggle="collapse" data-bs-target="#guideBody">
+            How to connect a new client
+          </button>
+        </h2>
+        <div id="guideBody" class="accordion-collapse collapse">
+          <div class="accordion-body">
+            <ol class="mb-0">
+              <li class="mb-2">
+                <strong>Install WireGuard</strong> on your client machine —
+                <a href="https://www.wireguard.com/install/" target="_blank">wireguard.com/install</a>
+              </li>
+              <li class="mb-2">
+                <strong>Generate a keypair</strong> on the client:
+                <pre class="bg-dark text-light rounded p-2 mt-1 mb-0">wg genkey | tee privkey | wg pubkey &gt; pubkey
+cat privkey   # your private key — keep this secret
+cat pubkey    # paste this into the form below</pre>
+              </li>
+              <li class="mb-2">
+                <strong>Add a peer</strong> here: paste your public key, assign an IP in the
+                <code>{{ tunnel.subnet }}</code> range (e.g. one host address, <code>/32</code>).
+              </li>
+              <li class="mb-2">
+                <strong>Download the client config</strong> with the "Config" button, then fill in your
+                private key where indicated.
+              </li>
+              <li class="mb-2">
+                <strong>Import</strong> the <code>.conf</code> file into your WireGuard client and connect.
+              </li>
+              <li>
+                <strong>Add firewall rules</strong> for the <code>{{ tunnel.name }}</code> interface on the
+                <a href="{{ url_for('index') }}">Firewall</a> page — new tunnels have no access by default.
+              </li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- row -->
+
+<!-- ── Add Peer Modal ───────────────────────────────────────────────── -->
+<div class="modal fade" id="addPeerModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form action="{{ url_for('vpn_add_peer', name=tunnel.name) }}" method="POST">
+        <div class="modal-header">
+          <h5 class="modal-title">Add Peer</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body row g-3">
+          <div class="col-12">
+            <label class="form-label">Name</label>
+            <input name="name" class="form-control" placeholder="e.g. student-laptop" required>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Client Public Key</label>
+            <input name="public_key" class="form-control font-monospace"
+                   placeholder="base64-encoded WireGuard public key" required>
+            <div class="form-text">Generate with: <code>wg genkey | wg pubkey</code></div>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Allowed IPs</label>
+            <input name="allowed_ips" class="form-control font-monospace"
+                   placeholder="e.g. 10.100.0.2/32" required>
+            <div class="form-text">The tunnel IP assigned to this client (one per peer), within {{ tunnel.subnet }}.</div>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Comment (optional)</label>
+            <input name="comment" class="form-control" placeholder="e.g. Alice — Lab 3">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Add Peer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+const TUNNEL_NAME = {{ tunnel.name | tojson }};
+
+// Render last-handshake timestamps as relative time
+function fmtHandshake(ts) {
+  if (!ts) return 'Never';
+  const sec = Math.floor(Date.now() / 1000) - ts;
+  if (sec < 60)  return sec + 's ago';
+  if (sec < 3600) return Math.floor(sec / 60) + 'm ago';
+  return Math.floor(sec / 3600) + 'h ago';
+}
+document.querySelectorAll('.peer-hs [data-ts]').forEach(el => {
+  el.textContent = fmtHandshake(parseInt(el.dataset.ts));
+});
+
+// Poll peer status every 15s
+function refreshPeerStatus() {
+  fetch('/api/vpn/status')
+    .then(r => r.json())
+    .then(data => {
+      const tunnelStatus = (data.tunnels || {})[TUNNEL_NAME] || {};
+      const badge = document.getElementById('iface-badge');
+      if (badge) {
+        badge.textContent = tunnelStatus.up ? 'Up' : 'Down';
+        badge.className = 'badge ' + (tunnelStatus.up ? 'bg-success' : 'bg-secondary');
+      }
+      const peers = tunnelStatus.peers || {};
+      document.querySelectorAll('#peers-tbody tr[data-pubkey]').forEach(row => {
+        const pk = row.dataset.pubkey;
+        const st = peers[pk];
+        const hsCell = row.querySelector('.peer-hs');
+        const ioCell = row.querySelector('.peer-io');
+        if (hsCell) {
+          hsCell.innerHTML = st && st.last_handshake
+            ? fmtHandshake(st.last_handshake)
+            : '<span class="text-muted">Never</span>';
+        }
+        if (ioCell) {
+          ioCell.innerHTML = st
+            ? `${(st.rx_bytes/1024).toFixed(1)} KB / ${(st.tx_bytes/1024).toFixed(1)} KB`
+            : '<span class="text-muted">—</span>';
+        }
+      });
+    })
+    .catch(() => {});
+}
+setInterval(refreshPeerStatus, 15000);
+</script>
+{% endblock %}
