@@ -66,6 +66,9 @@ COPY static/ /opt/fwui/static/
 COPY router.conf /etc/supervisor/conf.d/router.conf
 COPY suricata.yaml /etc/suricata/suricata.yaml
 COPY dnsmasq.conf /etc/dnsmasq.conf
+COPY usr/lib/grfics/network-init.py /usr/lib/grfics/network-init.py
+COPY usr/lib/grfics/suricata-start.sh /usr/lib/grfics/suricata-start.sh
+RUN chmod +x /usr/lib/grfics/suricata-start.sh
 
 COPY quickdraw.rules /etc/suricata/rules/quickdraw.rules
 COPY ulogd.conf /etc/ulogd.conf

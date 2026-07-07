@@ -51,9 +51,13 @@ mkdir -p "$STAGING/lib/systemd/system"
 cp "$SCRIPT_DIR/router/systemd/"*.service "$STAGING/lib/systemd/system/"
 
 # --- Init scripts ---
+# network-init.py/suricata-start.sh are shared with the Docker build (which
+# copies them straight from router/), so they live there rather than under
+# packaging/ — only zone-iface-tool.py (postinst's interactive first-boot
+# prompt) is VM/deb-install-specific.
 mkdir -p "$STAGING/usr/lib/grfics"
-cp "$SCRIPT_DIR/router/usr/lib/grfics/network-init.py" "$STAGING/usr/lib/grfics/"
-cp "$SCRIPT_DIR/router/usr/lib/grfics/suricata-start.sh" "$STAGING/usr/lib/grfics/"
+cp "$REPO_ROOT/router/usr/lib/grfics/network-init.py" "$STAGING/usr/lib/grfics/"
+cp "$REPO_ROOT/router/usr/lib/grfics/suricata-start.sh" "$STAGING/usr/lib/grfics/"
 cp "$SCRIPT_DIR/router/usr/lib/grfics/zone-iface-tool.py" "$STAGING/usr/lib/grfics/"
 chmod 755 "$STAGING/usr/lib/grfics/network-init.py" "$STAGING/usr/lib/grfics/suricata-start.sh" \
           "$STAGING/usr/lib/grfics/zone-iface-tool.py"
