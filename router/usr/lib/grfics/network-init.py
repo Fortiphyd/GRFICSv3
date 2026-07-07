@@ -89,21 +89,33 @@ def collect_zones(config, ifaces):
     return zones
 
 
+def _has_learned_gateway(iface):
+    """True if the kernel already has a DHCP-installed route on `iface` —
+    meaning some other device (a real upstream gateway, e.g. a cloud
+    provider's virtual router) is already answering as this subnet's
+    gateway. Only relevant on a VM/bare-metal/LXC install where an
+    interface's own address comes from DHCP rather than Docker's macvlan;
+    Docker never installs a `proto dhcp` route for these interfaces.
+    """
+    try:
+        out = subprocess.run(["ip", "-4", "route", "show", "dev", iface],
+                              capture_output=True, text=True, check=True).stdout
+    except subprocess.CalledProcessError:
+        return False
+    return "proto dhcp" in out
+
+
 def assign_gateways(zones):
-    # Only Docker needs this: docker-compose's macvlan networks give the
-    # router container a fixed .200 address while other containers get an
-    # IPAM-assigned address whose default gateway is Docker's own .1 for
-    # that subnet — a mismatch only the router can paper over, by also
-    # answering at .1. On a VM/bare-metal/LXC install there's no separate
-    # IPAM gateway: the admin points peers at the router's real address
-    # directly, so adding a second .1 address here is not just unneeded,
-    # it's wrong — it leaves an extra, unintended address on the interface
-    # (e.g. both .200 and .1 on the same NIC). /run/grfics/is-docker is
-    # created only by router/entrypoint.sh, which doesn't run outside Docker.
-    if not os.path.exists(os.path.join(RUN_DIR, "is-docker")):
-        return
     for label, network, iface, _monitor in zones:
         if not iface:
+            continue
+        if _has_learned_gateway(iface):
+            # Something else already answers as this subnet's gateway (a
+            # real upstream device we learned about via DHCP) — claiming
+            # the same address ourselves would conflict with it instead of
+            # complementing it, which is what happened on an Azure-hosted
+            # LXC install: the router grabbed the same address as Azure's
+            # own gateway on that subnet.
             continue
         # network.hosts() returns a generator normally but a plain list for
         # /31 and /32 — list(...)[0] works for both instead of next(...),

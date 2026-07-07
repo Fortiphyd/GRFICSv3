@@ -7,13 +7,6 @@ mkdir -p /etc/firewall /var/log/dnsmasq /var/log/arpmon /var/lib/arpmon /run/grf
 touch /etc/firewall/dns_hosts
 [ -f /etc/firewall/dns_blocked.conf ] || touch /etc/firewall/dns_blocked.conf
 
-# Marks this as a Docker deployment for network-init.py: only here does
-# docker-compose's macvlan setup give containers an IPAM-assigned gateway of
-# .1 that differs from the router's own fixed .200 address, so only here
-# does assign_gateways() need to also answer at .1 — the VM/bare-metal
-# package never creates this file, since it has no entrypoint.sh.
-touch /run/grfics/is-docker
-
 # Default-deny forwarding, add .1 gateway aliases on every zone interface
 # (containers use .1 as their Docker-IPAM-assigned default gateway — Docker
 # reserves .200 for this container's own static IP), rebuild NAT, and write
