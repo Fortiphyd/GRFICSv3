@@ -199,6 +199,27 @@ def _detect_interface_labels():
     return labels if labels else _FALLBACK
 
 
+def _existing_link_names():
+    """All current network interface (link) names on the box, physical or
+    virtual, regardless of whether they have an IP. Used to reject a new
+    tunnel name that collides with a real interface: wg-quick refuses to
+    create it (fails cleanly, doesn't touch the real link), but the tunnel
+    record would still get saved despite the failed start, and
+    wg_iface_up()'s bare `ip link show <name>` would then misreport it as
+    permanently "Up" forever after, since the real link always exists.
+    """
+    try:
+        out = subprocess.check_output(["ip", "-o", "link", "show"], text=True)
+    except subprocess.CalledProcessError:
+        return set()
+    names = set()
+    for line in out.splitlines():
+        m = re.match(r'^\d+:\s+(\S+):', line)
+        if m:
+            names.add(m.group(1).split('@')[0])
+    return names
+
+
 def _list_unconfigured_ifaces():
     """Interfaces with no IPv4 address at all — free NICs the admin can turn into a zone."""
     try:
@@ -1167,6 +1188,8 @@ def vpn_add_tunnel():
         flash("Tunnel name must be a short alphanumeric identifier, e.g. wg1.", "danger")
     elif find_tunnel(config, name):
         flash(f"Tunnel '{name}' already exists.", "danger")
+    elif name in _existing_link_names() - {t["name"] for t in config["tunnels"]}:
+        flash(f"'{name}' is already a network interface on this system — choose a different tunnel name.", "danger")
     elif network is None:
         flash("Invalid subnet — use CIDR notation, e.g. 10.100.1.0/24.", "danger")
     elif port is None or not (1 <= port <= 65535):
