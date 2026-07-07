@@ -15,6 +15,7 @@ import subprocess
 import sys
 
 CONFIG_PATH = "/etc/firewall/config.json"
+WG_CONFIG_PATH = "/etc/firewall/wg_config.json"
 BUILTIN_ZONES = {
     "LAN": ipaddress.ip_network("192.168.95.0/24"),
     "DMZ": ipaddress.ip_network("192.168.90.0/24"),
@@ -35,14 +36,32 @@ def save_config(config):
         json.dump(config, f, indent=2)
 
 
+def tunnel_ifaces():
+    """Interface names claimed by a WireGuard tunnel, new or old config schema
+    — each tunnel is a real network interface (see app.py's multi-tunnel
+    support), so none of them are "available" NICs a zone can bind to.
+    """
+    try:
+        with open(WG_CONFIG_PATH) as f:
+            config = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        config = {}
+    names = {t["name"] for t in config.get("tunnels", []) if t.get("name")}
+    names.add("wg0")  # old single-tunnel schema always used this name, and
+                       # app.py hasn't run yet to migrate it to "tunnels" the
+                       # first time this tool runs post-upgrade (postinst).
+    return names
+
+
 def link_ifaces():
+    tunnels = tunnel_ifaces()
     out = subprocess.run(["ip", "-o", "link", "show"], capture_output=True, text=True, check=True).stdout
     ifaces = []
     for line in out.splitlines():
         m = re.match(r"^\d+:\s+(\S+):", line)
         if m:
             iface = m.group(1).split("@")[0]
-            if iface not in ("lo", "wg0"):
+            if iface != "lo" and iface not in tunnels:
                 ifaces.append(iface)
     return ifaces
 
