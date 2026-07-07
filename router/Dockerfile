@@ -46,7 +46,6 @@ RUN sed -i 's|</ossec_config>|<localfile>\n    <log_format>json</log_format>\n  
 
 COPY entrypoint.sh /entrypoint.sh
 COPY app.py /opt/fwui/app.py
-COPY index.html /opt/fwui/templates/index.html
 COPY login.html /opt/fwui/templates/login.html
 COPY firewall.html /opt/fwui/templates/firewall.html
 COPY firewall_logs.html /opt/fwui/templates/firewall_logs.html
