@@ -194,6 +194,13 @@ def _apply_network():
     for tunnel in load_wg_config().get("tunnels", []):
         if wg_iface_up(tunnel["name"]):
             _ensure_wg_masquerade(tunnel["subnet"])
+    if proc.returncode == 0:
+        # network-init.py just rewrote /run/grfics/ids-ifaces, but Suricata
+        # only reads that file at process start (suricata-start.sh) — restart
+        # it so an IDS-monitor toggle or new zone takes effect without
+        # waiting for a full reboot, same as apply_dns_config() does for
+        # dnsmasq below.
+        subprocess.run(["supervisorctl", "restart", "suricata"], check=False)
     if proc.returncode != 0:
         detail = (proc.stderr or proc.stdout or "").strip().splitlines()
         flash("Saved, but applying it to the live network failed: "
