@@ -46,6 +46,46 @@ def _configured_zone_networks():
 
 # load_wg_config/save_wg_config/find_tunnel need to exist before
 # _detect_interface_labels() below, which reads tunnel labels.
+def _migrate_wg0_firewall_rule():
+    """Companion to the wg0 migration below. The blanket `-i/-o wg0 ACCEPT`
+    rules this version removes (see build_iptables_rules) used to give an
+    existing deployment's VPN peers full forwarding access with no explicit
+    rule for it — so migrating the config alone would silently drop all of
+    that traffic the moment this version starts, since the new per-tunnel
+    model grants no access by default. Write explicit, visible rules that
+    preserve the old behavior instead, so the admin can see and scope them
+    down like any other rule, rather than losing access outright.
+
+    Reads/writes /etc/firewall/config.json directly with a hardcoded path
+    rather than via CONFIG_PATH/save_json: this runs at import time (via
+    INTERFACE_LABELS = _detect_interface_labels() below), before either of
+    those is defined further down the file.
+    """
+    path = "/etc/firewall/config.json"
+    try:
+        with open(path) as f:
+            fw_config = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        fw_config = {}
+    rules = fw_config.setdefault("rules", [])
+    marker = "Auto-added on upgrade"
+    if any(r.get("comment", "").startswith(marker) for r in rules):
+        return
+    for iface_in, iface_out in (("wg0", ""), ("", "wg0")):
+        rules.append({
+            "iface_in": iface_in, "iface_out": iface_out,
+            "src": "0.0.0.0/0", "dst": "0.0.0.0/0",
+            "proto": "all", "dport": "", "action": "ACCEPT",
+            "comment": f"{marker}: preserves this tunnel's pre-existing full "
+                       f"access now that VPN traffic is scoped by ordinary "
+                       f"rules instead of a blanket accept — review and "
+                       f"scope down if it doesn't need this.",
+        })
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(fw_config, f, indent=2)
+
+
 def load_wg_config():
     try:
         with open(WG_CONFIG_PATH) as f:
@@ -56,7 +96,8 @@ def load_wg_config():
     if "tunnels" not in config and "server" in config:
         # Migrate the old single-tunnel {server, peers} schema into one
         # tunnel named wg0, preserving its keys/port/peers so nothing about
-        # an existing deployment changes until the admin touches it.
+        # an existing deployment's WireGuard setup changes until the admin
+        # touches it. Access is a separate concern, handled below.
         server = config.get("server", {})
         if server.get("private_key"):
             config = {"tunnels": [{
@@ -69,6 +110,7 @@ def load_wg_config():
                 "client_routes": "192.168.95.0/24, 192.168.90.0/24",
                 "peers": config.get("peers", []),
             }]}
+            _migrate_wg0_firewall_rule()
         else:
             config = {"tunnels": []}
         save_wg_config(config)
