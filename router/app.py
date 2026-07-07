@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 import subprocess
-import json, os, functools, time, glob, re, ipaddress
+import json, os, functools, time, glob, re, ipaddress, shutil
 from werkzeug.security import generate_password_hash, check_password_hash
 from collections import Counter
 from pathlib import Path
@@ -175,6 +175,20 @@ def _refresh_interface_labels():
     INTERFACE_LABELS = _detect_interface_labels()
 
 
+def _restart_daemon(supervisor_name, systemd_unit):
+    """Restart a managed daemon under whichever init system is actually
+    running this build — supervisord program name on Docker, systemd unit
+    name on the VM/bare-metal package. Check supervisorctl first: the
+    Docker image also ships a fake no-op `systemctl` stub (to satisfy the
+    Wazuh agent's postinstall script), so checking systemd first would
+    silently no-op on Docker instead of falling through.
+    """
+    if shutil.which("supervisorctl"):
+        subprocess.run(["supervisorctl", "restart", supervisor_name], check=False)
+    elif shutil.which("systemctl"):
+        subprocess.run(["systemctl", "restart", systemd_unit], check=False)
+
+
 def _apply_network():
     """Re-run network-init.py so a zone change takes effect without a reboot.
 
@@ -199,8 +213,10 @@ def _apply_network():
         # only reads that file at process start (suricata-start.sh) — restart
         # it so an IDS-monitor toggle or new zone takes effect without
         # waiting for a full reboot, same as apply_dns_config() does for
-        # dnsmasq below.
-        subprocess.run(["supervisorctl", "restart", "suricata"], check=False)
+        # dnsmasq below. grfics-suricata.service is the VM package's own
+        # unit wrapping suricata-start.sh (postinst masks the stock
+        # suricata.service to avoid the two conflicting).
+        _restart_daemon("suricata", "grfics-suricata")
     if proc.returncode != 0:
         detail = (proc.stderr or proc.stdout or "").strip().splitlines()
         flash("Saved, but applying it to the live network failed: "
@@ -499,7 +515,7 @@ def save_dns_config(config):
 
 
 def apply_dns_config(config):
-    """Write dnsmasq host and block files then restart dnsmasq via supervisorctl."""
+    """Write dnsmasq host and block files then restart dnsmasq."""
     host_lines = [f"{h['ip']}\t{h['hostname']}" for h in config.get("hosts", [])]
     with open(DNS_HOSTS_PATH, "w") as f:
         f.write("\n".join(host_lines) + ("\n" if host_lines else ""))
@@ -508,7 +524,10 @@ def apply_dns_config(config):
     with open(DNS_BLOCKED_PATH, "w") as f:
         f.write("\n".join(block_lines) + ("\n" if block_lines else ""))
 
-    subprocess.run(["supervisorctl", "restart", "dnsmasq"], check=False)
+    # "dnsmasq" is both the supervisord program name (Docker) and the stock
+    # package's own systemd unit name (VM/bare-metal) — same string, unlike
+    # Suricata which needs its own grfics-suricata unit.
+    _restart_daemon("dnsmasq", "dnsmasq")
 
 
 def get_dns_queries(limit=100):
