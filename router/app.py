@@ -44,6 +44,21 @@ def _configured_zone_networks():
     return result
 
 
+def _configured_tunnel_networks():
+    """[(label, ipaddress.ip_network), ...] for configured WireGuard tunnels
+    with a valid subnet — zones and tunnels share one address-space
+    namespace (both become real router interfaces), so anything checking
+    one for an overlap must check the other too.
+    """
+    result = []
+    for t in load_wg_config().get("tunnels", []):
+        try:
+            result.append((t.get("label", t.get("name", "Tunnel")), ipaddress.ip_network(t["subnet"], strict=False)))
+        except (KeyError, ValueError):
+            continue
+    return result
+
+
 # load_wg_config/save_wg_config/find_tunnel need to exist before
 # _detect_interface_labels() below, which reads tunnel labels.
 def _migrate_wg0_firewall_rule():
@@ -1156,8 +1171,10 @@ def vpn_add_tunnel():
         flash("Invalid subnet — use CIDR notation, e.g. 10.100.1.0/24.", "danger")
     elif port is None or not (1 <= port <= 65535):
         flash("Invalid listen port.", "danger")
-    elif any(network.overlaps(ipaddress.ip_network(t["subnet"], strict=False)) for t in config["tunnels"]):
-        flash("Subnet overlaps with an existing tunnel.", "danger")
+    elif any(network.overlaps(n) for n in
+             [n for _, n in BUILTIN_ZONE_NETWORKS] + [n for _, n in _configured_zone_networks()]
+             + [ipaddress.ip_network(t["subnet"], strict=False) for t in config["tunnels"]]):
+        flash("Subnet overlaps with an existing zone or tunnel.", "danger")
     elif any(t.get("listen_port") == port for t in config["tunnels"]):
         flash("Listen port already used by another tunnel.", "danger")
     else:
@@ -1666,14 +1683,16 @@ def add_zone():
     except ValueError:
         network = None
 
-    known_networks = [n for _, n in BUILTIN_ZONE_NETWORKS] + [n for _, n in _configured_zone_networks()]
+    known_networks = ([n for _, n in BUILTIN_ZONE_NETWORKS]
+                       + [n for _, n in _configured_zone_networks()]
+                       + [n for _, n in _configured_tunnel_networks()])
 
     if iface not in _list_unconfigured_ifaces():
         flash("That interface is unavailable — pick an unconfigured NIC.", "danger")
     elif network is None:
         flash("Invalid subnet — use CIDR notation, e.g. 192.168.50.0/24.", "danger")
     elif any(network.overlaps(n) for n in known_networks):
-        flash("Subnet overlaps with an existing zone.", "danger")
+        flash("Subnet overlaps with an existing zone or VPN tunnel.", "danger")
     else:
         zones.append({"iface": iface, "subnet": str(network), "label": label, "ids_monitor": monitor})
         save_config()
