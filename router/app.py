@@ -331,6 +331,7 @@ DNS_BLOCKED_PATH = "/etc/firewall/dns_blocked.conf"
 DNSMASQ_LOG = "/var/log/dnsmasq/dnsmasq.log"
 
 pending_rules = []
+nat_rules = []
 dirty = False
 
 def parse_firewall_logs(limit=100):
@@ -452,11 +453,12 @@ DEFAULT_RULES = [
 ]
 
 def load_config():
-    global pending_rules, dirty, users, zones, ids_monitor, zone_iface_overrides, INTERFACE_LABELS
+    global pending_rules, nat_rules, dirty, users, zones, ids_monitor, zone_iface_overrides, INTERFACE_LABELS
     if os.path.exists(CONFIG_PATH):
         with open(CONFIG_PATH) as f:
             data = json.load(f)
             pending_rules = data.get("rules", [])
+            nat_rules = data.get("nat_rules", [])
             zones = data.get("zones", [])
             ids_monitor = {**DEFAULT_IDS_MONITOR, **data.get("ids_monitor", {})}
             zone_iface_overrides = data.get("zone_iface_overrides", {})
@@ -471,6 +473,7 @@ def load_config():
                 save_config()
     else:
         pending_rules = DEFAULT_RULES.copy()
+        nat_rules = []
         zones = []
         ids_monitor = DEFAULT_IDS_MONITOR.copy()
         zone_iface_overrides = {}
@@ -480,7 +483,7 @@ def load_config():
 
 
 def save_config():
-    data = {"rules": pending_rules, "users": users, "zones": zones,
+    data = {"rules": pending_rules, "nat_rules": nat_rules, "users": users, "zones": zones,
             "ids_monitor": ids_monitor, "zone_iface_overrides": zone_iface_overrides}
     with open(CONFIG_PATH, "w") as f:
         json.dump(data, f, indent=2)
@@ -914,8 +917,15 @@ def move_rule():
     return redirect(url_for("index"))
 
 
-def build_iptables_rules(rules):
-    """Return an iptables-restore compatible ruleset string for the given rule list."""
+def build_iptables_rules(rules, nat_rules=None):
+    """Return an iptables-restore compatible *filter table ruleset for the given rule list.
+
+    nat_rules (port forwards, see build_nat_rules) each contribute one ACCEPT
+    line here when their auto_fw_rule flag is set — pfSense auto-adds an
+    associated filter-rule pass for every port forward by default, since
+    otherwise a DNAT would just get default-denied by the FORWARD chain.
+    """
+    nat_rules = nat_rules or []
     lines = [
         "*filter",
         ":INPUT ACCEPT [0:0]",
@@ -945,6 +955,18 @@ def build_iptables_rules(rules):
         else:
             line += f" -j {r['action']}"
         lines.append(line)
+    # Associated filter rules for enabled port forwards (pfSense-style
+    # "auto-add filter rule"). Matched on the forward's translated
+    # (post-DNAT) destination, since that's what the FORWARD chain actually
+    # sees after PREROUTING rewrites the packet.
+    for nr in nat_rules:
+        if not nr.get('enabled', True) or not nr.get('auto_fw_rule', True):
+            continue
+        line = f"-A FORWARD -i {nr['iface_in']} -p {nr['proto']}"
+        if nr.get('src') and nr['src'] not in ('', '0.0.0.0/0'):
+            line += f" -s {nr['src']}"
+        line += f" -d {nr['target_ip']} --dport {nr['target_port']} -j ACCEPT"
+        lines.append(line)
     # No blanket accept for WireGuard interfaces: each tunnel is a normal,
     # selectable interface (see _detect_interface_labels), so VPN traffic is
     # scoped by the same per-interface rules above as any other zone —
@@ -959,13 +981,40 @@ def build_iptables_rules(rules):
     return "\n".join(lines) + "\n"
 
 
-def _apply_rules_now(rules):
-    """Write the iptables ruleset for `rules` to disk and load it. Returns the proc result."""
+def build_nat_rules(nat_rules):
+    """Return an iptables-restore compatible *nat table PREROUTING stanza
+    (the DNAT half of a port forward, pfSense-style).
+
+    POSTROUTING is deliberately left out of this stanza: it's owned by
+    network-init.py's rebuild_nat() and WireGuard's per-tunnel masquerade
+    calls (_ensure_wg_masquerade). iptables-restore -n (noflush) only
+    flushes/replaces chains actually listed in the file being restored, so
+    omitting POSTROUTING here leaves those other rules untouched.
+    """
+    lines = ["*nat", ":PREROUTING ACCEPT [0:0]"]
+    for r in nat_rules:
+        if not r.get('enabled', True):
+            continue
+        line = f"-A PREROUTING -i {r['iface_in']} -p {r['proto']}"
+        if r.get('src') and r['src'] not in ('', '0.0.0.0/0'):
+            line += f" -s {r['src']}"
+        if r.get('dst'):
+            line += f" -d {r['dst']}"
+        line += f" --dport {r['ext_port']} -j DNAT --to-destination {r['target_ip']}:{r['target_port']}"
+        lines.append(line)
+    lines.append("COMMIT")
+    return "\n".join(lines) + "\n"
+
+
+def _apply_rules_now(rules, nat_rules=None):
+    """Write the iptables ruleset for `rules`/`nat_rules` to disk and load it. Returns the proc result."""
+    nat_rules = nat_rules or []
     os.makedirs(os.path.dirname(FIREWALL_RULES_PATH), exist_ok=True)
-    rules_text = build_iptables_rules(rules)
+    rules_text = build_nat_rules(nat_rules) + build_iptables_rules(rules, nat_rules)
     with open(FIREWALL_RULES_PATH, "w") as f:
         f.write(rules_text)
     subprocess.run(["iptables", "-F", "FORWARD"], check=False)
+    subprocess.run(["iptables", "-t", "nat", "-F", "PREROUTING"], check=False)
     return subprocess.run(["iptables-restore", "-n", FIREWALL_RULES_PATH])
 
 
@@ -974,7 +1023,7 @@ def _apply_rules_now(rules):
 @admin_required
 def apply_changes():
     load_config()
-    proc = _apply_rules_now(pending_rules)
+    proc = _apply_rules_now(pending_rules, nat_rules)
     if proc.returncode != 0:
         flash("Error applying firewall rules!", "danger")
     else:
@@ -993,6 +1042,123 @@ def revert_changes():
     dirty = False
     flash("Reverted to active iptables configuration", "info")
     return redirect(url_for("index"))
+
+
+@app.route("/nat")
+@login_required
+def nat_page():
+    user = session.get("username")
+    return render_template("nat.html", active_page="nat", nat_rules=nat_rules,
+                            labels=INTERFACE_LABELS, dirty=dirty, user=user)
+
+
+def _validate_nat_form(form):
+    """Validate a submitted port-forward form. Returns (rule_dict, errors)."""
+    iface_in = form.get("iface_in", "")
+    proto = form.get("proto", "tcp")
+    src = form.get("src", "").strip() or "0.0.0.0/0"
+    if src.lower() == "any":
+        src = "0.0.0.0/0"
+    dst = form.get("dst", "").strip()
+    if dst.lower() == "any":
+        dst = ""
+    ext_port = form.get("ext_port", "").strip()
+    target_ip = form.get("target_ip", "").strip()
+    target_port = form.get("target_port", "").strip() or ext_port
+    auto_fw_rule = form.get("auto_fw_rule") == "on"
+    comment = form.get("comment", "").strip()
+
+    errors = []
+    if not iface_in or iface_in not in INTERFACE_LABELS:
+        errors.append("Select a valid incoming interface.")
+    if proto not in ("tcp", "udp"):
+        errors.append("Protocol must be TCP or UDP.")
+    if not ext_port.isdigit() or not (1 <= int(ext_port) <= 65535):
+        errors.append("External port must be a number between 1 and 65535.")
+    if not target_port.isdigit() or not (1 <= int(target_port) <= 65535):
+        errors.append("Target port must be a number between 1 and 65535.")
+    try:
+        ipaddress.ip_address(target_ip)
+    except ValueError:
+        errors.append("Target IP must be a valid IPv4 address.")
+    if dst:
+        try:
+            ipaddress.ip_address(dst)
+        except ValueError:
+            errors.append("Destination address must be a valid IPv4 address, or left blank for any.")
+
+    rule = {
+        "iface_in": iface_in,
+        "proto": proto,
+        "src": src,
+        "dst": dst,
+        "ext_port": ext_port,
+        "target_ip": target_ip,
+        "target_port": target_port,
+        "auto_fw_rule": auto_fw_rule,
+        "enabled": True,
+        "comment": comment,
+    }
+    return rule, errors
+
+
+@app.route("/nat/add", methods=["POST"])
+@login_required
+@admin_required
+def nat_add_rule():
+    global dirty
+    rule, errors = _validate_nat_form(request.form)
+    if errors:
+        for e in errors:
+            flash(e, "danger")
+        return redirect(url_for("nat_page"))
+
+    nat_rules.append(rule)
+    save_config()
+    dirty = True
+    return redirect(url_for("nat_page"))
+
+
+@app.route("/nat/delete", methods=["POST"])
+@login_required
+@admin_required
+def nat_delete_rule():
+    global dirty
+    idx = int(request.form["rule_num"])
+    if 0 <= idx < len(nat_rules):
+        del nat_rules[idx]
+        save_config()
+        dirty = True
+    return redirect(url_for("nat_page"))
+
+
+@app.route("/nat/toggle", methods=["POST"])
+@login_required
+@admin_required
+def nat_toggle_rule():
+    global dirty
+    idx = int(request.form["rule_num"])
+    if 0 <= idx < len(nat_rules):
+        nat_rules[idx]["enabled"] = not nat_rules[idx].get("enabled", True)
+        save_config()
+        dirty = True
+    return redirect(url_for("nat_page"))
+
+
+@app.route("/nat/move", methods=["POST"])
+@login_required
+@admin_required
+def nat_move_rule():
+    global dirty
+    idx = int(request.form["rule_num"])
+    direction = request.form["direction"]
+    if direction == "up" and idx > 0:
+        nat_rules[idx - 1], nat_rules[idx] = nat_rules[idx], nat_rules[idx - 1]
+    elif direction == "down" and idx < len(nat_rules) - 1:
+        nat_rules[idx + 1], nat_rules[idx] = nat_rules[idx], nat_rules[idx + 1]
+    save_config()
+    dirty = True
+    return redirect(url_for("nat_page"))
 
 
 @app.route("/ids")
@@ -1770,7 +1936,7 @@ def set_ids_monitor():
 
 
 load_config()
-_apply_rules_now(pending_rules)
+_apply_rules_now(pending_rules, nat_rules)
 
 for _tunnel in load_wg_config().get("tunnels", []):
     apply_wg_tunnel(_tunnel)

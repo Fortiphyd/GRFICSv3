@@ -184,6 +184,95 @@ class TestApplyRulesNow:
         restore_calls = [c for c in sub_calls if "iptables-restore" in c]
         assert len(restore_calls) == 1
 
+    def test_nat_prerouting_flushed_alongside_forward(self):
+        """Applying rules must reset the nat PREROUTING chain, not just filter/FORWARD."""
+        sub_calls = []
+        with patch("builtins.open", mock_open()), \
+             patch("subprocess.run", side_effect=lambda cmd, **kw: sub_calls.append(cmd) or MagicMock(returncode=0)), \
+             patch("os.makedirs"):
+            flask_app._apply_rules_now([], [])
+        assert ["iptables", "-t", "nat", "-F", "PREROUTING"] in sub_calls
+
+
+# ---------------------------------------------------------------------------
+# build_nat_rules / build_iptables_rules(nat_rules=...) — port forwarding
+# ---------------------------------------------------------------------------
+
+NAT_RULE = {
+    "iface_in": "eth2", "proto": "tcp", "src": "0.0.0.0/0", "dst": "",
+    "ext_port": "8080", "target_ip": "192.168.95.5", "target_port": "80",
+    "auto_fw_rule": True, "enabled": True, "comment": "",
+}
+
+
+class TestBuildNatRules:
+    def test_starts_with_nat_table_and_prerouting_chain(self):
+        result = flask_app.build_nat_rules([])
+        assert result.startswith("*nat")
+        assert ":PREROUTING ACCEPT [0:0]" in result
+
+    def test_ends_with_commit(self):
+        result = flask_app.build_nat_rules([])
+        assert result.strip().endswith("COMMIT")
+
+    def test_postrouting_chain_not_mentioned(self):
+        """POSTROUTING is owned by network-init.py/WireGuard masquerade — must stay untouched."""
+        result = flask_app.build_nat_rules([NAT_RULE])
+        assert "POSTROUTING" not in result
+
+    def test_dnat_line_for_basic_forward(self):
+        result = flask_app.build_nat_rules([NAT_RULE])
+        assert "-A PREROUTING -i eth2 -p tcp --dport 8080 -j DNAT --to-destination 192.168.95.5:80" in result
+
+    def test_disabled_rule_omitted(self):
+        rule = {**NAT_RULE, "enabled": False}
+        result = flask_app.build_nat_rules([rule])
+        assert "DNAT" not in result
+
+    def test_src_restriction_included_when_set(self):
+        rule = {**NAT_RULE, "src": "192.168.90.6/32"}
+        result = flask_app.build_nat_rules([rule])
+        assert "-s 192.168.90.6/32" in result
+
+    def test_any_src_omits_s_flag(self):
+        result = flask_app.build_nat_rules([NAT_RULE])
+        line = next(l for l in result.splitlines() if "DNAT" in l)
+        assert "-s " not in line
+
+    def test_dst_restriction_included_when_set(self):
+        rule = {**NAT_RULE, "dst": "192.168.90.200"}
+        result = flask_app.build_nat_rules([rule])
+        assert "-d 192.168.90.200" in result
+
+    def test_blank_dst_omits_d_flag(self):
+        result = flask_app.build_nat_rules([NAT_RULE])
+        line = next(l for l in result.splitlines() if "DNAT" in l)
+        assert "-d " not in line
+
+
+class TestAssociatedFilterRule:
+    def test_auto_fw_rule_adds_forward_accept(self):
+        result = flask_app.build_iptables_rules([], [NAT_RULE])
+        assert "-A FORWARD -i eth2 -p tcp -d 192.168.95.5 --dport 80 -j ACCEPT" in result
+
+    def test_auto_fw_rule_false_adds_nothing(self):
+        rule = {**NAT_RULE, "auto_fw_rule": False}
+        result = flask_app.build_iptables_rules([], [rule])
+        assert "192.168.95.5" not in result
+
+    def test_disabled_nat_rule_adds_nothing(self):
+        rule = {**NAT_RULE, "enabled": False}
+        result = flask_app.build_iptables_rules([], [rule])
+        assert "192.168.95.5" not in result
+
+    def test_associated_rule_precedes_catchall_logdrop(self):
+        result = flask_app.build_iptables_rules([], [NAT_RULE])
+        assert result.index("192.168.95.5") < result.index("-A FORWARD -j LOGDROP")
+
+    def test_no_nat_rules_leaves_filter_output_unchanged(self):
+        assert flask_app.build_iptables_rules([]) == flask_app.build_iptables_rules([], [])
+        assert flask_app.build_iptables_rules([]) == flask_app.build_iptables_rules([], None)
+
 
 # ---------------------------------------------------------------------------
 # DEFAULT_RULES — misconfiguration scenario
