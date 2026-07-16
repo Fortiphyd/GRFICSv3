@@ -48,6 +48,7 @@ COPY entrypoint.sh /entrypoint.sh
 COPY app.py /opt/fwui/app.py
 COPY login.html /opt/fwui/templates/login.html
 COPY firewall.html /opt/fwui/templates/firewall.html
+COPY nat.html /opt/fwui/templates/nat.html
 COPY firewall_logs.html /opt/fwui/templates/firewall_logs.html
 COPY ids.html /opt/fwui/templates/ids.html
 COPY dashboard.html /opt/fwui/templates/dashboard.html
