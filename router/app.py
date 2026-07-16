@@ -780,24 +780,49 @@ def is_dirty():
 
 
 def parse_iptables_rules():
-    raw = subprocess.check_output(["iptables", "-S"], text=True).splitlines()
+    """Reconstruct pending_rules from the live FORWARD chain (used by Revert).
+
+    Scoped to FORWARD only — `iptables -S` with no chain lists every chain
+    in the filter table, which would otherwise pull in INPUT/OUTPUT and our
+    own LOGDROP/LOGREJECT logging chains. The stateful base rules, ICS
+    default-allow, and NAT-associated accepts (build_iptables_rules always
+    regenerates these itself) are excluded too, since re-adding them as
+    "user" pending_rules would just duplicate them on the next Apply.
+    """
+    raw = subprocess.check_output(["iptables", "-S", "FORWARD"], text=True).splitlines()
+    managed_lines = {
+        "-A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT",
+        "-A FORWARD -m conntrack --ctstate INVALID -j DROP",
+        f"-A FORWARD -s {ICS_SUBNET} -j ACCEPT",
+        "-A FORWARD -j LOGDROP",
+    }
+    managed_lines |= {
+        _nat_associated_forward_line(nr) for nr in nat_rules
+        if nr.get('enabled', True) and nr.get('auto_fw_rule', True)
+    }
+
     idx = 0
     rules = []
     for line in raw:
-        if not line.startswith('-A'):  # only actual rules
+        if not line.startswith('-A FORWARD') or line in managed_lines:
             continue
         idx += 1
         parts = line.split()
+        # DROP/REJECT rules jump to LOGDROP/LOGREJECT (see build_iptables_rules),
+        # so the action must be un-prefixed back to match the rule schema.
+        target = parts[-1]
+        action = target[3:] if target.startswith('LOG') else target
         rule = {
             'index': idx,
             'chain': parts[1],
             'iface_in': next((parts[i+1] for i,p in enumerate(parts) if p == '-i'), ''),
             'iface_out': next((parts[i+1] for i,p in enumerate(parts) if p == '-o'), ''),
-            'src': next((parts[i+1] for i,p in enumerate(parts) if p == '-s'), 'any'),
-            'dst': next((parts[i+1] for i,p in enumerate(parts) if p == '-d'), 'any'),
-            'proto': next((parts[i+1] for i,p in enumerate(parts) if p == '-p'), 'any'),
-            'dport': next((parts[i+1] for i,p in enumerate(parts) if p == '--dport'), 'any'),
-            'action': parts[-1],
+            'src': next((parts[i+1] for i,p in enumerate(parts) if p == '-s'), '0.0.0.0/0'),
+            'dst': next((parts[i+1] for i,p in enumerate(parts) if p == '-d'), '0.0.0.0/0'),
+            'proto': next((parts[i+1] for i,p in enumerate(parts) if p == '-p'), 'all'),
+            'dport': next((parts[i+1] for i,p in enumerate(parts) if p == '--dport'), ''),
+            'action': action,
+            'comment': '',
         }
         rules.append(rule)
     return rules
@@ -917,6 +942,19 @@ def move_rule():
     return redirect(url_for("index"))
 
 
+def _nat_associated_forward_line(nr):
+    """The FORWARD ACCEPT line build_iptables_rules() auto-adds for a port
+    forward with auto_fw_rule set. Factored out so parse_iptables_rules()
+    can recognize and exclude these framework-managed lines too — they're
+    regenerated from nat_rules, not user-authored pending_rules.
+    """
+    line = f"-A FORWARD -i {nr['iface_in']} -p {nr['proto']}"
+    if nr.get('src') and nr['src'] not in ('', '0.0.0.0/0'):
+        line += f" -s {nr['src']}"
+    line += f" -d {nr['target_ip']} --dport {nr['target_port']} -j ACCEPT"
+    return line
+
+
 def build_iptables_rules(rules, nat_rules=None):
     """Return an iptables-restore compatible *filter table ruleset for the given rule list.
 
@@ -962,11 +1000,7 @@ def build_iptables_rules(rules, nat_rules=None):
     for nr in nat_rules:
         if not nr.get('enabled', True) or not nr.get('auto_fw_rule', True):
             continue
-        line = f"-A FORWARD -i {nr['iface_in']} -p {nr['proto']}"
-        if nr.get('src') and nr['src'] not in ('', '0.0.0.0/0'):
-            line += f" -s {nr['src']}"
-        line += f" -d {nr['target_ip']} --dport {nr['target_port']} -j ACCEPT"
-        lines.append(line)
+        lines.append(_nat_associated_forward_line(nr))
     # No blanket accept for WireGuard interfaces: each tunnel is a normal,
     # selectable interface (see _detect_interface_labels), so VPN traffic is
     # scoped by the same per-interface rules above as any other zone —
@@ -1035,9 +1069,8 @@ def apply_changes():
 @login_required
 @admin_required
 def revert_changes():
-    global dirty
-    rules = parse_iptables_rules()
-    pending_rules = rules
+    global pending_rules, dirty
+    pending_rules = parse_iptables_rules()
     save_config()
     dirty = False
     flash("Reverted to active iptables configuration", "info")
