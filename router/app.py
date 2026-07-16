@@ -779,6 +779,20 @@ def is_dirty():
     return saved not in active
 
 
+def _normalize_ctstate(line):
+    """Sort any --ctstate value list before comparing lines for equality.
+
+    The kernel doesn't preserve the order a multi-value match option (like
+    `--ctstate ESTABLISHED,RELATED`) was written in — `iptables -S` echoes
+    it back in its own canonical order (observed: `RELATED,ESTABLISHED`),
+    so a plain string comparison against what build_iptables_rules() wrote
+    would spuriously fail.
+    """
+    return re.sub(r'(--ctstate )(\S+)',
+                  lambda m: m.group(1) + ','.join(sorted(m.group(2).split(','))),
+                  line)
+
+
 def parse_iptables_rules():
     """Reconstruct pending_rules from the live FORWARD chain (used by Revert).
 
@@ -791,8 +805,8 @@ def parse_iptables_rules():
     """
     raw = subprocess.check_output(["iptables", "-S", "FORWARD"], text=True).splitlines()
     managed_lines = {
-        "-A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT",
-        "-A FORWARD -m conntrack --ctstate INVALID -j DROP",
+        _normalize_ctstate("-A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT"),
+        _normalize_ctstate("-A FORWARD -m conntrack --ctstate INVALID -j DROP"),
         f"-A FORWARD -s {ICS_SUBNET} -j ACCEPT",
         "-A FORWARD -j LOGDROP",
     }
@@ -804,7 +818,7 @@ def parse_iptables_rules():
     idx = 0
     rules = []
     for line in raw:
-        if not line.startswith('-A FORWARD') or line in managed_lines:
+        if not line.startswith('-A FORWARD') or _normalize_ctstate(line) in managed_lines:
             continue
         idx += 1
         parts = line.split()

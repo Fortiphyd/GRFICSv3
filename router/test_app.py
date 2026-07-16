@@ -298,6 +298,20 @@ class TestParseIptablesRules:
         ])
         assert result == []
 
+    def test_framework_lines_excluded_with_kernel_ctstate_reordering(self):
+        """Regression test: `iptables -S` echoes back --ctstate values in its
+        own canonical order (observed live: RELATED,ESTABLISHED), not the
+        ESTABLISHED,RELATED order build_iptables_rules() wrote — a plain
+        string comparison missed this and reconstructed the stateful
+        ESTABLISHED,RELATED accept rule as a phantom 'allow any' user rule."""
+        result = self._parse([
+            "-A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT",
+            "-A FORWARD -m conntrack --ctstate INVALID -j DROP",
+            f"-A FORWARD -s {flask_app.ICS_SUBNET} -j ACCEPT",
+            "-A FORWARD -j LOGDROP",
+        ])
+        assert result == []
+
     def test_user_accept_rule_recovered(self):
         result = self._parse(["-A FORWARD -p tcp -s 192.168.90.0/24 -d 192.168.95.2 --dport 502 -j ACCEPT"])
         assert len(result) == 1
