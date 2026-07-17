@@ -29,6 +29,19 @@
   <div class="card-body">
     <p class="text-muted">Download the full router configuration — firewall/NAT rules, zones, DNS entries, IDS custom rules, and VPN tunnels — as a single JSON file. The file includes secrets (WireGuard private keys, user password hashes); store it like a credential.</p>
     <a class="btn btn-sm btn-primary" href="{{ url_for('export_config') }}">Export Config</a>
+
+    <hr>
+
+    <p class="text-muted">Import a previously exported config file. This <strong>replaces</strong> the current firewall/NAT rules, zones, DNS entries, IDS custom rules, VPN tunnels, and users outright and applies them live — it is not a merge.</p>
+    <form method="post" action="{{ url_for('import_config') }}" enctype="multipart/form-data" class="row g-2 align-items-end"
+          onsubmit="return confirm('This replaces the current firewall, DNS, IDS, VPN, and user config entirely. Continue?')">
+      <div class="col-auto">
+        <input type="file" name="config_file" accept="application/json" class="form-control form-control-sm" required>
+      </div>
+      <div class="col-auto">
+        <button type="submit" class="btn btn-sm btn-warning">Import Config</button>
+      </div>
+    </form>
   </div>
 </div>
 

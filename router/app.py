@@ -1861,6 +1861,91 @@ def export_config():
     )
 
 
+@app.route("/settings/import", methods=["POST"])
+@login_required
+@admin_required
+def import_config():
+    """Wholesale-replace every persisted config store from an export_config() bundle.
+
+    This is a restore, not a merge: firewall/NAT rules, zones, DNS, IDS
+    custom rules, VPN tunnels, and users are all replaced outright and
+    re-applied live. Unlike add_zone()/vpn_add_tunnel(), it does not
+    re-validate subnets for overlap -- the bundle is assumed to already be
+    an internally-consistent config that was exported from a working router.
+    """
+    global pending_rules, nat_rules, zones, ids_monitor, zone_iface_overrides, users, dirty
+
+    upload = request.files.get("config_file")
+    if not upload or not upload.filename:
+        flash("Choose a config file to import.", "danger")
+        return redirect(url_for("settings_users"))
+
+    try:
+        bundle = json.load(upload.stream)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        flash("That file isn't valid JSON.", "danger")
+        return redirect(url_for("settings_users"))
+
+    firewall = bundle.get("firewall")
+    vpn = bundle.get("vpn")
+    dns_cfg = bundle.get("dns")
+    imported_users = bundle.get("users")
+    if (bundle.get("schema_version") != 1 or not isinstance(firewall, dict)
+            or not isinstance(vpn, dict) or not isinstance(dns_cfg, dict)
+            or not isinstance(imported_users, list)):
+        flash("That file doesn't look like a router config export.", "danger")
+        return redirect(url_for("settings_users"))
+    if not any(u.get("role") == "admin" for u in imported_users):
+        flash("Refusing to import: the file has no admin user, which would lock everyone out.", "danger")
+        return redirect(url_for("settings_users"))
+
+    # --- firewall / NAT / zones / users ---
+    pending_rules = firewall.get("rules", [])
+    nat_rules = firewall.get("nat_rules", [])
+    zones = firewall.get("zones", [])
+    ids_monitor = {**DEFAULT_IDS_MONITOR, **firewall.get("ids_monitor", {})}
+    zone_iface_overrides = firewall.get("zone_iface_overrides", {})
+    users = imported_users
+    save_config()
+    dirty = False
+    _apply_network()
+    fw_proc = _apply_rules_now(pending_rules, nat_rules)
+
+    # --- DNS ---
+    save_dns_config(dns_cfg)
+    apply_dns_config(dns_cfg)
+
+    # --- IDS custom rules ---
+    ids_rules_text = bundle.get("ids_custom_rules", "") or ""
+    os.makedirs(os.path.dirname(IDS_RULES_FILE), exist_ok=True)
+    with open(IDS_RULES_FILE, "w") as f:
+        f.write(ids_rules_text.strip() + ("\n" if ids_rules_text.strip() else ""))
+    subprocess.run(["pkill", "-USR2", "Suricata-Main"], check=False)
+
+    # --- VPN tunnels: tear down whatever's running that isn't in the
+    # import, then bring up the imported set ---
+    imported_tunnels = vpn.get("tunnels", [])
+    imported_names = {t["name"] for t in imported_tunnels}
+    for t in load_wg_config().get("tunnels", []):
+        if t["name"] not in imported_names:
+            subprocess.run(["wg-quick", "down", t["name"]], capture_output=True)
+            try:
+                os.remove(os.path.join(WG_CONF_DIR, f"{t['name']}.conf"))
+            except OSError:
+                pass
+    save_wg_config(vpn)
+    for tunnel in imported_tunnels:
+        apply_wg_tunnel(tunnel)
+    _refresh_interface_labels()
+
+    if fw_proc.returncode != 0:
+        flash("Config imported, but applying the firewall/NAT rules failed — check them on the Firewall page.", "danger")
+    else:
+        flash("Config imported and applied. If the imported file changed your account, "
+              "you'll need to log back in with the restored credentials once your session ends.", "success")
+    return redirect(url_for("settings_users"))
+
+
 @app.route("/interfaces")
 @login_required
 def interfaces():
