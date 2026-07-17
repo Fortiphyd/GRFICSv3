@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, Response
 import subprocess
 import json, os, functools, time, glob, re, ipaddress, shutil
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -1819,6 +1819,46 @@ def settings_users():
     return render_template("settings.html", active_page="settings",
                            users=users, current_user=session["username"],
                            current_role=session.get("role"))
+
+
+@app.route("/settings/export")
+@login_required
+@admin_required
+def export_config():
+    """Bundle every persisted config store into one downloadable JSON file.
+
+    Includes secrets (WireGuard private keys, user password hashes) so the
+    file is a real backup, not just a shareable snapshot -- treat it like a
+    credential.
+    """
+    try:
+        with open(IDS_RULES_FILE) as f:
+            ids_rules_text = f.read()
+    except FileNotFoundError:
+        ids_rules_text = ""
+
+    bundle = {
+        "schema_version": 1,
+        "exported_at": datetime.now().isoformat(),
+        "firewall": {
+            "rules": pending_rules,
+            "nat_rules": nat_rules,
+            "zones": zones,
+            "ids_monitor": ids_monitor,
+            "zone_iface_overrides": zone_iface_overrides,
+        },
+        "users": users,
+        "dns": load_dns_config(),
+        "ids_custom_rules": ids_rules_text,
+        "vpn": load_wg_config(),
+    }
+
+    filename = f"grfics-router-config-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
+    return Response(
+        json.dumps(bundle, indent=2),
+        mimetype="application/json",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 @app.route("/interfaces")

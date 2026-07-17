@@ -25,6 +25,14 @@
 
 {% if current_role == "admin" %}
 <div class="card mb-4">
+  <div class="card-header">Backup</div>
+  <div class="card-body">
+    <p class="text-muted">Download the full router configuration — firewall/NAT rules, zones, DNS entries, IDS custom rules, and VPN tunnels — as a single JSON file. The file includes secrets (WireGuard private keys, user password hashes); store it like a credential.</p>
+    <a class="btn btn-sm btn-primary" href="{{ url_for('export_config') }}">Export Config</a>
+  </div>
+</div>
+
+<div class="card mb-4">
   <div class="card-header">Users</div>
   <div class="card-body p-0">
     <table class="table table-sm table-striped mb-0">
