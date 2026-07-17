@@ -743,7 +743,10 @@ class TestApplyDnsConfig:
             str(a[0]) for call in block_call[1].write.call_args_list
             for a in [call[0]]
         )
-        assert "address=/evil.com/#" in written_content
+        # No trailing "#": that variant makes dnsmasq return 0.0.0.0 (ping still
+        # "succeeds" via loopback); the bare form returns NXDOMAIN instead.
+        assert "address=/evil.com/" in written_content
+        assert "address=/evil.com/#" not in written_content
 
     def test_dnsmasq_restarted(self):
         config = {"hosts": [], "blocked": []}
@@ -761,6 +764,7 @@ class TestDomainSanitisation:
         self.client = flask_app.app.test_client()
         with self.client.session_transaction() as sess:
             sess['logged_in'] = True
+            sess['role'] = 'admin'
 
     def test_wildcard_prefix_stripped(self):
         saved = {}
