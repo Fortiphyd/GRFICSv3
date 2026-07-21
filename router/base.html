@@ -23,10 +23,15 @@
           <a class="nav-link {% if active_page == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">Dashboard</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link {% if active_page == 'firewall' %}active{% endif %}" href="{{ url_for('index') }}">Firewall</a>
+          <a class="nav-link {% if active_page == 'interfaces' %}active{% endif %}" href="{{ url_for('interfaces') }}">Interfaces</a>
         </li>
-        <li class="nav-item">
-          <a class="nav-link {% if active_page == 'states' %}active{% endif %}" href="{{ url_for('states') }}">States</a>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle {% if active_page in ['firewall', 'nat', 'firewall_logs'] %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Firewall</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item {% if active_page == 'firewall' %}active{% endif %}" href="{{ url_for('index') }}">Firewall</a></li>
+            <li><a class="dropdown-item {% if active_page == 'nat' %}active{% endif %}" href="{{ url_for('nat_page') }}">NAT</a></li>
+            <li><a class="dropdown-item {% if active_page == 'firewall_logs' %}active{% endif %}" href="{{ url_for('firewall_logs') }}">Firewall Logs</a></li>
+          </ul>
         </li>
         <li class="nav-item">
           <a class="nav-link {% if active_page == 'dns' %}active{% endif %}" href="{{ url_for('dns') }}">DNS</a>
@@ -37,11 +42,12 @@
         <li class="nav-item">
           <a class="nav-link {% if active_page == 'vpn' %}active{% endif %}" href="{{ url_for('vpn') }}">VPN</a>
         </li>
-        <li class="nav-item">
-          <a class="nav-link {% if active_page == 'firewall_logs' %}active{% endif %}" href="{{ url_for('firewall_logs') }}">Firewall Logs</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link {% if active_page == 'arp' %}active{% endif %}" href="{{ url_for('arp') }}">ARP</a>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle {% if active_page in ['arp', 'states'] %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Monitoring</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item {% if active_page == 'arp' %}active{% endif %}" href="{{ url_for('arp') }}">ARP</a></li>
+            <li><a class="dropdown-item {% if active_page == 'states' %}active{% endif %}" href="{{ url_for('states') }}">States</a></li>
+          </ul>
         </li>
         <li class="nav-item">
           <a class="nav-link {% if active_page == 'diagnostics' %}active{% endif %}" href="{{ url_for('diagnostics') }}">Diagnostics</a>

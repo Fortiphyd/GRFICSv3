@@ -46,16 +46,18 @@ RUN sed -i 's|</ossec_config>|<localfile>\n    <log_format>json</log_format>\n  
 
 COPY entrypoint.sh /entrypoint.sh
 COPY app.py /opt/fwui/app.py
-COPY index.html /opt/fwui/templates/index.html
 COPY login.html /opt/fwui/templates/login.html
 COPY firewall.html /opt/fwui/templates/firewall.html
+COPY nat.html /opt/fwui/templates/nat.html
 COPY firewall_logs.html /opt/fwui/templates/firewall_logs.html
 COPY ids.html /opt/fwui/templates/ids.html
 COPY dashboard.html /opt/fwui/templates/dashboard.html
 COPY states.html /opt/fwui/templates/states.html
 COPY dns.html /opt/fwui/templates/dns.html
 COPY wireguard.html /opt/fwui/templates/wireguard.html
+COPY vpn_tunnel.html /opt/fwui/templates/vpn_tunnel.html
 COPY settings.html /opt/fwui/templates/settings.html
+COPY interfaces.html /opt/fwui/templates/interfaces.html
 COPY arp.html /opt/fwui/templates/arp.html
 COPY diagnostics.html /opt/fwui/templates/diagnostics.html
 COPY base.html /opt/fwui/templates/base.html
@@ -64,6 +66,9 @@ COPY static/ /opt/fwui/static/
 COPY router.conf /etc/supervisor/conf.d/router.conf
 COPY suricata.yaml /etc/suricata/suricata.yaml
 COPY dnsmasq.conf /etc/dnsmasq.conf
+COPY usr/lib/grfics/network-init.py /usr/lib/grfics/network-init.py
+COPY usr/lib/grfics/suricata-start.sh /usr/lib/grfics/suricata-start.sh
+RUN chmod +x /usr/lib/grfics/suricata-start.sh
 
 COPY quickdraw.rules /etc/suricata/rules/quickdraw.rules
 COPY ulogd.conf /etc/ulogd.conf

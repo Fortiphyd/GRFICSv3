@@ -1,0 +1,14 @@
+#!/bin/bash
+set -e
+
+systemctl stop grfics-flask.service 2>/dev/null || true
+systemctl stop grfics-suricata.service 2>/dev/null || true
+systemctl stop grfics-arpmon.service 2>/dev/null || true
+systemctl stop grfics-router-init.service 2>/dev/null || true
+
+systemctl disable grfics-flask.service 2>/dev/null || true
+systemctl disable grfics-suricata.service 2>/dev/null || true
+systemctl disable grfics-arpmon.service 2>/dev/null || true
+systemctl disable grfics-router-init.service 2>/dev/null || true
+
+systemctl unmask suricata.service 2>/dev/null || true

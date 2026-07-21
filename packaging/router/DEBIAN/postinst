@@ -1,0 +1,109 @@
+#!/bin/bash
+set -e
+
+# Create runtime directories
+mkdir -p /etc/firewall \
+         /var/log/flask \
+         /var/log/arpmon \
+         /var/log/suricata \
+         /var/log/ulog \
+         /var/log/dnsmasq \
+         /var/lib/arpmon
+
+# Initialize config files if not already present (preserves state on upgrade)
+[ -f /etc/firewall/dns_hosts ] || touch /etc/firewall/dns_hosts
+[ -f /etc/firewall/dns_blocked.conf ] || touch /etc/firewall/dns_blocked.conf
+[ -f /etc/suricata/rules/local.rules ] || touch /etc/suricata/rules/local.rules
+
+# suricata.yaml/dnsmasq.conf/ulogd.conf live at paths owned by the suricata/
+# dnsmasq/ulogd2 packages, so we can't ship them as dpkg-owned files at
+# those paths (dpkg would refuse to unpack whichever package comes second).
+# Copy our versions into place now that those packages have unpacked theirs.
+cp -f /usr/lib/grfics/config/suricata.yaml /etc/suricata/suricata.yaml
+cp -f /usr/lib/grfics/config/dnsmasq.conf /etc/dnsmasq.conf
+cp -f /usr/lib/grfics/config/ulogd.conf /etc/ulogd.conf
+
+# Prevent the suricata package's own service from conflicting with ours
+systemctl stop suricata.service 2>/dev/null || true
+systemctl mask suricata.service 2>/dev/null || true
+
+# systemd-resolved's stub listener holds port 53 on every VM/bare-metal
+# install (Docker containers never run it, which is why this only shows up
+# here) — this box is meant to be the lab's DNS server, so it takes port 53
+# outright instead of sharing with the host resolver.
+systemctl stop systemd-resolved.service 2>/dev/null || true
+systemctl mask systemd-resolved.service 2>/dev/null || true
+if [ -L /etc/resolv.conf ]; then
+    rm -f /etc/resolv.conf
+    printf 'nameserver 127.0.0.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf
+fi
+
+# On a fresh VM/bare-metal install, nothing pre-assigns the router's own
+# address on the LAN/DMZ NICs (Docker's macvlan config used to do this
+# automatically). Prompt interactively for which blank interface plays each
+# role when attached to a terminal; otherwise skip — the admin can bind
+# these later under Settings > Interfaces in the web UI. This only covers
+# the two built-in zones — it does NOT ask about every physical NIC, so any
+# interface beyond LAN/DMZ is reported at the end for the admin to configure
+# as a custom zone later (Interfaces > Add Zone lets you pick a subnet/label
+# per interface, which doesn't fit a single yes/no terminal prompt well).
+STATUS="$(python3 /usr/lib/grfics/zone-iface-tool.py status)"
+LAN_IFACE="$(echo "$STATUS" | grep '^LAN=' | cut -d= -f2)"
+DMZ_IFACE="$(echo "$STATUS" | grep '^DMZ=' | cut -d= -f2)"
+AVAILABLE="$(echo "$STATUS" | grep '^AVAILABLE=' | cut -d= -f2-)"
+
+if [ -t 0 ] && [ -t 1 ]; then
+    if [ -z "$LAN_IFACE" ] && [ -n "$AVAILABLE" ]; then
+        echo ""
+        echo "No interface detected for the LAN zone (192.168.95.0/24)."
+        echo "Available interfaces: $AVAILABLE"
+        read -r -p "Interface to use for LAN (Enter to skip, configure later in Settings): " CHOSEN || CHOSEN=""
+        if [ -n "$CHOSEN" ]; then
+            case " $AVAILABLE " in
+                *" $CHOSEN "*)
+                    python3 /usr/lib/grfics/zone-iface-tool.py bind LAN "$CHOSEN"
+                    AVAILABLE="$(echo "$AVAILABLE" | tr ' ' '\n' | grep -vx "$CHOSEN" | tr '\n' ' ')"
+                    ;;
+                *)
+                    echo "grfics-router: '$CHOSEN' is not an available interface, skipping." >&2
+                    ;;
+            esac
+        fi
+    fi
+
+    if [ -z "$DMZ_IFACE" ] && [ -n "$AVAILABLE" ]; then
+        echo ""
+        echo "No interface detected for the DMZ zone (192.168.90.0/24)."
+        echo "Available interfaces: $AVAILABLE"
+        read -r -p "Interface to use for DMZ (Enter to skip, configure later in Settings): " CHOSEN || CHOSEN=""
+        if [ -n "$CHOSEN" ]; then
+            case " $AVAILABLE " in
+                *" $CHOSEN "*)
+                    python3 /usr/lib/grfics/zone-iface-tool.py bind DMZ "$CHOSEN"
+                    ;;
+                *)
+                    echo "grfics-router: '$CHOSEN' is not an available interface, skipping." >&2
+                    ;;
+            esac
+        fi
+    fi
+else
+    echo "grfics-router: non-interactive install — LAN/DMZ interfaces not auto-assigned." >&2
+    echo "grfics-router: bind them under Settings > Interfaces in the web UI." >&2
+fi
+
+if [ -n "$AVAILABLE" ]; then
+    echo ""
+    echo "grfics-router: additional unconfigured interfaces detected: $AVAILABLE"
+    echo "grfics-router: bind them under Settings > Interfaces in the web UI if you want to use them as extra zones."
+fi
+
+systemctl daemon-reload
+
+systemctl enable --now grfics-router-init.service
+systemctl enable --now grfics-flask.service
+systemctl enable --now grfics-suricata.service
+systemctl enable --now grfics-arpmon.service
+systemctl enable --now dnsmasq
+systemctl enable --now ulogd2
+systemctl restart dnsmasq ulogd2

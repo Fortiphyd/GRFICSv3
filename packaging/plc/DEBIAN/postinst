@@ -1,0 +1,13 @@
+#!/bin/bash
+set -e
+
+# Create Python venv and install Flask/OpenPLC dependencies
+# (venv is not shipped in the package because it embeds absolute build-time paths)
+python3 -m venv /opt/openplc/.venv
+/opt/openplc/.venv/bin/pip install --quiet \
+    flask==2.3.3 werkzeug==2.3.7 flask-login==0.6.2 pyserial pymodbus==2.5.3
+
+systemctl daemon-reload
+
+systemctl enable --now grfics-plc-init.service
+systemctl enable --now grfics-plc.service

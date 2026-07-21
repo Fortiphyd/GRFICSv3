@@ -1,0 +1,12 @@
+[Unit]
+Description=GRFICSv3 Caldera network initialization
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/grfics/caldera-init.sh
+
+[Install]
+WantedBy=multi-user.target

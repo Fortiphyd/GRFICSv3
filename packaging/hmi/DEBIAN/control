@@ -1,0 +1,7 @@
+Package: grfics-hmi
+Version: 1.3
+Architecture: amd64
+Maintainer: Fortiphyd Logic <info@fortiphyd.com>
+Description: GRFICSv3 OT lab HMI (ScadaLTS on Tomcat + MariaDB)
+Depends: openjdk-11-jre-headless, mariadb-server, libjaxb-java,
+ libactivation-java, iproute2, curl, procps, unzip

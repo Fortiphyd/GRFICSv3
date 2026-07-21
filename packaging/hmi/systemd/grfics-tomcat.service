@@ -1,0 +1,13 @@
+[Unit]
+Description=GRFICSv3 HMI Tomcat (ScadaLTS)
+After=grfics-hmi-init.service
+Requires=grfics-hmi-init.service
+
+[Service]
+Environment=CATALINA_HOME=/usr/local/tomcat
+Environment=JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+ExecStart=/usr/local/tomcat/bin/catalina.sh run
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

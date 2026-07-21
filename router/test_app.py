@@ -184,6 +184,203 @@ class TestApplyRulesNow:
         restore_calls = [c for c in sub_calls if "iptables-restore" in c]
         assert len(restore_calls) == 1
 
+    def test_nat_prerouting_flushed_alongside_forward(self):
+        """Applying rules must reset the nat PREROUTING chain, not just filter/FORWARD."""
+        sub_calls = []
+        with patch("builtins.open", mock_open()), \
+             patch("subprocess.run", side_effect=lambda cmd, **kw: sub_calls.append(cmd) or MagicMock(returncode=0)), \
+             patch("os.makedirs"):
+            flask_app._apply_rules_now([], [])
+        assert ["iptables", "-t", "nat", "-F", "PREROUTING"] in sub_calls
+
+
+# ---------------------------------------------------------------------------
+# build_nat_rules / build_iptables_rules(nat_rules=...) — port forwarding
+# ---------------------------------------------------------------------------
+
+NAT_RULE = {
+    "iface_in": "eth2", "proto": "tcp", "src": "0.0.0.0/0", "dst": "",
+    "ext_port": "8080", "target_ip": "192.168.95.5", "target_port": "80",
+    "auto_fw_rule": True, "enabled": True, "comment": "",
+}
+
+
+class TestBuildNatRules:
+    def test_starts_with_nat_table_and_prerouting_chain(self):
+        result = flask_app.build_nat_rules([])
+        assert result.startswith("*nat")
+        assert ":PREROUTING ACCEPT [0:0]" in result
+
+    def test_ends_with_commit(self):
+        result = flask_app.build_nat_rules([])
+        assert result.strip().endswith("COMMIT")
+
+    def test_postrouting_chain_not_mentioned(self):
+        """POSTROUTING is owned by network-init.py/WireGuard masquerade — must stay untouched."""
+        result = flask_app.build_nat_rules([NAT_RULE])
+        assert "POSTROUTING" not in result
+
+    def test_dnat_line_for_basic_forward(self):
+        result = flask_app.build_nat_rules([NAT_RULE])
+        assert "-A PREROUTING -i eth2 -p tcp --dport 8080 -j DNAT --to-destination 192.168.95.5:80" in result
+
+    def test_disabled_rule_omitted(self):
+        rule = {**NAT_RULE, "enabled": False}
+        result = flask_app.build_nat_rules([rule])
+        assert "DNAT" not in result
+
+    def test_src_restriction_included_when_set(self):
+        rule = {**NAT_RULE, "src": "192.168.90.6/32"}
+        result = flask_app.build_nat_rules([rule])
+        assert "-s 192.168.90.6/32" in result
+
+    def test_any_src_omits_s_flag(self):
+        result = flask_app.build_nat_rules([NAT_RULE])
+        line = next(l for l in result.splitlines() if "DNAT" in l)
+        assert "-s " not in line
+
+    def test_dst_restriction_included_when_set(self):
+        rule = {**NAT_RULE, "dst": "192.168.90.200"}
+        result = flask_app.build_nat_rules([rule])
+        assert "-d 192.168.90.200" in result
+
+    def test_blank_dst_omits_d_flag(self):
+        result = flask_app.build_nat_rules([NAT_RULE])
+        line = next(l for l in result.splitlines() if "DNAT" in l)
+        assert "-d " not in line
+
+
+class TestAssociatedFilterRule:
+    def test_auto_fw_rule_adds_forward_accept(self):
+        result = flask_app.build_iptables_rules([], [NAT_RULE])
+        assert "-A FORWARD -i eth2 -p tcp -d 192.168.95.5 --dport 80 -j ACCEPT" in result
+
+    def test_auto_fw_rule_false_adds_nothing(self):
+        rule = {**NAT_RULE, "auto_fw_rule": False}
+        result = flask_app.build_iptables_rules([], [rule])
+        assert "192.168.95.5" not in result
+
+    def test_disabled_nat_rule_adds_nothing(self):
+        rule = {**NAT_RULE, "enabled": False}
+        result = flask_app.build_iptables_rules([], [rule])
+        assert "192.168.95.5" not in result
+
+    def test_associated_rule_precedes_catchall_logdrop(self):
+        result = flask_app.build_iptables_rules([], [NAT_RULE])
+        assert result.index("192.168.95.5") < result.index("-A FORWARD -j LOGDROP")
+
+    def test_no_nat_rules_leaves_filter_output_unchanged(self):
+        assert flask_app.build_iptables_rules([]) == flask_app.build_iptables_rules([], [])
+        assert flask_app.build_iptables_rules([]) == flask_app.build_iptables_rules([], None)
+
+
+# ---------------------------------------------------------------------------
+# parse_iptables_rules / revert — must reconstruct only user rules from the
+# live FORWARD chain, not the framework-managed lines build_iptables_rules
+# regenerates itself (regression test for the Revert bug).
+# ---------------------------------------------------------------------------
+
+class TestParseIptablesRules:
+    def _parse(self, forward_lines):
+        out = "\n".join(forward_lines) + "\n"
+        with patch("subprocess.check_output", return_value=out) as mock_co:
+            result = flask_app.parse_iptables_rules()
+        args = mock_co.call_args[0][0]
+        assert args == ["iptables", "-S", "FORWARD"], "must scope the query to FORWARD only"
+        return result
+
+    def test_framework_lines_excluded(self):
+        result = self._parse([
+            "-A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT",
+            "-A FORWARD -m conntrack --ctstate INVALID -j DROP",
+            f"-A FORWARD -s {flask_app.ICS_SUBNET} -j ACCEPT",
+            "-A FORWARD -j LOGDROP",
+        ])
+        assert result == []
+
+    def test_framework_lines_excluded_with_kernel_ctstate_reordering(self):
+        """Regression test: `iptables -S` echoes back --ctstate values in its
+        own canonical order (observed live: RELATED,ESTABLISHED), not the
+        ESTABLISHED,RELATED order build_iptables_rules() wrote — a plain
+        string comparison missed this and reconstructed the stateful
+        ESTABLISHED,RELATED accept rule as a phantom 'allow any' user rule."""
+        result = self._parse([
+            "-A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT",
+            "-A FORWARD -m conntrack --ctstate INVALID -j DROP",
+            f"-A FORWARD -s {flask_app.ICS_SUBNET} -j ACCEPT",
+            "-A FORWARD -j LOGDROP",
+        ])
+        assert result == []
+
+    def test_user_accept_rule_recovered(self):
+        result = self._parse(["-A FORWARD -p tcp -s 192.168.90.0/24 -d 192.168.95.2 --dport 502 -j ACCEPT"])
+        assert len(result) == 1
+        r = result[0]
+        assert r["src"] == "192.168.90.0/24"
+        assert r["dst"] == "192.168.95.2"
+        assert r["proto"] == "tcp"
+        assert r["dport"] == "502"
+        assert r["action"] == "ACCEPT"
+
+    def test_user_drop_rule_action_unprefixed_from_logdrop(self):
+        """A user DROP rule renders as `-j LOGDROP` (see build_iptables_rules) —
+        must be read back as action DROP, not the literal chain name LOGDROP."""
+        result = self._parse(["-A FORWARD -p tcp -s 1.2.3.4 -d 5.6.7.8 --dport 80 -j LOGDROP"])
+        assert len(result) == 1
+        assert result[0]["action"] == "DROP"
+
+    def test_user_reject_rule_action_unprefixed_from_logreject(self):
+        result = self._parse(["-A FORWARD -p tcp -s 1.2.3.4 -d 5.6.7.8 --dport 80 -j LOGREJECT"])
+        assert result[0]["action"] == "REJECT"
+
+    def test_bare_catchall_logdrop_not_confused_with_user_drop_rule(self):
+        """Only the exact bare catch-all line is excluded; a matched-and-dropped
+        user rule (which also targets LOGDROP) must still come back."""
+        result = self._parse([
+            "-A FORWARD -p tcp -s 1.2.3.4 -d 5.6.7.8 --dport 80 -j LOGDROP",
+            "-A FORWARD -j LOGDROP",
+        ])
+        assert len(result) == 1
+        assert result[0]["src"] == "1.2.3.4"
+
+    def test_nat_associated_accept_excluded(self):
+        with patch.object(flask_app, "nat_rules", [NAT_RULE]):
+            result = self._parse([flask_app._nat_associated_forward_line(NAT_RULE)])
+        assert result == []
+
+    def test_missing_src_dst_default_to_any_address_not_literal_any(self):
+        """Must match the schema build_iptables_rules expects (0.0.0.0/0), not
+        the string 'any' — 'any' is not a valid iptables address."""
+        result = self._parse(["-A FORWARD -j ACCEPT"])
+        assert result[0]["src"] == "0.0.0.0/0"
+        assert result[0]["dst"] == "0.0.0.0/0"
+
+    def test_missing_proto_defaults_to_all_not_literal_any(self):
+        """build_iptables_rules only omits -p when proto == 'all'; 'any' would
+        wrongly re-emit '-p any' on the next Apply."""
+        result = self._parse(["-A FORWARD -s 10.0.0.1 -d 10.0.0.2 -j ACCEPT"])
+        assert result[0]["proto"] == "all"
+
+
+class TestRevertChanges:
+    def test_revert_updates_module_global_pending_rules(self):
+        """Regression test: revert_changes() previously reassigned a local
+        `pending_rules` instead of the module global (missing `global`
+        declaration), so Revert silently did nothing but clear the dirty flag."""
+        client = flask_app.app.test_client()
+        with client.session_transaction() as sess:
+            sess["logged_in"] = True
+            sess["role"] = "admin"
+        live_forward = "-A FORWARD -p tcp -s 1.2.3.4 -d 5.6.7.8 --dport 80 -j ACCEPT\n"
+        with patch("subprocess.check_output", return_value=live_forward), \
+             patch.object(flask_app, "save_config"):
+            client.post("/revert")
+        assert flask_app.pending_rules == [{
+            "index": 1, "chain": "FORWARD", "iface_in": "", "iface_out": "",
+            "src": "1.2.3.4", "dst": "5.6.7.8", "proto": "tcp", "dport": "80",
+            "action": "ACCEPT", "comment": "",
+        }]
+
 
 # ---------------------------------------------------------------------------
 # DEFAULT_RULES — misconfiguration scenario
@@ -546,7 +743,10 @@ class TestApplyDnsConfig:
             str(a[0]) for call in block_call[1].write.call_args_list
             for a in [call[0]]
         )
-        assert "address=/evil.com/#" in written_content
+        # No trailing "#": that variant makes dnsmasq return 0.0.0.0 (ping still
+        # "succeeds" via loopback); the bare form returns NXDOMAIN instead.
+        assert "address=/evil.com/" in written_content
+        assert "address=/evil.com/#" not in written_content
 
     def test_dnsmasq_restarted(self):
         config = {"hosts": [], "blocked": []}
@@ -564,6 +764,7 @@ class TestDomainSanitisation:
         self.client = flask_app.app.test_client()
         with self.client.session_transaction() as sess:
             sess['logged_in'] = True
+            sess['role'] = 'admin'
 
     def test_wildcard_prefix_stripped(self):
         saved = {}

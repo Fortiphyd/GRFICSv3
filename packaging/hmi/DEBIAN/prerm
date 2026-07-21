@@ -1,0 +1,8 @@
+#!/bin/bash
+set -e
+
+systemctl stop grfics-tomcat.service 2>/dev/null || true
+systemctl stop grfics-hmi-init.service 2>/dev/null || true
+
+systemctl disable grfics-tomcat.service 2>/dev/null || true
+systemctl disable grfics-hmi-init.service 2>/dev/null || true

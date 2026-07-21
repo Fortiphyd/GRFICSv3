@@ -1,0 +1,19 @@
+#!/bin/bash
+set -e
+
+# Copy JAXB and activation JARs into Tomcat lib (required by ScadaLTS on Java 11)
+cp /usr/share/java/jaxb-*.jar /usr/local/tomcat/lib/ 2>/dev/null || true
+cp /usr/share/java/*activation*.jar /usr/local/tomcat/lib/ 2>/dev/null || true
+
+# Ensure runtime directories exist with correct ownership
+mkdir -p /var/lib/mysql /run/mysqld /var/log/mysql /usr/local/tomcat/logs
+chown -R mysql:mysql /var/lib/mysql /run/mysqld /var/log/mysql
+
+# Create directory for seed data
+mkdir -p /opt/grfics/hmi
+
+systemctl daemon-reload
+
+systemctl enable --now mariadb
+systemctl enable --now grfics-hmi-init.service
+systemctl enable --now grfics-tomcat.service

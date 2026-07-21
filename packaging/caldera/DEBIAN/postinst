@@ -1,0 +1,91 @@
+#!/bin/bash
+set -e
+
+CALDERA_DIR=/usr/src/caldera
+ASSETS=/opt/grfics/caldera
+
+# --- Node.js LTS (required to build the magma Vue.js UI) ---
+if ! command -v node &>/dev/null || [ "$(node --version | sed 's/v//' | cut -d. -f1)" -lt 18 ]; then
+    curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
+    apt-get install -y nodejs
+fi
+
+# --- Go 1.21 (Ubuntu 22.04 ships 1.18; Caldera requires >=1.19 for sandcat) ---
+if ! /usr/local/go/bin/go version 2>/dev/null | grep -qE 'go1\.(19|2[0-9])'; then
+    GO_VERSION=1.21.13
+    echo "Installing Go ${GO_VERSION}..."
+    curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" \
+        | tar -xz -C /usr/local
+fi
+export PATH="/usr/local/go/bin:$PATH"
+
+# --- Clone Caldera with all submodules ---
+if [ ! -d "$CALDERA_DIR" ]; then
+    git clone --recursive https://github.com/mitre/caldera.git "$CALDERA_DIR"
+fi
+
+# --- caldera-ot modbus plugin ---
+if [ ! -d "$CALDERA_DIR/plugins/modbus" ]; then
+    git clone --recursive https://github.com/mitre/caldera-ot.git /tmp/caldera-ot
+    mv /tmp/caldera-ot/modbus "$CALDERA_DIR/plugins/modbus"
+    rm -rf /tmp/caldera-ot
+fi
+
+# --- Apply GRFICS overlays ---
+cp "$ASSETS/conf/local.yml" "$CALDERA_DIR/conf/local.yml"
+
+cp "$ASSETS/adversaries/ff2effd0-6938-4705-801c-8e4dcbfbf452.yml" \
+   "$CALDERA_DIR/data/adversaries/"
+
+mkdir -p "$CALDERA_DIR/plugins/modbus/data/abilities/discovery"
+cp "$ASSETS/abilities/9360ba0d-46a3-47a1-bbe6-e6c875790500.yml" \
+   "$CALDERA_DIR/plugins/modbus/data/abilities/discovery/"
+
+mkdir -p "$CALDERA_DIR/plugins/modbus/data/sources"
+cp "$ASSETS/sources/0033b644-a615-4eff-bcf3-178e9b17adc3.yml" \
+   "$CALDERA_DIR/plugins/modbus/data/sources/"
+
+cp "$ASSETS/modbus/spec.py"       "$CALDERA_DIR/plugins/modbus/src/modbus/actions/spec.py"
+cp "$ASSETS/modbus/modbus_cli.py" "$CALDERA_DIR/plugins/modbus/src/modbus_cli.py"
+cp "$ASSETS/modbus/modbus_cli"    "$CALDERA_DIR/plugins/modbus/payloads/modbus_cli"
+cp "$ASSETS/modbus/modbus_cli.spec" "$CALDERA_DIR/plugins/modbus/src/modbus_cli.spec"
+chmod +x "$CALDERA_DIR/plugins/modbus/payloads/modbus_cli"
+
+# --- Python dependencies ---
+pip3 install --break-system-packages --no-cache-dir \
+    -r "$CALDERA_DIR/requirements.txt"
+pip3 install --break-system-packages --no-cache-dir \
+    -r "$CALDERA_DIR/plugins/emu/requirements.txt"
+
+# --- atomic-red-team (enables offline atomic plugin) ---
+if [ ! -d "$CALDERA_DIR/plugins/atomic/data/atomic-red-team" ]; then
+    git clone --depth 1 https://github.com/redcanaryco/atomic-red-team.git \
+        "$CALDERA_DIR/plugins/atomic/data/atomic-red-team"
+fi
+
+# --- adversary emulation plans (emu plugin) ---
+if [ ! -d "$CALDERA_DIR/plugins/emu/data/adversary-emulation-plans" ]; then
+    git clone --depth 1 \
+        https://github.com/center-for-threat-informed-defense/adversary_emulation_library \
+        "$CALDERA_DIR/plugins/emu/data/adversary-emulation-plans"
+fi
+
+# --- emu payloads ---
+chmod +x "$CALDERA_DIR/plugins/emu/download_payloads.sh"
+(cd "$CALDERA_DIR/plugins/emu" && ./download_payloads.sh)
+
+# --- magma Vue.js UI ---
+(cd "$CALDERA_DIR/plugins/magma" && npm install && npm run build)
+
+# --- sandcat agents (Go cross-compilation for Linux/Windows/macOS) ---
+# Fix potential CRLF line endings from Windows clones
+tr -d '\15\32' < "$CALDERA_DIR/plugins/sandcat/update-agents.sh" \
+    > /tmp/update-agents.sh
+mv /tmp/update-agents.sh "$CALDERA_DIR/plugins/sandcat/update-agents.sh"
+chmod +x "$CALDERA_DIR/plugins/sandcat/update-agents.sh"
+(cd "$CALDERA_DIR/plugins/sandcat/gocat" && go mod tidy && go mod download)
+(cd "$CALDERA_DIR/plugins/sandcat" && ./update-agents.sh)
+
+systemctl daemon-reload
+systemctl enable --now grfics-caldera-init.service
+systemctl enable --now grfics-caldera.service

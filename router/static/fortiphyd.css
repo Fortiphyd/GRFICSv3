@@ -32,6 +32,23 @@
   font-size: 0.8rem;
 }
 
+.navbar .dropdown-menu {
+  background-color: var(--fl-dark);
+  border-color: var(--fl-gold);
+}
+
+.navbar .dropdown-item {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.875rem;
+}
+
+.navbar .dropdown-item:hover,
+.navbar .dropdown-item:focus,
+.navbar .dropdown-item.active {
+  background-color: transparent;
+  color: var(--fl-gold);
+}
+
 /* ── Primary buttons → gold ───────────────────────── */
 .btn-primary {
   background-color: var(--fl-gold);

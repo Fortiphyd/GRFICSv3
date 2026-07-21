@@ -1,0 +1,112 @@
+#!/bin/bash
+set -e
+
+# --- Firefox (Mozilla PPA — provides current Firefox as a deb, not snap) ---
+if ! dpkg -l firefox 2>/dev/null | grep -q '^ii'; then
+    add-apt-repository -y ppa:mozillateam/ppa 2>/dev/null || true
+    cat > /etc/apt/preferences.d/mozilla-firefox <<'EOF'
+Package: *
+Pin: release o=LP-PPA-mozillateam
+Pin-Priority: 1001
+EOF
+    apt-get update -qq
+    apt-get install -y firefox
+fi
+
+# --- Wazuh agent ---
+if ! dpkg -l wazuh-agent 2>/dev/null | grep -q '^ii'; then
+    curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH \
+        | gpg --no-default-keyring \
+              --keyring gnupg-ring:/usr/share/keyrings/wazuh.gpg --import
+    chmod 644 /usr/share/keyrings/wazuh.gpg
+    echo "deb [signed-by=/usr/share/keyrings/wazuh.gpg] \
+https://packages.wazuh.com/4.x/apt/ stable main" \
+        > /etc/apt/sources.list.d/wazuh.list
+    apt-get update -qq
+    WAZUH_MANAGER=192.168.90.20 WAZUH_AGENT_NAME=EWS apt-get install -y wazuh-agent
+fi
+
+# --- gnome-icon-theme (optional, absent from some Ubuntu 22.04 mirrors) ---
+apt-get install -y gnome-icon-theme 2>/dev/null || true
+
+# --- engineer user ---
+if ! id engineer &>/dev/null; then
+    useradd -m -s /bin/bash engineer
+    echo "engineer:zxcvbnm" | chpasswd
+    usermod -aG sudo engineer
+fi
+
+# --- noVNC ---
+if [ ! -d /opt/noVNC ]; then
+    git clone --depth=1 https://github.com/novnc/noVNC.git /opt/noVNC
+    git clone --depth=1 https://github.com/novnc/websockify \
+        /opt/noVNC/utils/websockify
+    chmod -R a+rx /opt/noVNC
+fi
+
+cp /opt/grfics/ews/novnc-assets/index.html /opt/noVNC/index.html
+cp /opt/grfics/ews/novnc-assets/shield.svg  /opt/noVNC/shield.svg
+sed -i '/<link rel="icon"/d' /opt/noVNC/vnc.html
+sed -i 's|<title>[^<]*</title>|<title>Defender Workstation</title>|' \
+    /opt/noVNC/vnc.html
+sed -i 's|</head>|<link rel="icon" type="image/svg+xml" href="shield.svg"></head>|' \
+    /opt/noVNC/vnc.html
+
+# --- OpenPLC Editor ---
+if [ ! -d /opt/OpenPLC_Editor ]; then
+    git clone https://github.com/thiagoralves/OpenPLC_Editor.git /opt/OpenPLC_Editor
+    # Fetch prebuilt wxPython wheel rather than compiling from source
+    sed -i 's#-m pip install wxPython==4.2.0#-m pip install wxPython==4.2.0 --find-links https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-22.04/ --only-binary wxPython#g' \
+        /opt/OpenPLC_Editor/install.sh
+    cd /opt/OpenPLC_Editor && ./install.sh
+    chown -R engineer:engineer /opt/OpenPLC_Editor
+fi
+
+# --- Desktop files ---
+DESKTOP=/home/engineer/Desktop
+mkdir -p "$DESKTOP"
+
+cp    /opt/grfics/ews/desktop/chemical.st "$DESKTOP/"
+cp -r /opt/grfics/ews/desktop/chemical    "$DESKTOP/"
+
+cat > "$DESKTOP/OpenPLC.desktop" <<'EOF'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=OpenPLC Editor
+Comment=OpenPLC Ladder Logic Editor
+Exec=/bin/bash -lc '/opt/OpenPLC_Editor/openplc_editor.sh'
+Icon=utilities-terminal
+Terminal=false
+Categories=Development;
+EOF
+chmod +x "$DESKTOP/OpenPLC.desktop"
+
+# --- Firefox profile with pre-configured bookmarks ---
+FF_PROFILE=/home/engineer/.mozilla/firefox/grfics.default-release
+mkdir -p "$FF_PROFILE"
+cp /opt/grfics/ews/firefox/places.sqlite "$FF_PROFILE/places.sqlite"
+mkdir -p /home/engineer/.mozilla/firefox
+cat > /home/engineer/.mozilla/firefox/profiles.ini <<'EOF'
+[Install]
+Default=grfics.default-release
+Locked=1
+
+[Profile0]
+Name=default-release
+IsRelative=1
+Path=grfics.default-release
+Default=1
+EOF
+
+# --- VNC password ---
+mkdir -p /home/engineer/.vnc
+if [ ! -f /home/engineer/.vnc/passwd ]; then
+    echo "changeme" | x11vnc -storepasswd - /home/engineer/.vnc/passwd
+fi
+
+chown -R engineer:engineer /home/engineer
+
+systemctl daemon-reload
+systemctl enable --now grfics-ews-init.service
+systemctl enable --now grfics-ews.service

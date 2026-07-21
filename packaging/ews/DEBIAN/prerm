@@ -1,0 +1,8 @@
+#!/bin/bash
+set -e
+
+systemctl stop grfics-ews.service 2>/dev/null || true
+systemctl stop grfics-ews-init.service 2>/dev/null || true
+
+systemctl disable grfics-ews.service 2>/dev/null || true
+systemctl disable grfics-ews-init.service 2>/dev/null || true

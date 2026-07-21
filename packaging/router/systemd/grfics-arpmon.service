@@ -1,0 +1,12 @@
+[Unit]
+Description=GRFICSv3 ARP monitor
+After=grfics-router-init.service
+
+[Service]
+ExecStart=python3 /opt/fwui/arpmon.py
+Restart=on-failure
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

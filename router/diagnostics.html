@@ -49,7 +49,7 @@
             <label class="form-label">Interface</label>
             <select name="iface" class="form-select form-select-sm">
               {% for k, v in interfaces.items() %}
-              <option value="{{ k }}"{% if k == "eth2" %} selected{% endif %}>{{ v }} ({{ k }})</option>
+              <option value="{{ k }}"{% if v == "DMZ" %} selected{% endif %}>{{ v }} ({{ k }})</option>
               {% endfor %}
             </select>
           </div>

@@ -1,0 +1,8 @@
+#!/bin/bash
+set -e
+
+systemctl stop grfics-plc.service 2>/dev/null || true
+systemctl stop grfics-plc-init.service 2>/dev/null || true
+
+systemctl disable grfics-plc.service 2>/dev/null || true
+systemctl disable grfics-plc-init.service 2>/dev/null || true

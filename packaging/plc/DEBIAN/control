@@ -1,0 +1,7 @@
+Package: grfics-plc
+Version: 1.3
+Architecture: amd64
+Maintainer: Fortiphyd Logic <info@fortiphyd.com>
+Description: GRFICSv3 OT lab PLC (OpenPLC Runtime v3)
+Depends: python3, python3-venv, sqlite3, iproute2, procps,
+ net-tools, g++
