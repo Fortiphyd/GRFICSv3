@@ -343,59 +343,76 @@ void MAIN1_init__(MAIN1 *data__, BOOL retain) {
   __INIT_LOCATED_VALUE(data__->TEST_INT,0)
   __INIT_LOCATED(BOOL,__QX5_0,data__->RUN_BIT,retain)
   __INIT_LOCATED_VALUE(data__->RUN_BIT,__BOOL_LITERAL(TRUE))
+  __INIT_LOCATED(BOOL,__QX0_0,data__->MANUAL_MODE,retain)
+  __INIT_LOCATED_VALUE(data__->MANUAL_MODE,__BOOL_LITERAL(FALSE))
+  __INIT_LOCATED(UINT,__QW10,data__->F1_MANUAL_SP,retain)
+  __INIT_LOCATED_VALUE(data__->F1_MANUAL_SP,0)
+  __INIT_LOCATED(UINT,__QW11,data__->F2_MANUAL_SP,retain)
+  __INIT_LOCATED_VALUE(data__->F2_MANUAL_SP,0)
+  __INIT_LOCATED(UINT,__QW12,data__->PURGE_MANUAL_SP,retain)
+  __INIT_LOCATED_VALUE(data__->PURGE_MANUAL_SP,65535)
+  __INIT_LOCATED(UINT,__QW13,data__->PRODUCT_MANUAL_SP,retain)
+  __INIT_LOCATED_VALUE(data__->PRODUCT_MANUAL_SP,65535)
 }
 
 // Code part
 void MAIN1_body__(MAIN1 *data__) {
   // Initialise TEMP variables
 
-  __SET_LOCATED(data__->,F1_VALVE_SP,,CONTROL(
-    (BOOL)__BOOL_LITERAL(TRUE),
-    NULL,
-    NULL,
-    (REAL)500.0,
-    (REAL)0.0,
-    (REAL)20.0,
-    (UINT)__GET_LOCATED(data__->PRODUCT_FLOW,),
-    (UINT)__GET_LOCATED(data__->PRODUCT_FLOW_SETPOINT,),
-    (UINT)__GET_LOCATED(data__->F1_VALVE_POS,)));
-  __SET_LOCATED(data__->,PURGE_VALVE_SP,,CONTROL(
-    (BOOL)__BOOL_LITERAL(TRUE),
-    NULL,
-    NULL,
-    (REAL)3200.0,
-    (REAL)0.0,
-    (REAL)-20.0,
-    (UINT)__GET_LOCATED(data__->PRESSURE,),
-    (UINT)__GET_LOCATED(data__->PRESSURE_SP,),
-    (UINT)__GET_LOCATED(data__->PURGE_VALVE_POS,)));
-  __SET_LOCATED(data__->,F2_VALVE_SP,,CONTROL(
-    (BOOL)__BOOL_LITERAL(TRUE),
-    NULL,
-    NULL,
-    (REAL)100.0,
-    (REAL)0.0,
-    (REAL)1.0,
-    (UINT)__GET_LOCATED(data__->A_IN_PURGE,),
-    (UINT)__GET_LOCATED(data__->A_SETPOINT,),
-    (UINT)__GET_LOCATED(data__->F2_VALVE_POS,)));
-  __SET_LOCATED(data__->,PRODUCT_FLOW_SETPOINT,,PRESSURE_OVERRIDE(
-    (BOOL)__BOOL_LITERAL(TRUE),
-    NULL,
-    (UINT)__GET_LOCATED(data__->PRESSURE,),
-    (UINT)__GET_LOCATED(data__->PRODUCT_FLOW_SETPOINT,),
-    NULL,
-    (UINT)__GET_LOCATED(data__->OVERRIDE_SP,)));
-  __SET_LOCATED(data__->,PRODUCT_VALVE_SP,,CONTROL(
-    (BOOL)__BOOL_LITERAL(TRUE),
-    NULL,
-    NULL,
-    (REAL)100.0,
-    (REAL)0.0,
-    (REAL)-10.0,
-    (UINT)__GET_LOCATED(data__->LEVEL,),
-    (UINT)__GET_LOCATED(data__->LEVEL_SP,),
-    (UINT)__GET_LOCATED(data__->PRODUCT_VALVE_POS,)));
+  if (__GET_LOCATED(data__->MANUAL_MODE,)) {
+    __SET_LOCATED(data__->,F1_VALVE_SP,,__GET_LOCATED(data__->F1_MANUAL_SP,));
+    __SET_LOCATED(data__->,F2_VALVE_SP,,__GET_LOCATED(data__->F2_MANUAL_SP,));
+    __SET_LOCATED(data__->,PURGE_VALVE_SP,,__GET_LOCATED(data__->PURGE_MANUAL_SP,));
+    __SET_LOCATED(data__->,PRODUCT_VALVE_SP,,__GET_LOCATED(data__->PRODUCT_MANUAL_SP,));
+  } else {
+    __SET_LOCATED(data__->,F1_VALVE_SP,,CONTROL(
+      (BOOL)__BOOL_LITERAL(TRUE),
+      NULL,
+      NULL,
+      (REAL)500.0,
+      (REAL)0.0,
+      (REAL)20.0,
+      (UINT)__GET_LOCATED(data__->PRODUCT_FLOW,),
+      (UINT)__GET_LOCATED(data__->PRODUCT_FLOW_SETPOINT,),
+      (UINT)__GET_LOCATED(data__->F1_VALVE_POS,)));
+    __SET_LOCATED(data__->,PURGE_VALVE_SP,,CONTROL(
+      (BOOL)__BOOL_LITERAL(TRUE),
+      NULL,
+      NULL,
+      (REAL)3200.0,
+      (REAL)0.0,
+      (REAL)-20.0,
+      (UINT)__GET_LOCATED(data__->PRESSURE,),
+      (UINT)__GET_LOCATED(data__->PRESSURE_SP,),
+      (UINT)__GET_LOCATED(data__->PURGE_VALVE_POS,)));
+    __SET_LOCATED(data__->,F2_VALVE_SP,,CONTROL(
+      (BOOL)__BOOL_LITERAL(TRUE),
+      NULL,
+      NULL,
+      (REAL)100.0,
+      (REAL)0.0,
+      (REAL)1.0,
+      (UINT)__GET_LOCATED(data__->A_IN_PURGE,),
+      (UINT)__GET_LOCATED(data__->A_SETPOINT,),
+      (UINT)__GET_LOCATED(data__->F2_VALVE_POS,)));
+    __SET_LOCATED(data__->,PRODUCT_FLOW_SETPOINT,,PRESSURE_OVERRIDE(
+      (BOOL)__BOOL_LITERAL(TRUE),
+      NULL,
+      (UINT)__GET_LOCATED(data__->PRESSURE,),
+      (UINT)__GET_LOCATED(data__->PRODUCT_FLOW_SETPOINT,),
+      NULL,
+      (UINT)__GET_LOCATED(data__->OVERRIDE_SP,)));
+    __SET_LOCATED(data__->,PRODUCT_VALVE_SP,,CONTROL(
+      (BOOL)__BOOL_LITERAL(TRUE),
+      NULL,
+      NULL,
+      (REAL)100.0,
+      (REAL)0.0,
+      (REAL)-10.0,
+      (UINT)__GET_LOCATED(data__->LEVEL,),
+      (UINT)__GET_LOCATED(data__->LEVEL_SP,),
+      (UINT)__GET_LOCATED(data__->PRODUCT_VALVE_POS,)));
+  };
   __SET_LOCATED(data__->,F1_VALVE_POS,,LIMIT__UINT__UINT__UINT__UINT(
     (BOOL)__BOOL_LITERAL(TRUE),
     NULL,

@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <project xmlns="http://www.plcopen.org/xml/tc6_0201" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xhtml="http://www.w3.org/1999/xhtml" xmlns:ns1="http://www.plcopen.org/xml/tc6_0201">
   <fileHeader companyName="Unknown" productName="Unnamed" productVersion="1" creationDateTime="2024-07-23T12:29:55"/>
-  <contentHeader name="Unnamed" modificationDateTime="2026-01-19T18:42:00">
+  <contentHeader name="Unnamed" modificationDateTime="2026-06-23T13:02:49">
     <coordinateInfo>
       <fbd>
         <scaling x="10" y="10"/>
@@ -253,49 +253,96 @@
                 <simpleValue value="TRUE"/>
               </initialValue>
             </variable>
+            <variable name="manual_mode" address="%QX0.0">
+              <type>
+                <BOOL/>
+              </type>
+              <initialValue>
+                <simpleValue value="FALSE"/>
+              </initialValue>
+            </variable>
+            <variable name="f1_manual_sp" address="%QW10">
+              <type>
+                <UINT/>
+              </type>
+              <initialValue>
+                <simpleValue value="0"/>
+              </initialValue>
+            </variable>
+            <variable name="f2_manual_sp" address="%QW11">
+              <type>
+                <UINT/>
+              </type>
+              <initialValue>
+                <simpleValue value="0"/>
+              </initialValue>
+            </variable>
+            <variable name="purge_manual_sp" address="%QW12">
+              <type>
+                <UINT/>
+              </type>
+              <initialValue>
+                <simpleValue value="65535"/>
+              </initialValue>
+            </variable>
+            <variable name="product_manual_sp" address="%QW13">
+              <type>
+                <UINT/>
+              </type>
+              <initialValue>
+                <simpleValue value="65535"/>
+              </initialValue>
+            </variable>
           </localVars>
         </interface>
         <body>
           <ST>
             <xhtml:p><![CDATA[
 
-f1_valve_sp := control(
-     current_value := product_flow,
-     setpoint := product_flow_setpoint,
-     current_pos := f1_valve_pos,
-     k := 20.0,
-     rmax := 500.0,
-     rmin := 0.0);
-     
-purge_valve_sp := control(
-     current_value := pressure,
-     setpoint := pressure_sp,
-     current_pos := purge_valve_pos,
-     k := -20.0,
-     rmax := 3200.0,
-     rmin := 0.0);
-     
-f2_valve_sp := control(
-     current_value := a_in_purge,
-     setpoint := a_setpoint,
-     current_pos := f2_valve_pos,
-     k := 1.0,
-     rmax := 100.0,
-     rmin := 0.0);
-     
-product_flow_setpoint := pressure_override(
-     pressure_in := pressure,
-     current_sp := product_flow_setpoint,
-     override_sp := override_sp);
-   
-product_valve_sp := control(
-     current_value := level,
-     setpoint := level_sp,
-     current_pos := product_valve_pos,
-     k := -10.0,
-     rmax := 100.0,
-     rmin := 0.0);  
-     
+IF manual_mode THEN
+    f1_valve_sp := f1_manual_sp;
+    f2_valve_sp := f2_manual_sp;
+    purge_valve_sp := purge_manual_sp;
+    product_valve_sp := product_manual_sp;
+  ELSE
+    f1_valve_sp := control(
+         current_value := product_flow,
+         setpoint := product_flow_setpoint,
+         current_pos := f1_valve_pos,
+         k := 20.0,
+         rmax := 500.0,
+         rmin := 0.0);
+
+    purge_valve_sp := control(
+         current_value := pressure,
+         setpoint := pressure_sp,
+         current_pos := purge_valve_pos,
+         k := -20.0,
+         rmax := 3200.0,
+         rmin := 0.0);
+
+    f2_valve_sp := control(
+         current_value := a_in_purge,
+         setpoint := a_setpoint,
+         current_pos := f2_valve_pos,
+         k := 1.0,
+         rmax := 100.0,
+         rmin := 0.0);
+
+    product_flow_setpoint := pressure_override(
+         pressure_in := pressure,
+         current_sp := product_flow_setpoint,
+         override_sp := override_sp);
+
+    product_valve_sp := control(
+         current_value := level,
+         setpoint := level_sp,
+         current_pos := product_valve_pos,
+         k := -10.0,
+         rmax := 100.0,
+         rmin := 0.0);
+  END_IF;
+
 f1_valve_pos := LIMIT(0, f1_valve_pos, 65535);
 f1_flow := LIMIT(0, f1_flow, 65535);
 f2_valve_pos := LIMIT(0, f2_valve_pos, 65535);

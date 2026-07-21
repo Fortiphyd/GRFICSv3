@@ -11,7 +11,7 @@ async def handlepurge(context, reader, writer, interval):
 
         try:
             valve_pos = int(data["state"]["purge_valve_pos"] / 100.0 * 65535)
-            flow = int(data["outputs"]["purge_flow"] / 500.0 * 65535)
+            flow = int(data["outputs"]["purge_flow"] / 2000.0 * 65535)
 
             # Clamp to valid range
             valve_pos = modbusdevice.clamp_value(valve_pos)

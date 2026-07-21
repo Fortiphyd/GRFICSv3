@@ -87,6 +87,7 @@ jobs:
         with:
           lfs: true
           fetch-tags: true
+          fetch-depth: 0
 
       - uses: docker/setup-buildx-action@v3
 

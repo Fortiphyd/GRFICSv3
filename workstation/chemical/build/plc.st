@@ -178,47 +178,59 @@ PROGRAM main1
   VAR
     test_int AT %MW30 : UINT;
     run_bit AT %QX5.0 : BOOL := TRUE;
+    manual_mode AT %QX0.0 : BOOL := FALSE;
+    f1_manual_sp AT %QW10 : UINT := 0;
+    f2_manual_sp AT %QW11 : UINT := 0;
+    purge_manual_sp AT %QW12 : UINT := 65535;
+    product_manual_sp AT %QW13 : UINT := 65535;
   END_VAR
 
 
 
-  f1_valve_sp := control(
-       current_value := product_flow,
-       setpoint := product_flow_setpoint,
-       current_pos := f1_valve_pos,
-       k := 20.0,
-       rmax := 500.0,
-       rmin := 0.0);
-       
-  purge_valve_sp := control(
-       current_value := pressure,
-       setpoint := pressure_sp,
-       current_pos := purge_valve_pos,
-       k := -20.0,
-       rmax := 3200.0,
-       rmin := 0.0);
-       
-  f2_valve_sp := control(
-       current_value := a_in_purge,
-       setpoint := a_setpoint,
-       current_pos := f2_valve_pos,
-       k := 1.0,
-       rmax := 100.0,
-       rmin := 0.0);
-       
-  product_flow_setpoint := pressure_override(
-       pressure_in := pressure,
-       current_sp := product_flow_setpoint,
-       override_sp := override_sp);
-     
-  product_valve_sp := control(
-       current_value := level,
-       setpoint := level_sp,
-       current_pos := product_valve_pos,
-       k := -10.0,
-       rmax := 100.0,
-       rmin := 0.0);  
-       
+  IF manual_mode THEN
+      f1_valve_sp := f1_manual_sp;
+      f2_valve_sp := f2_manual_sp;
+      purge_valve_sp := purge_manual_sp;
+      product_valve_sp := product_manual_sp;
+    ELSE
+      f1_valve_sp := control(
+           current_value := product_flow,
+           setpoint := product_flow_setpoint,
+           current_pos := f1_valve_pos,
+           k := 20.0,
+           rmax := 500.0,
+           rmin := 0.0);
+
+      purge_valve_sp := control(
+           current_value := pressure,
+           setpoint := pressure_sp,
+           current_pos := purge_valve_pos,
+           k := -20.0,
+           rmax := 3200.0,
+           rmin := 0.0);
+
+      f2_valve_sp := control(
+           current_value := a_in_purge,
+           setpoint := a_setpoint,
+           current_pos := f2_valve_pos,
+           k := 1.0,
+           rmax := 100.0,
+           rmin := 0.0);
+
+      product_flow_setpoint := pressure_override(
+           pressure_in := pressure,
+           current_sp := product_flow_setpoint,
+           override_sp := override_sp);
+
+      product_valve_sp := control(
+           current_value := level,
+           setpoint := level_sp,
+           current_pos := product_valve_pos,
+           k := -10.0,
+           rmax := 100.0,
+           rmin := 0.0);
+    END_IF;
+
   f1_valve_pos := LIMIT(0, f1_valve_pos, 65535);
   f1_flow := LIMIT(0, f1_flow, 65535);
   f2_valve_pos := LIMIT(0, f2_valve_pos, 65535);

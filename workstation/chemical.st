@@ -155,47 +155,59 @@ PROGRAM main1
   VAR
     test_int AT %MW30 : UINT;
     run_bit AT %QX5.0 : BOOL := TRUE;
+    manual_mode AT %QX0.0 : BOOL := FALSE;
+    f1_manual_sp AT %QW10 : UINT := 0;
+    f2_manual_sp AT %QW11 : UINT := 0;
+    purge_manual_sp AT %QW12 : UINT := 65535;
+    product_manual_sp AT %QW13 : UINT := 65535;
   END_VAR
 
 
 
-  f1_valve_sp := control(
-       current_value := product_flow,
-       setpoint := product_flow_setpoint,
-       current_pos := f1_valve_pos,
-       k := 20.0,
-       rmax := 500.0,
-       rmin := 0.0);
-       
-  purge_valve_sp := control(
-       current_value := pressure,
-       setpoint := pressure_sp,
-       current_pos := purge_valve_pos,
-       k := -20.0,
-       rmax := 3200.0,
-       rmin := 0.0);
-       
-  f2_valve_sp := control(
-       current_value := a_in_purge,
-       setpoint := a_setpoint,
-       current_pos := f2_valve_pos,
-       k := 1.0,
-       rmax := 100.0,
-       rmin := 0.0);
-       
-  product_flow_setpoint := pressure_override(
-       pressure_in := pressure,
-       current_sp := product_flow_setpoint,
-       override_sp := override_sp);
-     
-  product_valve_sp := control(
-       current_value := level,
-       setpoint := level_sp,
-       current_pos := product_valve_pos,
-       k := -10.0,
-       rmax := 100.0,
-       rmin := 0.0);  
-       
+  IF manual_mode THEN
+      f1_valve_sp := f1_manual_sp;
+      f2_valve_sp := f2_manual_sp;
+      purge_valve_sp := purge_manual_sp;
+      product_valve_sp := product_manual_sp;
+    ELSE
+      f1_valve_sp := control(
+           current_value := product_flow,
+           setpoint := product_flow_setpoint,
+           current_pos := f1_valve_pos,
+           k := 20.0,
+           rmax := 500.0,
+           rmin := 0.0);
+
+      purge_valve_sp := control(
+           current_value := pressure,
+           setpoint := pressure_sp,
+           current_pos := purge_valve_pos,
+           k := -20.0,
+           rmax := 3200.0,
+           rmin := 0.0);
+
+      f2_valve_sp := control(
+           current_value := a_in_purge,
+           setpoint := a_setpoint,
+           current_pos := f2_valve_pos,
+           k := 1.0,
+           rmax := 100.0,
+           rmin := 0.0);
+
+      product_flow_setpoint := pressure_override(
+           pressure_in := pressure,
+           current_sp := product_flow_setpoint,
+           override_sp := override_sp);
+
+      product_valve_sp := control(
+           current_value := level,
+           setpoint := level_sp,
+           current_pos := product_valve_pos,
+           k := -10.0,
+           rmax := 100.0,
+           rmin := 0.0);
+    END_IF;
+
   f1_valve_pos := LIMIT(0, f1_valve_pos, 65535);
   f1_flow := LIMIT(0, f1_flow, 65535);
   f2_valve_pos := LIMIT(0, f2_valve_pos, 65535);
@@ -215,10 +227,10 @@ PROGRAM main1
   product_flow_setpoint := 30000;
 
   IF NOT run_bit THEN
-    f1_valve_sp := 0;
-    f2_valve_sp := 0;
-    purge_valve_sp := 65535;
-    product_valve_sp := 65535;
+     f1_valve_sp := 0;
+     f2_valve_sp := 0;
+     purge_valve_sp := 65535;
+     product_valve_sp := 65535;
   END_IF;
 END_PROGRAM
 
@@ -275,7 +287,7 @@ CONFIGURATION Config0
   END_RESOURCE
 END_CONFIGURATION
 
-(*DBG:char md5[] = "f0cccecd508a69d2b1e2a1d22a4054a7";*)
+(*DBG:char md5[] = "64ab1b4f1044a1e90e17da24eec6da5f";*)
 (*DBG:/**)
 (*DBG: * This file is part of OpenPLC Runtime*)
 (*DBG: **)
@@ -353,9 +365,14 @@ END_CONFIGURATION
 (*DBG:    {&(RES0__INSTANCE0.TEST_REAL), REAL_ENUM},*)
 (*DBG:    {&(RES0__INSTANCE0.TEST_INT), UINT_O_ENUM},*)
 (*DBG:    {&(RES0__INSTANCE0.RUN_BIT), BOOL_O_ENUM},*)
+(*DBG:    {&(RES0__INSTANCE0.MANUAL_MODE), BOOL_O_ENUM},*)
+(*DBG:    {&(RES0__INSTANCE0.F1_MANUAL_SP), UINT_O_ENUM},*)
+(*DBG:    {&(RES0__INSTANCE0.F2_MANUAL_SP), UINT_O_ENUM},*)
+(*DBG:    {&(RES0__INSTANCE0.PURGE_MANUAL_SP), UINT_O_ENUM},*)
+(*DBG:    {&(RES0__INSTANCE0.PRODUCT_MANUAL_SP), UINT_O_ENUM},*)
 (*DBG:};*)
 (*DBG:*)
-(*DBG:#define VAR_COUNT               39*)
+(*DBG:#define VAR_COUNT               44*)
 (*DBG:*)
 (*DBG:uint16_t get_var_count(void)*)
 (*DBG:{*)
@@ -369,16 +386,16 @@ END_CONFIGURATION
 (*DBG:        return 0;*)
 (*DBG:    }*)
 (*DBG:    switch (debug_vars[idx].type) {*)
-(*DBG:    case REAL_ENUM:*)
-(*DBG:        return sizeof(REAL);*)
-(*DBG:    case INT_O_ENUM:*)
-(*DBG:        return sizeof(INT);*)
 (*DBG:    case UINT_ENUM:*)
 (*DBG:    case UINT_O_ENUM:*)
 (*DBG:    case UINT_P_ENUM:*)
 (*DBG:        return sizeof(UINT);*)
 (*DBG:    case BOOL_O_ENUM:*)
 (*DBG:        return sizeof(BOOL);*)
+(*DBG:    case REAL_ENUM:*)
+(*DBG:        return sizeof(REAL);*)
+(*DBG:    case INT_O_ENUM:*)
+(*DBG:        return sizeof(INT);*)
 (*DBG:    default:*)
 (*DBG:        return 0;*)
 (*DBG:    }*)
@@ -389,12 +406,6 @@ END_CONFIGURATION
 (*DBG:    void *ptr = debug_vars[idx].ptr;*)
 (*DBG:*)
 (*DBG:    switch (debug_vars[idx].type) {*)
-(*DBG:    case REAL_ENUM:*)
-(*DBG:        return (void *)&((__IEC_REAL_t *) ptr)->value;*)
-(*DBG:    case INT_O_ENUM:*)
-(*DBG:        return (void *)((((__IEC_INT_p *) ptr)->flags & __IEC_FORCE_FLAG) *)
-(*DBG:                        ? &(((__IEC_INT_p *) ptr)->fvalue) *)
-(*DBG:                        : ((__IEC_INT_p *) ptr)->value);*)
 (*DBG:    case UINT_ENUM:*)
 (*DBG:        return (void *)&((__IEC_UINT_t *) ptr)->value;*)
 (*DBG:    case UINT_O_ENUM:*)
@@ -406,6 +417,12 @@ END_CONFIGURATION
 (*DBG:        return (void *)((((__IEC_BOOL_p *) ptr)->flags & __IEC_FORCE_FLAG) *)
 (*DBG:                        ? &(((__IEC_BOOL_p *) ptr)->fvalue) *)
 (*DBG:                        : ((__IEC_BOOL_p *) ptr)->value);*)
+(*DBG:    case REAL_ENUM:*)
+(*DBG:        return (void *)&((__IEC_REAL_t *) ptr)->value;*)
+(*DBG:    case INT_O_ENUM:*)
+(*DBG:        return (void *)((((__IEC_INT_p *) ptr)->flags & __IEC_FORCE_FLAG) *)
+(*DBG:                        ? &(((__IEC_INT_p *) ptr)->fvalue) *)
+(*DBG:                        : ((__IEC_INT_p *) ptr)->value);*)
 (*DBG:    default:*)
 (*DBG:        return 0;*)
 (*DBG:    }*)
@@ -418,18 +435,6 @@ END_CONFIGURATION
 (*DBG:    if (forced) {*)
 (*DBG:        size_t var_size = get_var_size(idx);*)
 (*DBG:        switch (debug_vars[idx].type) {*)
-(*DBG:        case REAL_ENUM: {*)
-(*DBG:            memcpy(&((__IEC_REAL_t *) ptr)->value, val, var_size);*)
-(*DBG:            //((__IEC_REAL_t *) ptr)->value = *((REAL *) val);*)
-(*DBG:            ((__IEC_REAL_t *) ptr)->flags |= __IEC_FORCE_FLAG;*)
-(*DBG:            break;*)
-(*DBG:        }*)
-(*DBG:        case INT_O_ENUM: {*)
-(*DBG:            memcpy((((__IEC_INT_p *) ptr)->value), val, var_size);*)
-(*DBG:            //*(((__IEC_INT_p *) ptr)->value) = *((INT *) val);*)
-(*DBG:            ((__IEC_INT_p *) ptr)->flags |= __IEC_FORCE_FLAG;*)
-(*DBG:            break;*)
-(*DBG:        }*)
 (*DBG:        case UINT_ENUM: {*)
 (*DBG:            memcpy(&((__IEC_UINT_t *) ptr)->value, val, var_size);*)
 (*DBG:            //((__IEC_UINT_t *) ptr)->value = *((UINT *) val);*)
@@ -454,17 +459,23 @@ END_CONFIGURATION
 (*DBG:            ((__IEC_BOOL_p *) ptr)->flags |= __IEC_FORCE_FLAG;*)
 (*DBG:            break;*)
 (*DBG:        }*)
+(*DBG:        case REAL_ENUM: {*)
+(*DBG:            memcpy(&((__IEC_REAL_t *) ptr)->value, val, var_size);*)
+(*DBG:            //((__IEC_REAL_t *) ptr)->value = *((REAL *) val);*)
+(*DBG:            ((__IEC_REAL_t *) ptr)->flags |= __IEC_FORCE_FLAG;*)
+(*DBG:            break;*)
+(*DBG:        }*)
+(*DBG:        case INT_O_ENUM: {*)
+(*DBG:            memcpy((((__IEC_INT_p *) ptr)->value), val, var_size);*)
+(*DBG:            //*(((__IEC_INT_p *) ptr)->value) = *((INT *) val);*)
+(*DBG:            ((__IEC_INT_p *) ptr)->flags |= __IEC_FORCE_FLAG;*)
+(*DBG:            break;*)
+(*DBG:        }*)
 (*DBG:        default:*)
 (*DBG:            break;*)
 (*DBG:        }*)
 (*DBG:    } else {*)
 (*DBG:        switch (debug_vars[idx].type) {*)
-(*DBG:        case REAL_ENUM:*)
-(*DBG:            ((__IEC_REAL_t *) ptr)->flags &= ~__IEC_FORCE_FLAG;*)
-(*DBG:            break;*)
-(*DBG:        case INT_O_ENUM:*)
-(*DBG:            ((__IEC_INT_p *) ptr)->flags &= ~__IEC_FORCE_FLAG;*)
-(*DBG:            break;*)
 (*DBG:        case UINT_ENUM:*)
 (*DBG:            ((__IEC_UINT_t *) ptr)->flags &= ~__IEC_FORCE_FLAG;*)
 (*DBG:            break;*)
@@ -474,6 +485,12 @@ END_CONFIGURATION
 (*DBG:            break;*)
 (*DBG:        case BOOL_O_ENUM:*)
 (*DBG:            ((__IEC_BOOL_p *) ptr)->flags &= ~__IEC_FORCE_FLAG;*)
+(*DBG:            break;*)
+(*DBG:        case REAL_ENUM:*)
+(*DBG:            ((__IEC_REAL_t *) ptr)->flags &= ~__IEC_FORCE_FLAG;*)
+(*DBG:            break;*)
+(*DBG:        case INT_O_ENUM:*)
+(*DBG:            ((__IEC_INT_p *) ptr)->flags &= ~__IEC_FORCE_FLAG;*)
 (*DBG:            break;*)
 (*DBG:        default:*)
 (*DBG:            break;*)

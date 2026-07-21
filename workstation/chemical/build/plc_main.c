@@ -166,6 +166,16 @@ IEC_UINT var32;
 IEC_UINT *__MW30 = &var32;
 IEC_BOOL var33;
 IEC_BOOL *__QX5_0 = &var33;
+IEC_BOOL var34;
+IEC_BOOL *__QX0_0 = &var34;
+IEC_UINT var35;
+IEC_UINT *__QW10 = &var35;
+IEC_UINT var36;
+IEC_UINT *__QW11 = &var36;
+IEC_UINT var37;
+IEC_UINT *__QW12 = &var37;
+IEC_UINT var38;
+IEC_UINT *__QW13 = &var38;
 /**
  * Linux specific code
  **/
