@@ -105,17 +105,9 @@ def _has_learned_gateway(iface):
     return "proto dhcp" in out
 
 
-def assign_gateways(zones):
+def assign_gateways(zones, skip=frozenset()):
     for label, network, iface, _monitor in zones:
         if not iface:
-            continue
-        if _has_learned_gateway(iface):
-            # Something else already answers as this subnet's gateway (a
-            # real upstream device we learned about via DHCP) — claiming
-            # the same address ourselves would conflict with it instead of
-            # complementing it, which is what happened on an Azure-hosted
-            # LXC install: the router grabbed the same address as Azure's
-            # own gateway on that subnet.
             continue
         # network.hosts() returns a generator normally but a plain list for
         # /31 and /32 — list(...)[0] works for both instead of next(...),
@@ -125,6 +117,29 @@ def assign_gateways(zones):
             print(f"network-init: {label} subnet {network} has no usable host address", file=sys.stderr)
             continue
         gateway = hosts[0]
+        if label in skip:
+            # Admin opted this zone out of the gateway role via
+            # config["gateway_skip"]: the router keeps only its own
+            # interface address and must not also claim the subnet's
+            # first-host (.1) gateway. Used on installs (e.g. an LXC) that
+            # must not act as the subnet's default gateway. Actively delete
+            # the alias — not just refrain from adding it — so toggling this
+            # off in the web UI (which re-runs us) takes effect live instead
+            # of only on the next reboot. This removes only the .1 gateway
+            # alias; the interface's own configured address is untouched.
+            subprocess.run(
+                ["ip", "addr", "del", f"{gateway}/{network.prefixlen}", "dev", iface],
+                check=False, stderr=subprocess.DEVNULL,
+            )
+            continue
+        if _has_learned_gateway(iface):
+            # Something else already answers as this subnet's gateway (a
+            # real upstream device we learned about via DHCP) — claiming
+            # the same address ourselves would conflict with it instead of
+            # complementing it, which is what happened on an Azure-hosted
+            # LXC install: the router grabbed the same address as Azure's
+            # own gateway on that subnet.
+            continue
         subprocess.run(
             ["ip", "addr", "add", f"{gateway}/{network.prefixlen}", "dev", iface],
             check=False, stderr=subprocess.DEVNULL,
@@ -163,7 +178,7 @@ def main():
     ifaces = detect_ifaces()
     zones = collect_zones(config, ifaces)
 
-    assign_gateways(zones)
+    assign_gateways(zones, skip=set(config.get("gateway_skip", [])))
     rebuild_nat(zones)
     write_ids_ifaces(zones)
 

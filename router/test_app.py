@@ -7,6 +7,8 @@ Run with:  pytest router/test_app.py -v
 import os
 import sys
 import json
+import ipaddress
+import importlib.util
 from io import StringIO
 from unittest.mock import MagicMock, mock_open, patch
 
@@ -775,3 +777,49 @@ class TestDomainSanitisation:
              patch.object(flask_app, 'apply_dns_config'):
             self.client.post('/dns/add_block', data={'domain': '*.evil.com', 'comment': ''})
         assert saved.get("blocked", [{}])[0].get("domain") == "evil.com"
+
+
+# ---------------------------------------------------------------------------
+# network-init.py assign_gateways — gateway_skip behavior
+# ---------------------------------------------------------------------------
+
+def _load_network_init():
+    path = os.path.join(os.path.dirname(__file__), "usr", "lib", "grfics", "network-init.py")
+    spec = importlib.util.spec_from_file_location("network_init", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class TestAssignGateways:
+    DMZ = ipaddress.ip_network("192.168.90.0/24")
+
+    def _zone(self):
+        return [("DMZ", self.DMZ, "eth1", True)]
+
+    def test_assigns_first_host_when_not_skipped(self):
+        ni = _load_network_init()
+        with patch.object(ni.subprocess, "run") as run, \
+             patch.object(ni, "_has_learned_gateway", return_value=False):
+            ni.assign_gateways(self._zone(), skip=set())
+        cmds = [c.args[0] for c in run.call_args_list]
+        assert ["ip", "addr", "add", "192.168.90.1/24", "dev", "eth1"] in cmds
+        assert not any(c[:3] == ["ip", "addr", "del"] for c in cmds)
+
+    def test_removes_first_host_when_skipped(self):
+        ni = _load_network_init()
+        with patch.object(ni.subprocess, "run") as run, \
+             patch.object(ni, "_has_learned_gateway", return_value=False):
+            ni.assign_gateways(self._zone(), skip={"DMZ"})
+        cmds = [c.args[0] for c in run.call_args_list]
+        assert ["ip", "addr", "del", "192.168.90.1/24", "dev", "eth1"] in cmds
+        assert not any(c[:3] == ["ip", "addr", "add"] for c in cmds)
+
+    def test_skip_leaves_interface_own_address_untouched(self):
+        """Only the .1 alias is deleted — never the interface's own .200."""
+        ni = _load_network_init()
+        with patch.object(ni.subprocess, "run") as run, \
+             patch.object(ni, "_has_learned_gateway", return_value=False):
+            ni.assign_gateways(self._zone(), skip={"DMZ"})
+        cmds = [c.args[0] for c in run.call_args_list]
+        assert not any("192.168.90.200" in " ".join(c) for c in cmds)

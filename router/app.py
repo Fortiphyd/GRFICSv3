@@ -20,6 +20,12 @@ ids_monitor = DEFAULT_IDS_MONITOR.copy()
 # used to do this automatically). {"LAN": "eth1", "DMZ": "eth2"}
 zone_iface_overrides = {}
 
+# Zone labels the router must NOT act as the gateway for: network-init.py
+# skips assigning (and removes) the subnet's first-host (.1) address for
+# these. Used where the router should hold only its own interface address —
+# e.g. an LXC that must not also claim the subnet's default gateway. ["DMZ"]
+gateway_skip = []
+
 # Needed by _detect_interface_labels() below (via load_wg_config(), which
 # may run its old-schema migration) before the full constants block further
 # down the file is defined.
@@ -453,7 +459,7 @@ DEFAULT_RULES = [
 ]
 
 def load_config():
-    global pending_rules, nat_rules, dirty, users, zones, ids_monitor, zone_iface_overrides, INTERFACE_LABELS
+    global pending_rules, nat_rules, dirty, users, zones, ids_monitor, zone_iface_overrides, gateway_skip, INTERFACE_LABELS
     if os.path.exists(CONFIG_PATH):
         with open(CONFIG_PATH) as f:
             data = json.load(f)
@@ -462,6 +468,7 @@ def load_config():
             zones = data.get("zones", [])
             ids_monitor = {**DEFAULT_IDS_MONITOR, **data.get("ids_monitor", {})}
             zone_iface_overrides = data.get("zone_iface_overrides", {})
+            gateway_skip = data.get("gateway_skip", [])
             if "users" in data:
                 users = data["users"]
             elif "auth" in data:
@@ -477,6 +484,7 @@ def load_config():
         zones = []
         ids_monitor = DEFAULT_IDS_MONITOR.copy()
         zone_iface_overrides = {}
+        gateway_skip = []
         save_config()
     dirty = False
     INTERFACE_LABELS = _detect_interface_labels()
@@ -484,7 +492,8 @@ def load_config():
 
 def save_config():
     data = {"rules": pending_rules, "nat_rules": nat_rules, "users": users, "zones": zones,
-            "ids_monitor": ids_monitor, "zone_iface_overrides": zone_iface_overrides}
+            "ids_monitor": ids_monitor, "zone_iface_overrides": zone_iface_overrides,
+            "gateway_skip": gateway_skip}
     with open(CONFIG_PATH, "w") as f:
         json.dump(data, f, indent=2)
 
@@ -1846,6 +1855,7 @@ def export_config():
             "zones": zones,
             "ids_monitor": ids_monitor,
             "zone_iface_overrides": zone_iface_overrides,
+            "gateway_skip": gateway_skip,
         },
         "users": users,
         "dns": load_dns_config(),
@@ -1873,7 +1883,7 @@ def import_config():
     re-validate subnets for overlap -- the bundle is assumed to already be
     an internally-consistent config that was exported from a working router.
     """
-    global pending_rules, nat_rules, zones, ids_monitor, zone_iface_overrides, users, dirty
+    global pending_rules, nat_rules, zones, ids_monitor, zone_iface_overrides, gateway_skip, users, dirty
 
     upload = request.files.get("config_file")
     if not upload or not upload.filename:
@@ -1905,6 +1915,7 @@ def import_config():
     zones = firewall.get("zones", [])
     ids_monitor = {**DEFAULT_IDS_MONITOR, **firewall.get("ids_monitor", {})}
     zone_iface_overrides = firewall.get("zone_iface_overrides", {})
+    gateway_skip = firewall.get("gateway_skip", [])
     users = imported_users
     save_config()
     dirty = False
@@ -1952,6 +1963,7 @@ def interfaces():
     return render_template("interfaces.html", active_page="interfaces",
                            current_role=session.get("role"),
                            zones=zones, ids_monitor=ids_monitor,
+                           gateway_skip=gateway_skip,
                            interface_labels=INTERFACE_LABELS,
                            available_ifaces=_list_unconfigured_ifaces())
 
@@ -2104,6 +2116,32 @@ def set_ids_monitor():
             pass
     save_config()
     _apply_network()
+    return redirect(url_for("interfaces"))
+
+
+@app.route("/settings/zones/gateway", methods=["POST"])
+@login_required
+@admin_required
+def set_zone_gateway():
+    """Toggle whether the router acts as this zone's gateway (holds the
+    subnet's .1). The checkbox is 'act as gateway'; unchecking adds the
+    zone's label to gateway_skip so network-init.py drops the .1 alias."""
+    key = request.form.get("key", "")
+    act_as_gateway = request.form.get("gateway") == "on"
+    if key in ("LAN", "DMZ"):
+        label = key
+    else:
+        try:
+            label = zones[int(key)].get("label")
+        except (ValueError, IndexError):
+            label = None
+    if label:
+        if act_as_gateway:
+            gateway_skip[:] = [l for l in gateway_skip if l != label]
+        elif label not in gateway_skip:
+            gateway_skip.append(label)
+        save_config()
+        _apply_network()
     return redirect(url_for("interfaces"))
 
 

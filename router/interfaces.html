@@ -11,7 +11,7 @@
   <div class="card-body p-0">
     <table class="table table-sm table-striped mb-0 align-middle">
       <thead>
-        <tr><th>Zone</th><th>Interface</th><th>Subnet</th><th>IDS Monitor</th><th></th></tr>
+        <tr><th>Zone</th><th>Interface</th><th>Subnet</th><th>IDS Monitor</th><th title="Router holds the subnet's .1 and acts as default gateway for this zone">Gateway</th><th></th></tr>
       </thead>
       <tbody>
         <tr>
@@ -38,6 +38,12 @@
             <form method="post" action="{{ url_for('set_ids_monitor') }}">
               <input type="hidden" name="key" value="LAN">
               <input type="checkbox" name="ids_monitor" onchange="this.form.submit()" {% if ids_monitor.get('LAN') %}checked{% endif %}>
+            </form>
+          </td>
+          <td>
+            <form method="post" action="{{ url_for('set_zone_gateway') }}">
+              <input type="hidden" name="key" value="LAN">
+              <input type="checkbox" name="gateway" onchange="this.form.submit()" {% if 'LAN' not in gateway_skip %}checked{% endif %}>
             </form>
           </td>
           <td></td>
@@ -68,6 +74,12 @@
               <input type="checkbox" name="ids_monitor" onchange="this.form.submit()" {% if ids_monitor.get('DMZ') %}checked{% endif %}>
             </form>
           </td>
+          <td>
+            <form method="post" action="{{ url_for('set_zone_gateway') }}">
+              <input type="hidden" name="key" value="DMZ">
+              <input type="checkbox" name="gateway" onchange="this.form.submit()" {% if 'DMZ' not in gateway_skip %}checked{% endif %}>
+            </form>
+          </td>
           <td></td>
         </tr>
         {% for z in zones %}
@@ -79,6 +91,12 @@
             <form method="post" action="{{ url_for('set_ids_monitor') }}">
               <input type="hidden" name="key" value="{{ loop.index0 }}">
               <input type="checkbox" name="ids_monitor" onchange="this.form.submit()" {% if z.ids_monitor %}checked{% endif %}>
+            </form>
+          </td>
+          <td>
+            <form method="post" action="{{ url_for('set_zone_gateway') }}">
+              <input type="hidden" name="key" value="{{ loop.index0 }}">
+              <input type="checkbox" name="gateway" onchange="this.form.submit()" {% if z.label not in gateway_skip %}checked{% endif %}>
             </form>
           </td>
           <td class="text-end">
