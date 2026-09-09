@@ -323,6 +323,16 @@
         grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
         gap: 16px;
         max-width: 1300px;
+        margin-bottom: 24px;
+      }
+
+      .fault-section-title {
+        font-size: 13px;
+        font-weight: 650;
+        opacity: 0.7;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin: 0 0 12px;
       }
 
       .fault-card {
@@ -700,6 +710,28 @@ const SIM_POLL_MS = 3000;
     faultState[v.key] = { sticky: false, strokeSeconds: 20, fouled: false, cvPercent: 50, stuck: false };
   }
 
+  // sensor faults: value comes from a single boolean freeze flag each, no
+  // severity parameter. trueField/measuredField name the JSON fields to
+  // compare in the live readout; analyzer reports three fields at once.
+  const FAULT_SENSORS = [
+    { key: 'tank_pressure', label: 'Tank Pressure',  fields: [{ field: 'pressure',      unit: 'kPa',     decimals: 0 }] },
+    { key: 'tank_level',    label: 'Tank Level',      fields: [{ field: 'liquid_level', unit: '%',       decimals: 1 }] },
+    { key: 'f1_flow',       label: 'Feed 1 Flow',     fields: [{ field: 'f1_flow',      unit: 'kmol/hr', decimals: 1 }] },
+    { key: 'f2_flow',       label: 'Feed 2 Flow',     fields: [{ field: 'f2_flow',      unit: 'kmol/hr', decimals: 1 }] },
+    { key: 'purge_flow',    label: 'Purge Flow',      fields: [{ field: 'purge_flow',   unit: 'kmol/hr', decimals: 1 }] },
+    { key: 'product_flow',  label: 'Product Flow',    fields: [{ field: 'product_flow', unit: 'kmol/hr', decimals: 1 }] },
+    { key: 'analyzer',      label: 'Analyzer (A/B/C)', fields: [
+        { field: 'A_in_purge', unit: '', decimals: 3, prefix: 'A: ' },
+        { field: 'B_in_purge', unit: '', decimals: 3, prefix: 'B: ' },
+        { field: 'C_in_purge', unit: '', decimals: 3, prefix: 'C: ' },
+      ] },
+  ];
+
+  const sensorFaultState = {};
+  for (const s of FAULT_SENSORS) {
+    sensorFaultState[s.key] = { frozen: false };
+  }
+
   let faultLivePollTimer = null;
 
   function strokeSecondsToSlewRate(strokeSeconds) {
@@ -719,6 +751,9 @@ const SIM_POLL_MS = 3000;
       payload[`${v.key}_slew_rate`] = s.sticky ? strokeSecondsToSlewRate(s.strokeSeconds) : 0;
       payload[`${v.key}_cv_scale`] = s.fouled ? (s.cvPercent / 100.0) : 1.0;
       payload[`${v.key}_stuck`] = s.stuck ? 1 : 0;
+    }
+    for (const sn of FAULT_SENSORS) {
+      payload[`${sn.key}_freeze`] = sensorFaultState[sn.key].frozen ? 1 : 0;
     }
     return payload;
   }
@@ -771,6 +806,31 @@ const SIM_POLL_MS = 3000;
     container.innerHTML = html;
   }
 
+  function renderSensorFaultControls() {
+    const container = document.getElementById('sensorFaultControlsBody');
+    if (!container) return;
+    let html = '';
+    for (const s of FAULT_SENSORS) {
+      const frozen = sensorFaultState[s.key].frozen;
+      html += `<div class="fault-card">
+        <h3>${s.label}</h3>
+        <div class="fault-toggle-line">
+          <input type="checkbox" id="${s.key}_frozen_chk" ${frozen ? 'checked' : ''}
+                 onchange="onSensorFaultToggle('${s.key}', this.checked)">
+          <label class="fault-label" for="${s.key}_frozen_chk">Frozen (stuck reading)</label>
+          <span style="opacity:0.4;font-size:11px;">reports last value forever</span>
+        </div>
+        <div class="fault-live" id="${s.key}_live">true: -- / measured: --</div>
+      </div>`;
+    }
+    container.innerHTML = html;
+  }
+
+  function onSensorFaultToggle(key, checked) {
+    sensorFaultState[key].frozen = checked;
+    pushFaultState();
+  }
+
   function onFaultToggle(key, faultType, checked) {
     faultState[key][faultType] = checked;
     // sticky (slow) and stuck (frozen) are mutually exclusive actuator faults
@@ -794,7 +854,11 @@ const SIM_POLL_MS = 3000;
       faultState[v.key].fouled = false;
       faultState[v.key].stuck = false;
     }
+    for (const s of FAULT_SENSORS) {
+      sensorFaultState[s.key].frozen = false;
+    }
     renderFaultControls();
+    renderSensorFaultControls();
     await pushFaultState();
   }
 
@@ -804,6 +868,8 @@ const SIM_POLL_MS = 3000;
       if (!res.ok) return;
       const data = await res.json();
       const st = data.state || {};
+      const trueOutputs = data.outputs || {};
+      const measured = data.measured || {};
       for (const v of FAULT_VALVES) {
         const el = document.getElementById(`${v.key}_live`);
         if (!el) continue;
@@ -811,6 +877,18 @@ const SIM_POLL_MS = 3000;
         if (typeof pos === 'number') {
           el.textContent = `position: ${pos.toFixed(1)}%`;
         }
+      }
+      for (const s of FAULT_SENSORS) {
+        const el = document.getElementById(`${s.key}_live`);
+        if (!el) continue;
+        const parts = s.fields.map(f => {
+          const t = trueOutputs[f.field];
+          const m = measured[f.field];
+          const prefix = f.prefix || '';
+          if (typeof t !== 'number' || typeof m !== 'number') return `${prefix}--`;
+          return `${prefix}true ${t.toFixed(f.decimals)}${f.unit} / measured ${m.toFixed(f.decimals)}${f.unit}`;
+        });
+        el.textContent = parts.join('  ·  ');
       }
     } catch { /* ignore transient errors */ }
   }
@@ -832,9 +910,14 @@ const SIM_POLL_MS = 3000;
           s.fouled = typeof scale === 'number' && scale < 1.0;
           if (s.fouled) s.cvPercent = Math.round(scale * 100);
         }
+        for (const sn of FAULT_SENSORS) {
+          const frozen = st[`${sn.key}_freeze`];
+          sensorFaultState[sn.key].frozen = frozen === true || frozen === 1;
+        }
       }
     } catch { /* fall back to last-known UI state */ }
     renderFaultControls();
+    renderSensorFaultControls();
     if (faultLivePollTimer) clearInterval(faultLivePollTimer);
     faultLivePollTimer = setInterval(pollFaultLiveState, 1000);
     pollFaultLiveState();
@@ -1019,10 +1102,15 @@ const SIM_POLL_MS = 3000;
 
         <div class="page-content">
           <p class="fault-intro">
-            Inject physical valve faults into the process. Faults act on the physical actuator itself,
-            so the PLC/HMI will show them as unexplained process behavior rather than a reported fault.
+            Inject physical faults into the process. Faults act on the physical actuator or sensor
+            itself, so the PLC/HMI will show them as unexplained process behavior (or a suspiciously
+            steady reading) rather than a reported fault.
           </p>
+          <h2 class="fault-section-title">Valves</h2>
           <div id="faultControlsBody" class="fault-grid"></div>
+
+          <h2 class="fault-section-title">Sensors</h2>
+          <div id="sensorFaultControlsBody" class="fault-grid"></div>
         </div>
       </main>
     </div>
