@@ -59,18 +59,33 @@ class TE {
         bool f2_stuck;
         bool purge_stuck;
         bool product_stuck;
-        //sensor freeze faults: when set, the corresponding measured_* value
-        //below stops tracking its true output and holds its last value,
-        //mirroring a real transmitter whose signal loop stops updating (e.g. a
-        //plugged impulse line) while the process keeps moving. The true
-        //outputs are never touched by these flags - only the measured_* copy.
-        bool tank_pressure_freeze;
-        bool tank_level_freeze;
-        bool f1_flow_freeze;
-        bool f2_flow_freeze;
-        bool purge_flow_freeze;
-        bool product_flow_freeze;
-        bool analyzer_freeze;
+        //sensor faults: each sensor has one active fault mode at a time
+        //(see SENSOR_FAULT_* constants in TE_process.cc) plus a severity
+        //value whose meaning depends on the mode (drift rate, noise
+        //amplitude, or dropout duty cycle - unused for none/frozen). All
+        //fault logic lives here; the true outputs are never touched, only
+        //the corresponding measured_* copy below.
+        int tank_pressure_fault_mode;
+        double tank_pressure_fault_severity;
+        double tank_pressure_bias;          //accumulated drift offset
+        int tank_level_fault_mode;
+        double tank_level_fault_severity;
+        double tank_level_bias;
+        int f1_flow_fault_mode;
+        double f1_flow_fault_severity;
+        double f1_flow_bias;
+        int f2_flow_fault_mode;
+        double f2_flow_fault_severity;
+        double f2_flow_bias;
+        int purge_flow_fault_mode;
+        double purge_flow_fault_severity;
+        double purge_flow_bias;
+        int product_flow_fault_mode;
+        double product_flow_fault_severity;
+        double product_flow_bias;
+        int analyzer_fault_mode;
+        double analyzer_fault_severity;
+        double analyzer_bias;
         //measured (possibly faulted) sensor values - this is what Modbus
         //devices report; they have no fault logic of their own and simply
         //relay these values as-is

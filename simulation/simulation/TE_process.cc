@@ -1,5 +1,15 @@
 #include "TE_process.h"
 #include <iostream>
+#include <cstdlib>
+
+// sensor fault modes: one active mode per sensor at a time, plus a single
+// severity value whose meaning depends on the mode (see apply_sensor_fault)
+static const int SENSOR_FAULT_NONE = 0;
+static const int SENSOR_FAULT_FROZEN = 1;
+static const int SENSOR_FAULT_DRIFT = 2;
+static const int SENSOR_FAULT_NOISE = 3;
+static const int SENSOR_FAULT_DROPOUT = 4;
+
 double tauvlv = 2.77e-3;
 double VT = 122.0e0;
 double VLmax=30.0e0;
@@ -23,9 +33,62 @@ double slew_limit(double pos, double sp, double rate, double dt) {
     }
     return pos + delta;
 }
+
+// uniform random value in [-amplitude, +amplitude]; amplitude<=0 means no noise
+double uniform_noise(double amplitude) {
+    if (amplitude <= 0.0) {
+        return 0.0;
+    }
+    double r = (double(rand()) / RAND_MAX) * 2.0 - 1.0;
+    return r * amplitude;
+}
+
+// deterministic duty-cycle dropout: within each fixed period, the sensor
+// reports a dropout (loss-of-signal) reading for the first `duty` fraction of
+// the period, then a healthy reading for the rest. duty<=0 means no dropout.
+bool in_dropout_phase(double now_seconds, double duty) {
+    if (duty <= 0.0) {
+        return false;
+    }
+    const double period = 10.0; // seconds
+    double phase = fmod(now_seconds, period) / period;
+    return phase < duty;
+}
+
+// applies one sensor's fault mode: tracks true_value into *measured unless a
+// fault mode says otherwise, and maintains *bias (drift's accumulated
+// offset) across ticks. A NAMUR NE43-style "fails low to 0" convention is
+// used for dropout, matching a real transmitter with a broken/open loop.
+void apply_sensor_fault(double true_value, double *measured, double *bias,
+                         int mode, double severity, double dt, double now_seconds) {
+    switch (mode) {
+        case SENSOR_FAULT_FROZEN:
+            // hold *measured at whatever it last was; nothing to do
+            *bias = 0.0;
+            break;
+        case SENSOR_FAULT_DRIFT:
+            *bias += severity * dt;
+            *measured = true_value + *bias;
+            break;
+        case SENSOR_FAULT_NOISE:
+            *bias = 0.0;
+            *measured = true_value + uniform_noise(severity);
+            break;
+        case SENSOR_FAULT_DROPOUT:
+            *bias = 0.0;
+            *measured = in_dropout_phase(now_seconds, severity) ? 0.0 : true_value;
+            break;
+        default: // SENSOR_FAULT_NONE
+            *bias = 0.0;
+            *measured = true_value;
+            break;
+    }
+}
+
 TE::TE() {
     gettimeofday(&current, NULL);
     last_update = current;
+    srand((unsigned int)time(NULL));
     e_stop = 0;
     f1_slew_rate = 0.0;
     f2_slew_rate = 0.0;
@@ -39,13 +102,27 @@ TE::TE() {
     f2_stuck = false;
     purge_stuck = false;
     product_stuck = false;
-    tank_pressure_freeze = false;
-    tank_level_freeze = false;
-    f1_flow_freeze = false;
-    f2_flow_freeze = false;
-    purge_flow_freeze = false;
-    product_flow_freeze = false;
-    analyzer_freeze = false;
+    tank_pressure_fault_mode = SENSOR_FAULT_NONE;
+    tank_pressure_fault_severity = 0.0;
+    tank_pressure_bias = 0.0;
+    tank_level_fault_mode = SENSOR_FAULT_NONE;
+    tank_level_fault_severity = 0.0;
+    tank_level_bias = 0.0;
+    f1_flow_fault_mode = SENSOR_FAULT_NONE;
+    f1_flow_fault_severity = 0.0;
+    f1_flow_bias = 0.0;
+    f2_flow_fault_mode = SENSOR_FAULT_NONE;
+    f2_flow_fault_severity = 0.0;
+    f2_flow_bias = 0.0;
+    purge_flow_fault_mode = SENSOR_FAULT_NONE;
+    purge_flow_fault_severity = 0.0;
+    purge_flow_bias = 0.0;
+    product_flow_fault_mode = SENSOR_FAULT_NONE;
+    product_flow_fault_severity = 0.0;
+    product_flow_bias = 0.0;
+    analyzer_fault_mode = SENSOR_FAULT_NONE;
+    analyzer_fault_severity = 0.0;
+    analyzer_bias = 0.0;
     measured_pressure = 0.0;
     measured_liquid_level = 0.0;
     measured_f1_flow = 0.0;
@@ -221,26 +298,47 @@ void TE::update(Json::Value inputs) {
     if (inputs["inputs"].isMember("product_stuck")) {
         product_stuck = inputs["inputs"]["product_stuck"].asInt() ? true : false;
     }
-    if (inputs["inputs"].isMember("tank_pressure_freeze")) {
-        tank_pressure_freeze = inputs["inputs"]["tank_pressure_freeze"].asInt() ? true : false;
+    if (inputs["inputs"].isMember("tank_pressure_fault_mode")) {
+        tank_pressure_fault_mode = inputs["inputs"]["tank_pressure_fault_mode"].asInt();
     }
-    if (inputs["inputs"].isMember("tank_level_freeze")) {
-        tank_level_freeze = inputs["inputs"]["tank_level_freeze"].asInt() ? true : false;
+    if (inputs["inputs"].isMember("tank_pressure_fault_severity")) {
+        tank_pressure_fault_severity = inputs["inputs"]["tank_pressure_fault_severity"].asDouble();
     }
-    if (inputs["inputs"].isMember("f1_flow_freeze")) {
-        f1_flow_freeze = inputs["inputs"]["f1_flow_freeze"].asInt() ? true : false;
+    if (inputs["inputs"].isMember("tank_level_fault_mode")) {
+        tank_level_fault_mode = inputs["inputs"]["tank_level_fault_mode"].asInt();
     }
-    if (inputs["inputs"].isMember("f2_flow_freeze")) {
-        f2_flow_freeze = inputs["inputs"]["f2_flow_freeze"].asInt() ? true : false;
+    if (inputs["inputs"].isMember("tank_level_fault_severity")) {
+        tank_level_fault_severity = inputs["inputs"]["tank_level_fault_severity"].asDouble();
     }
-    if (inputs["inputs"].isMember("purge_flow_freeze")) {
-        purge_flow_freeze = inputs["inputs"]["purge_flow_freeze"].asInt() ? true : false;
+    if (inputs["inputs"].isMember("f1_flow_fault_mode")) {
+        f1_flow_fault_mode = inputs["inputs"]["f1_flow_fault_mode"].asInt();
     }
-    if (inputs["inputs"].isMember("product_flow_freeze")) {
-        product_flow_freeze = inputs["inputs"]["product_flow_freeze"].asInt() ? true : false;
+    if (inputs["inputs"].isMember("f1_flow_fault_severity")) {
+        f1_flow_fault_severity = inputs["inputs"]["f1_flow_fault_severity"].asDouble();
     }
-    if (inputs["inputs"].isMember("analyzer_freeze")) {
-        analyzer_freeze = inputs["inputs"]["analyzer_freeze"].asInt() ? true : false;
+    if (inputs["inputs"].isMember("f2_flow_fault_mode")) {
+        f2_flow_fault_mode = inputs["inputs"]["f2_flow_fault_mode"].asInt();
+    }
+    if (inputs["inputs"].isMember("f2_flow_fault_severity")) {
+        f2_flow_fault_severity = inputs["inputs"]["f2_flow_fault_severity"].asDouble();
+    }
+    if (inputs["inputs"].isMember("purge_flow_fault_mode")) {
+        purge_flow_fault_mode = inputs["inputs"]["purge_flow_fault_mode"].asInt();
+    }
+    if (inputs["inputs"].isMember("purge_flow_fault_severity")) {
+        purge_flow_fault_severity = inputs["inputs"]["purge_flow_fault_severity"].asDouble();
+    }
+    if (inputs["inputs"].isMember("product_flow_fault_mode")) {
+        product_flow_fault_mode = inputs["inputs"]["product_flow_fault_mode"].asInt();
+    }
+    if (inputs["inputs"].isMember("product_flow_fault_severity")) {
+        product_flow_fault_severity = inputs["inputs"]["product_flow_fault_severity"].asDouble();
+    }
+    if (inputs["inputs"].isMember("analyzer_fault_mode")) {
+        analyzer_fault_mode = inputs["inputs"]["analyzer_fault_mode"].asInt();
+    }
+    if (inputs["inputs"].isMember("analyzer_fault_severity")) {
+        analyzer_fault_severity = inputs["inputs"]["analyzer_fault_severity"].asDouble();
     }
 
     last_update = current;
@@ -355,37 +453,78 @@ void TE::update(Json::Value inputs) {
     purge_cv_scale = std::max(std::min(purge_cv_scale, 1.0), 0.0);
     product_cv_scale = std::max(std::min(product_cv_scale, 1.0), 0.0);
 
+    // sensor fault mode must be one of the 5 known modes; severity must be
+    // non-negative (its unit/meaning depends on the mode - see apply_sensor_fault)
+    tank_pressure_fault_mode = std::max(std::min(tank_pressure_fault_mode, 4), 0);
+    tank_level_fault_mode = std::max(std::min(tank_level_fault_mode, 4), 0);
+    f1_flow_fault_mode = std::max(std::min(f1_flow_fault_mode, 4), 0);
+    f2_flow_fault_mode = std::max(std::min(f2_flow_fault_mode, 4), 0);
+    purge_flow_fault_mode = std::max(std::min(purge_flow_fault_mode, 4), 0);
+    product_flow_fault_mode = std::max(std::min(product_flow_fault_mode, 4), 0);
+    analyzer_fault_mode = std::max(std::min(analyzer_fault_mode, 4), 0);
+    tank_pressure_fault_severity = std::max(tank_pressure_fault_severity, 0.0);
+    tank_level_fault_severity = std::max(tank_level_fault_severity, 0.0);
+    f1_flow_fault_severity = std::max(f1_flow_fault_severity, 0.0);
+    f2_flow_fault_severity = std::max(f2_flow_fault_severity, 0.0);
+    purge_flow_fault_severity = std::max(purge_flow_fault_severity, 0.0);
+    product_flow_fault_severity = std::max(product_flow_fault_severity, 0.0);
+    analyzer_fault_severity = std::max(analyzer_fault_severity, 0.0);
+
     molar_A = std::max(molar_A, 0.0);
     molar_B = std::max(molar_B, 0.0);
     molar_C = std::max(molar_C, 0.0);
     molar_D = std::max(molar_D, 0.0);
 
-    // measured (possibly faulted) sensor values: track the true output each
-    // tick unless a freeze fault holds this one at its last-tracked value.
+    // measured (possibly faulted) sensor values: each tick, apply this
+    // sensor's active fault mode (or just track the true value if healthy).
     // Modbus devices read only these measured_* fields, never the true
     // outputs above, so they stay unaware of whether a fault is active.
-    if (!tank_pressure_freeze) {
-        measured_pressure = pressure;
-    }
-    if (!tank_level_freeze) {
-        measured_liquid_level = liquid_level;
-    }
-    if (!f1_flow_freeze) {
-        measured_f1_flow = f1_flow;
-    }
-    if (!f2_flow_freeze) {
-        measured_f2_flow = f2_flow;
-    }
-    if (!purge_flow_freeze) {
-        measured_purge_flow = purge_flow;
-    }
-    if (!product_flow_freeze) {
-        measured_product_flow = product_flow;
-    }
-    if (!analyzer_freeze) {
-        measured_A_in_purge = A_in_purge;
-        measured_B_in_purge = B_in_purge;
-        measured_C_in_purge = C_in_purge;
+    double now_seconds = current.tv_sec + current.tv_usec / 1e6;
+    apply_sensor_fault(pressure, &measured_pressure, &tank_pressure_bias,
+                        tank_pressure_fault_mode, tank_pressure_fault_severity, dt, now_seconds);
+    apply_sensor_fault(liquid_level, &measured_liquid_level, &tank_level_bias,
+                        tank_level_fault_mode, tank_level_fault_severity, dt, now_seconds);
+    apply_sensor_fault(f1_flow, &measured_f1_flow, &f1_flow_bias,
+                        f1_flow_fault_mode, f1_flow_fault_severity, dt, now_seconds);
+    apply_sensor_fault(f2_flow, &measured_f2_flow, &f2_flow_bias,
+                        f2_flow_fault_mode, f2_flow_fault_severity, dt, now_seconds);
+    apply_sensor_fault(purge_flow, &measured_purge_flow, &purge_flow_bias,
+                        purge_flow_fault_mode, purge_flow_fault_severity, dt, now_seconds);
+    apply_sensor_fault(product_flow, &measured_product_flow, &product_flow_bias,
+                        product_flow_fault_mode, product_flow_fault_severity, dt, now_seconds);
+    // analyzer is a single instrument: a real GC samples A/B/C together, so
+    // they share one mode and one drift bias/dropout phase, not three
+    // independent ones
+    switch (analyzer_fault_mode) {
+        case SENSOR_FAULT_FROZEN:
+            analyzer_bias = 0.0;
+            break;
+        case SENSOR_FAULT_DRIFT:
+            analyzer_bias += analyzer_fault_severity * dt;
+            measured_A_in_purge = A_in_purge + analyzer_bias;
+            measured_B_in_purge = B_in_purge + analyzer_bias;
+            measured_C_in_purge = C_in_purge + analyzer_bias;
+            break;
+        case SENSOR_FAULT_NOISE:
+            analyzer_bias = 0.0;
+            measured_A_in_purge = A_in_purge + uniform_noise(analyzer_fault_severity);
+            measured_B_in_purge = B_in_purge + uniform_noise(analyzer_fault_severity);
+            measured_C_in_purge = C_in_purge + uniform_noise(analyzer_fault_severity);
+            break;
+        case SENSOR_FAULT_DROPOUT: {
+            analyzer_bias = 0.0;
+            bool dropped = in_dropout_phase(now_seconds, analyzer_fault_severity);
+            measured_A_in_purge = dropped ? 0.0 : A_in_purge;
+            measured_B_in_purge = dropped ? 0.0 : B_in_purge;
+            measured_C_in_purge = dropped ? 0.0 : C_in_purge;
+            break;
+        }
+        default: // SENSOR_FAULT_NONE
+            analyzer_bias = 0.0;
+            measured_A_in_purge = A_in_purge;
+            measured_B_in_purge = B_in_purge;
+            measured_C_in_purge = C_in_purge;
+            break;
     }
 
     if (product_flow <= 0.0) {
@@ -454,13 +593,20 @@ Json::Value TE::get_state_json() {
     state["state"]["purge_stuck"] = purge_stuck;
     state["state"]["product_stuck"] = product_stuck;
 
-    state["state"]["tank_pressure_freeze"] = tank_pressure_freeze;
-    state["state"]["tank_level_freeze"] = tank_level_freeze;
-    state["state"]["f1_flow_freeze"] = f1_flow_freeze;
-    state["state"]["f2_flow_freeze"] = f2_flow_freeze;
-    state["state"]["purge_flow_freeze"] = purge_flow_freeze;
-    state["state"]["product_flow_freeze"] = product_flow_freeze;
-    state["state"]["analyzer_freeze"] = analyzer_freeze;
+    state["state"]["tank_pressure_fault_mode"] = tank_pressure_fault_mode;
+    state["state"]["tank_pressure_fault_severity"] = tank_pressure_fault_severity;
+    state["state"]["tank_level_fault_mode"] = tank_level_fault_mode;
+    state["state"]["tank_level_fault_severity"] = tank_level_fault_severity;
+    state["state"]["f1_flow_fault_mode"] = f1_flow_fault_mode;
+    state["state"]["f1_flow_fault_severity"] = f1_flow_fault_severity;
+    state["state"]["f2_flow_fault_mode"] = f2_flow_fault_mode;
+    state["state"]["f2_flow_fault_severity"] = f2_flow_fault_severity;
+    state["state"]["purge_flow_fault_mode"] = purge_flow_fault_mode;
+    state["state"]["purge_flow_fault_severity"] = purge_flow_fault_severity;
+    state["state"]["product_flow_fault_mode"] = product_flow_fault_mode;
+    state["state"]["product_flow_fault_severity"] = product_flow_fault_severity;
+    state["state"]["analyzer_fault_mode"] = analyzer_fault_mode;
+    state["state"]["analyzer_fault_severity"] = analyzer_fault_severity;
 
     // measured (possibly faulted) sensor values - this is what a Modbus
     // device/PLC/HMI actually sees, as opposed to the true physical values

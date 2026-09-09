@@ -6,9 +6,6 @@ $port = 55555;
 $boolean_fields = [
     'e_stop',
     'f1_stuck', 'f2_stuck', 'purge_stuck', 'product_stuck',
-    'tank_pressure_freeze', 'tank_level_freeze',
-    'f1_flow_freeze', 'f2_flow_freeze', 'purge_flow_freeze', 'product_flow_freeze',
-    'analyzer_freeze',
 ];
 
 // numeric fault/setpoint fields the simulation will accept, and their valid ranges
@@ -25,6 +22,21 @@ $numeric_fields = [
     'f2_cv_scale'      => [0.0, 1.0],
     'purge_cv_scale'   => [0.0, 1.0],
     'product_cv_scale' => [0.0, 1.0],
+    // sensor fault mode: 0=none, 1=frozen, 2=drift, 3=noise, 4=dropout
+    'tank_pressure_fault_mode'   => [0.0, 4.0],
+    'tank_pressure_fault_severity' => [0.0, 1000000.0],
+    'tank_level_fault_mode'      => [0.0, 4.0],
+    'tank_level_fault_severity'  => [0.0, 1000000.0],
+    'f1_flow_fault_mode'         => [0.0, 4.0],
+    'f1_flow_fault_severity'     => [0.0, 1000000.0],
+    'f2_flow_fault_mode'         => [0.0, 4.0],
+    'f2_flow_fault_severity'     => [0.0, 1000000.0],
+    'purge_flow_fault_mode'      => [0.0, 4.0],
+    'purge_flow_fault_severity'  => [0.0, 1000000.0],
+    'product_flow_fault_mode'    => [0.0, 4.0],
+    'product_flow_fault_severity' => [0.0, 1000000.0],
+    'analyzer_fault_mode'        => [0.0, 4.0],
+    'analyzer_fault_severity'    => [0.0, 1000000.0],
 ];
 
 $httpMethod = $_SERVER['REQUEST_METHOD'];
