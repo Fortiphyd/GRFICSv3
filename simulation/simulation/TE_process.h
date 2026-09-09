@@ -40,8 +40,20 @@ class TE {
         double f2_valve_pos;        //X2        percentage
         double purge_valve_pos;     //X3        percentage
         double product_valve_pos;   //X4        percentage
-        bool   e_stop;                          
-        
+        bool   e_stop;
+
+        //physical fault injection
+        //slew rate faults: max valve travel [%/h]; 0 = no fault (instant, healthy)
+        double f1_slew_rate;
+        double f2_slew_rate;
+        double purge_slew_rate;
+        double product_slew_rate;
+        //fouling faults: fraction of nominal Cv still achievable; 1.0 = no fault (healthy)
+        double f1_cv_scale;
+        double f2_cv_scale;
+        double purge_cv_scale;
+        double product_cv_scale;
+
         //state var derivatives
         double dxdt_molar_A;             //NA        kmol
         double dxdt_molar_B;             //NB        kmol

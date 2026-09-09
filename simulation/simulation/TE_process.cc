@@ -8,10 +8,33 @@ double Tgas=373.0e0;
 double Lden = 8.3e0;
 double cv[4] = {6.4046, 0.4246, 0.352, 0.0417};
 uint64_t tpurge;
+
+// slews pos toward sp, limited to rate*dt of travel per update; rate<=0 means no limit (healthy valve)
+double slew_limit(double pos, double sp, double rate, double dt) {
+    if (rate <= 0.0) {
+        return sp;
+    }
+    double max_delta = rate * dt;
+    double delta = sp - pos;
+    if (delta > max_delta) {
+        delta = max_delta;
+    } else if (delta < -max_delta) {
+        delta = -max_delta;
+    }
+    return pos + delta;
+}
 TE::TE() {
     gettimeofday(&current, NULL);
     last_update = current;
     e_stop = 0;
+    f1_slew_rate = 0.0;
+    f2_slew_rate = 0.0;
+    purge_slew_rate = 0.0;
+    product_slew_rate = 0.0;
+    f1_cv_scale = 1.0;
+    f2_cv_scale = 1.0;
+    purge_cv_scale = 1.0;
+    product_cv_scale = 1.0;
     pressure = 2700;
     product_flow = 100;
     A_in_purge = 0.47;
@@ -139,14 +162,42 @@ void TE::update(Json::Value inputs) {
         }
     }
 
+    // physical fault injection: valve actuator/sensor faults apply regardless of
+    // control mode (including e_stop), since they represent hardware conditions,
+    // not PLC/operator decisions.
+    if (inputs["inputs"].isMember("f1_slew_rate")) {
+        f1_slew_rate = inputs["inputs"]["f1_slew_rate"].asDouble();
+    }
+    if (inputs["inputs"].isMember("f2_slew_rate")) {
+        f2_slew_rate = inputs["inputs"]["f2_slew_rate"].asDouble();
+    }
+    if (inputs["inputs"].isMember("purge_slew_rate")) {
+        purge_slew_rate = inputs["inputs"]["purge_slew_rate"].asDouble();
+    }
+    if (inputs["inputs"].isMember("product_slew_rate")) {
+        product_slew_rate = inputs["inputs"]["product_slew_rate"].asDouble();
+    }
+    if (inputs["inputs"].isMember("f1_cv_scale")) {
+        f1_cv_scale = inputs["inputs"]["f1_cv_scale"].asDouble();
+    }
+    if (inputs["inputs"].isMember("f2_cv_scale")) {
+        f2_cv_scale = inputs["inputs"]["f2_cv_scale"].asDouble();
+    }
+    if (inputs["inputs"].isMember("purge_cv_scale")) {
+        purge_cv_scale = inputs["inputs"]["purge_cv_scale"].asDouble();
+    }
+    if (inputs["inputs"].isMember("product_cv_scale")) {
+        product_cv_scale = inputs["inputs"]["product_cv_scale"].asDouble();
+    }
+
     last_update = current;
     gettimeofday(&current, NULL);
     double dt = ((current.tv_sec - last_update.tv_sec) + (current.tv_usec - last_update.tv_usec)/1000000.0)/60/60; //measurements are in hours
     dt = dt*time_scale;
-    f1_valve_pos = f1_valve_sp;
-    f2_valve_pos = f2_valve_sp;
-    purge_valve_pos = purge_valve_sp;
-    product_valve_pos = product_valve_sp;
+    f1_valve_pos = slew_limit(f1_valve_pos, f1_valve_sp, f1_slew_rate, dt);
+    f2_valve_pos = slew_limit(f2_valve_pos, f2_valve_sp, f2_slew_rate, dt);
+    purge_valve_pos = slew_limit(purge_valve_pos, purge_valve_sp, purge_slew_rate, dt);
+    product_valve_pos = slew_limit(product_valve_pos, product_valve_sp, product_slew_rate, dt);
     // TODO double check to make sure I didn't skip anything
     double NL = molar_D;                        // total liquid moles [kmol]
     double VL = NL/Lden;                        // liquid volume [m^3]
@@ -157,11 +208,11 @@ void TE::update(Json::Value inputs) {
     liquid_level = VL * 100.0 / VLmax;          // liquid volume as percentage of capacity
     
     //flow rates
-    f1_flow = cv[0] * f1_valve_pos;
-    f2_flow = cv[1] * f2_valve_pos;
+    f1_flow = cv[0] * f1_cv_scale * f1_valve_pos;
+    f2_flow = cv[1] * f2_cv_scale * f2_valve_pos;
     if (pressure >= 100.0) {
-        purge_flow = cv[2] * purge_valve_pos * sqrt(pressure-100.0);  
-        product_flow = cv[3] * product_valve_pos * sqrt(pressure-100.0);
+        purge_flow = cv[2] * purge_cv_scale * purge_valve_pos * sqrt(pressure-100.0);
+        product_flow = cv[3] * product_cv_scale * product_valve_pos * sqrt(pressure-100.0);
     } else {
         purge_flow = 0.0;
         product_flow = 0.0;
@@ -230,7 +281,17 @@ void TE::update(Json::Value inputs) {
     product_valve_pos = std::max(std::min(product_valve_pos, 100.0), 0.0);
     liquid_level = std::max(std::min(liquid_level, 100.0), 0.0);
     pressure = std::max(std::min(pressure, 3200.0), 0.0);
-    
+
+    // fault parameters: rate must be non-negative, cv scale is a 0-1 fraction
+    f1_slew_rate = std::max(f1_slew_rate, 0.0);
+    f2_slew_rate = std::max(f2_slew_rate, 0.0);
+    purge_slew_rate = std::max(purge_slew_rate, 0.0);
+    product_slew_rate = std::max(product_slew_rate, 0.0);
+    f1_cv_scale = std::max(std::min(f1_cv_scale, 1.0), 0.0);
+    f2_cv_scale = std::max(std::min(f2_cv_scale, 1.0), 0.0);
+    purge_cv_scale = std::max(std::min(purge_cv_scale, 1.0), 0.0);
+    product_cv_scale = std::max(std::min(product_cv_scale, 1.0), 0.0);
+
     molar_A = std::max(molar_A, 0.0);
     molar_B = std::max(molar_B, 0.0);
     molar_C = std::max(molar_C, 0.0);
@@ -290,9 +351,17 @@ Json::Value TE::get_state_json() {
     state["state"]["purge_valve_pos"] = purge_valve_pos;
     state["state"]["product_valve_pos"] = product_valve_pos;
     state["state"]["e_stop"] = e_stop;
-    
-    
-    
+
+    state["state"]["f1_slew_rate"] = f1_slew_rate;
+    state["state"]["f2_slew_rate"] = f2_slew_rate;
+    state["state"]["purge_slew_rate"] = purge_slew_rate;
+    state["state"]["product_slew_rate"] = product_slew_rate;
+    state["state"]["f1_cv_scale"] = f1_cv_scale;
+    state["state"]["f2_cv_scale"] = f2_cv_scale;
+    state["state"]["purge_cv_scale"] = purge_cv_scale;
+    state["state"]["product_cv_scale"] = product_cv_scale;
+
+
     return state;
 
 }

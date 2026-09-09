@@ -289,6 +289,73 @@
         }
       }
 
+      /* --- Fault injection panel --- */
+      .fault-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 0;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+      }
+      .fault-row:last-child { border-bottom: none; }
+
+      .fault-valve-name {
+        width: 78px;
+        flex: 0 0 78px;
+        font-size: 13px;
+        font-weight: 650;
+      }
+
+      .fault-controls {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .fault-toggle-line {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+      }
+
+      .fault-toggle-line input[type="checkbox"] {
+        accent-color: var(--accent);
+        width: 15px;
+        height: 15px;
+        cursor: pointer;
+      }
+
+      .fault-toggle-line input[type="range"] {
+        flex: 1;
+        accent-color: var(--accent);
+      }
+
+      .fault-toggle-line .fault-value {
+        width: 54px;
+        flex: 0 0 54px;
+        text-align: right;
+        opacity: 0.8;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .fault-toggle-line label.fault-label {
+        width: 116px;
+        flex: 0 0 116px;
+        opacity: 0.85;
+      }
+
+      .fault-live {
+        font-size: 11px;
+        opacity: 0.5;
+        margin-top: 2px;
+      }
+
+      #faultResetBtn {
+        margin-top: 4px;
+      }
+
       /* Mobile-ish: sidebar becomes top bar */
       @media (max-width: 860px) {
         .app {
@@ -588,6 +655,159 @@ const SIM_POLL_MS = 3000;
     }
   }
 
+  // ---- Fault injection ----
+
+  const FAULT_VALVES = [
+    { key: 'f1',      label: 'Feed 1' },
+    { key: 'f2',      label: 'Feed 2' },
+    { key: 'purge',   label: 'Purge' },
+    { key: 'product', label: 'Product' },
+  ];
+
+  // per-valve UI state; slew_rate/cv_scale are converted to/from these human units
+  const faultState = {};
+  for (const v of FAULT_VALVES) {
+    faultState[v.key] = { sticky: false, strokeSeconds: 20, fouled: false, cvPercent: 50 };
+  }
+
+  let faultLivePollTimer = null;
+
+  function strokeSecondsToSlewRate(strokeSeconds) {
+    // valve travels 0-100% in strokeSeconds -> %/hour internal rate
+    return 360000.0 / strokeSeconds;
+  }
+
+  function slewRateToStrokeSeconds(slewRate) {
+    if (!slewRate || slewRate <= 0) return 20;
+    return 360000.0 / slewRate;
+  }
+
+  function faultInputsPayload() {
+    const payload = {};
+    for (const v of FAULT_VALVES) {
+      const s = faultState[v.key];
+      payload[`${v.key}_slew_rate`] = s.sticky ? strokeSecondsToSlewRate(s.strokeSeconds) : 0;
+      payload[`${v.key}_cv_scale`] = s.fouled ? (s.cvPercent / 100.0) : 1.0;
+    }
+    return payload;
+  }
+
+  async function pushFaultState() {
+    try {
+      await fetch('/data/index.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(faultInputsPayload()),
+      });
+    } catch { /* best effort; UI still reflects intended state */ }
+  }
+
+  function renderFaultControls() {
+    const container = document.getElementById('faultControlsBody');
+    if (!container) return;
+    let html = '';
+    for (const v of FAULT_VALVES) {
+      const s = faultState[v.key];
+      html += `<div class="fault-row">
+        <div class="fault-valve-name">${v.label}</div>
+        <div class="fault-controls">
+          <div class="fault-toggle-line">
+            <input type="checkbox" id="${v.key}_sticky_chk" ${s.sticky ? 'checked' : ''}
+                   onchange="onFaultToggle('${v.key}', 'sticky', this.checked)">
+            <label class="fault-label" for="${v.key}_sticky_chk">Sluggish (stuck) valve</label>
+            <input type="range" min="2" max="120" step="1" value="${s.strokeSeconds}"
+                   id="${v.key}_stroke_sld" ${s.sticky ? '' : 'disabled'}
+                   oninput="onFaultSlider('${v.key}', 'strokeSeconds', this.value)">
+            <span class="fault-value" id="${v.key}_stroke_val">${s.strokeSeconds}s stroke</span>
+          </div>
+          <div class="fault-toggle-line">
+            <input type="checkbox" id="${v.key}_fouled_chk" ${s.fouled ? 'checked' : ''}
+                   onchange="onFaultToggle('${v.key}', 'fouled', this.checked)">
+            <label class="fault-label" for="${v.key}_fouled_chk">Fouled (reduced capacity)</label>
+            <input type="range" min="10" max="95" step="5" value="${s.cvPercent}"
+                   id="${v.key}_cv_sld" ${s.fouled ? '' : 'disabled'}
+                   oninput="onFaultSlider('${v.key}', 'cvPercent', this.value)">
+            <span class="fault-value" id="${v.key}_cv_val">${s.cvPercent}% max</span>
+          </div>
+          <div class="fault-live" id="${v.key}_live">position: -- / setpoint: --</div>
+        </div>
+      </div>`;
+    }
+    container.innerHTML = html;
+  }
+
+  function onFaultToggle(key, faultType, checked) {
+    faultState[key][faultType] = checked;
+    renderFaultControls();
+    pushFaultState();
+  }
+
+  function onFaultSlider(key, field, value) {
+    faultState[key][field] = Number(value);
+    const suffix = field === 'strokeSeconds' ? 's stroke' : '% max';
+    const el = document.getElementById(`${key}_${field === 'strokeSeconds' ? 'stroke' : 'cv'}_val`);
+    if (el) el.textContent = `${value}${suffix}`;
+    pushFaultState();
+  }
+
+  async function resetAllFaults() {
+    for (const v of FAULT_VALVES) {
+      faultState[v.key].sticky = false;
+      faultState[v.key].fouled = false;
+    }
+    renderFaultControls();
+    await pushFaultState();
+  }
+
+  async function pollFaultLiveState() {
+    try {
+      const res = await fetch('/data/index.php', { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json();
+      const st = data.state || {};
+      for (const v of FAULT_VALVES) {
+        const el = document.getElementById(`${v.key}_live`);
+        if (!el) continue;
+        const pos = st[`${v.key}_valve_pos`];
+        if (typeof pos === 'number') {
+          el.textContent = `position: ${pos.toFixed(1)}%`;
+        }
+      }
+    } catch { /* ignore transient errors */ }
+  }
+
+  async function openFaultPanel() {
+    document.getElementById('faultModal').style.display = 'flex';
+    try {
+      const res = await fetch('/data/index.php', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        const st = data.state || {};
+        for (const v of FAULT_VALVES) {
+          const rate = st[`${v.key}_slew_rate`];
+          const scale = st[`${v.key}_cv_scale`];
+          const s = faultState[v.key];
+          s.sticky = typeof rate === 'number' && rate > 0;
+          if (s.sticky) s.strokeSeconds = Math.round(slewRateToStrokeSeconds(rate));
+          s.fouled = typeof scale === 'number' && scale < 1.0;
+          if (s.fouled) s.cvPercent = Math.round(scale * 100);
+        }
+      }
+    } catch { /* fall back to last-known UI state */ }
+    renderFaultControls();
+    if (faultLivePollTimer) clearInterval(faultLivePollTimer);
+    faultLivePollTimer = setInterval(pollFaultLiveState, 1000);
+    pollFaultLiveState();
+  }
+
+  function closeFaultPanel() {
+    document.getElementById('faultModal').style.display = 'none';
+    if (faultLivePollTimer) {
+      clearInterval(faultLivePollTimer);
+      faultLivePollTimer = null;
+    }
+  }
+
   // ---- One load handler: init everything ----
   window.addEventListener("load", function () {
     // Tool indicators start calm
@@ -686,6 +906,16 @@ const SIM_POLL_MS = 3000;
           </div>
         </button>
 
+        <div class="section-title">Instructor Tools</div>
+
+        <button class="btn" onclick="openFaultPanel()">
+          <div class="icon">⚠️</div>
+          <div class="meta">
+            <div class="label">Fault Injection</div>
+            <div class="hint">Inject valve faults into the process</div>
+          </div>
+        </button>
+
         <div class="sidebar-footer" onclick="openAbout()" style="cursor:pointer;" title="Click to view version info">
           GRFICSv3 — open-source OT security lab by Fortiphyd Logic
           <br><span id="versionHint" style="opacity:0.6;font-size:11px;">Loading version…</span>
@@ -746,6 +976,28 @@ const SIM_POLL_MS = 3000;
                      transition:background 120ms ease;">
         Copy for bug report
       </button>
+    </div>
+  </div>
+
+  <!-- Fault injection modal -->
+  <div id="faultModal"
+       style="display:none; position:fixed; inset:0; z-index:1000;
+              background:rgba(0,0,0,0.72); align-items:center; justify-content:center;"
+       onclick="if(event.target===this)closeFaultPanel()">
+    <div style="background:#0f1722; border:1px solid rgba(255,255,255,0.12);
+                border-radius:16px; padding:28px 28px 22px; max-width:620px; width:92%;
+                position:relative; box-shadow:0 24px 64px rgba(0,0,0,0.6);
+                color:#e8eef6; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;">
+      <button onclick="closeFaultPanel()"
+              style="position:absolute; top:14px; right:16px; background:none; border:none;
+                     color:#e8eef6; font-size:20px; cursor:pointer; opacity:0.55; line-height:1;">✕</button>
+      <h2 style="margin:0 0 4px; font-size:17px; font-weight:650;">Fault Injection</h2>
+      <p style="margin:0 0 16px; opacity:0.5; font-size:12px;">
+        Inject physical valve faults into the process. Faults act on the physical actuator itself,
+        so the PLC/HMI will show them as unexplained process behavior rather than a reported fault.
+      </p>
+      <div id="faultControlsBody"></div>
+      <button id="faultResetBtn" class="small-btn" onclick="resetAllFaults()">Reset all faults</button>
     </div>
   </div>
 
