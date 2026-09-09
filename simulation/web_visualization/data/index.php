@@ -2,6 +2,12 @@
 $address = '127.0.0.1';
 $port = 55555;
 
+// boolean fault/control fields the simulation will accept
+$boolean_fields = [
+    'e_stop',
+    'f1_stuck', 'f2_stuck', 'purge_stuck', 'product_stuck',
+];
+
 // numeric fault/setpoint fields the simulation will accept, and their valid ranges
 $numeric_fields = [
     'f1_valve_sp'      => [0.0, 100.0],
@@ -27,8 +33,10 @@ if ($httpMethod === 'POST') {
     $inputs = [];
 
     if (is_array($cmd)) {
-        if (array_key_exists('e_stop', $cmd)) {
-            $inputs['e_stop'] = $cmd['e_stop'] ? 1 : 0;
+        foreach ($boolean_fields as $key) {
+            if (array_key_exists($key, $cmd)) {
+                $inputs[$key] = $cmd[$key] ? 1 : 0;
+            }
         }
         foreach ($numeric_fields as $key => $range) {
             if (array_key_exists($key, $cmd) && is_numeric($cmd[$key])) {

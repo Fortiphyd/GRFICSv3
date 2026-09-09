@@ -664,10 +664,12 @@ const SIM_POLL_MS = 3000;
     { key: 'product', label: 'Product' },
   ];
 
-  // per-valve UI state; slew_rate/cv_scale are converted to/from these human units
+  // per-valve UI state; slew_rate/cv_scale are converted to/from these human units.
+  // sticky and stuck are mutually exclusive: a valve can't be both slowly moving
+  // and completely frozen at once.
   const faultState = {};
   for (const v of FAULT_VALVES) {
-    faultState[v.key] = { sticky: false, strokeSeconds: 20, fouled: false, cvPercent: 50 };
+    faultState[v.key] = { sticky: false, strokeSeconds: 20, fouled: false, cvPercent: 50, stuck: false };
   }
 
   let faultLivePollTimer = null;
@@ -688,6 +690,7 @@ const SIM_POLL_MS = 3000;
       const s = faultState[v.key];
       payload[`${v.key}_slew_rate`] = s.sticky ? strokeSecondsToSlewRate(s.strokeSeconds) : 0;
       payload[`${v.key}_cv_scale`] = s.fouled ? (s.cvPercent / 100.0) : 1.0;
+      payload[`${v.key}_stuck`] = s.stuck ? 1 : 0;
     }
     return payload;
   }
@@ -712,13 +715,19 @@ const SIM_POLL_MS = 3000;
         <div class="fault-valve-name">${v.label}</div>
         <div class="fault-controls">
           <div class="fault-toggle-line">
-            <input type="checkbox" id="${v.key}_sticky_chk" ${s.sticky ? 'checked' : ''}
+            <input type="checkbox" id="${v.key}_sticky_chk" ${s.sticky ? 'checked' : ''} ${s.stuck ? 'disabled' : ''}
                    onchange="onFaultToggle('${v.key}', 'sticky', this.checked)">
-            <label class="fault-label" for="${v.key}_sticky_chk">Sluggish (stuck) valve</label>
+            <label class="fault-label" for="${v.key}_sticky_chk">Sluggish (slow) valve</label>
             <input type="range" min="2" max="120" step="1" value="${s.strokeSeconds}"
                    id="${v.key}_stroke_sld" ${s.sticky ? '' : 'disabled'}
                    oninput="onFaultSlider('${v.key}', 'strokeSeconds', this.value)">
             <span class="fault-value" id="${v.key}_stroke_val">${s.strokeSeconds}s stroke</span>
+          </div>
+          <div class="fault-toggle-line">
+            <input type="checkbox" id="${v.key}_stuck_chk" ${s.stuck ? 'checked' : ''} ${s.sticky ? 'disabled' : ''}
+                   onchange="onFaultToggle('${v.key}', 'stuck', this.checked)">
+            <label class="fault-label" for="${v.key}_stuck_chk">Stuck (frozen position)</label>
+            <span style="opacity:0.4;font-size:11px;">ignores PLC setpoint and e-stop</span>
           </div>
           <div class="fault-toggle-line">
             <input type="checkbox" id="${v.key}_fouled_chk" ${s.fouled ? 'checked' : ''}
@@ -738,6 +747,9 @@ const SIM_POLL_MS = 3000;
 
   function onFaultToggle(key, faultType, checked) {
     faultState[key][faultType] = checked;
+    // sticky (slow) and stuck (frozen) are mutually exclusive actuator faults
+    if (checked && faultType === 'sticky') faultState[key].stuck = false;
+    if (checked && faultType === 'stuck') faultState[key].sticky = false;
     renderFaultControls();
     pushFaultState();
   }
@@ -754,6 +766,7 @@ const SIM_POLL_MS = 3000;
     for (const v of FAULT_VALVES) {
       faultState[v.key].sticky = false;
       faultState[v.key].fouled = false;
+      faultState[v.key].stuck = false;
     }
     renderFaultControls();
     await pushFaultState();
@@ -786,8 +799,10 @@ const SIM_POLL_MS = 3000;
         for (const v of FAULT_VALVES) {
           const rate = st[`${v.key}_slew_rate`];
           const scale = st[`${v.key}_cv_scale`];
+          const stuck = st[`${v.key}_stuck`];
           const s = faultState[v.key];
-          s.sticky = typeof rate === 'number' && rate > 0;
+          s.stuck = stuck === true || stuck === 1;
+          s.sticky = !s.stuck && typeof rate === 'number' && rate > 0;
           if (s.sticky) s.strokeSeconds = Math.round(slewRateToStrokeSeconds(rate));
           s.fouled = typeof scale === 'number' && scale < 1.0;
           if (s.fouled) s.cvPercent = Math.round(scale * 100);

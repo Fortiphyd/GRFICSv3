@@ -35,6 +35,10 @@ TE::TE() {
     f2_cv_scale = 1.0;
     purge_cv_scale = 1.0;
     product_cv_scale = 1.0;
+    f1_stuck = false;
+    f2_stuck = false;
+    purge_stuck = false;
+    product_stuck = false;
     pressure = 2700;
     product_flow = 100;
     A_in_purge = 0.47;
@@ -189,15 +193,37 @@ void TE::update(Json::Value inputs) {
     if (inputs["inputs"].isMember("product_cv_scale")) {
         product_cv_scale = inputs["inputs"]["product_cv_scale"].asDouble();
     }
+    if (inputs["inputs"].isMember("f1_stuck")) {
+        f1_stuck = inputs["inputs"]["f1_stuck"].asInt() ? true : false;
+    }
+    if (inputs["inputs"].isMember("f2_stuck")) {
+        f2_stuck = inputs["inputs"]["f2_stuck"].asInt() ? true : false;
+    }
+    if (inputs["inputs"].isMember("purge_stuck")) {
+        purge_stuck = inputs["inputs"]["purge_stuck"].asInt() ? true : false;
+    }
+    if (inputs["inputs"].isMember("product_stuck")) {
+        product_stuck = inputs["inputs"]["product_stuck"].asInt() ? true : false;
+    }
 
     last_update = current;
     gettimeofday(&current, NULL);
     double dt = ((current.tv_sec - last_update.tv_sec) + (current.tv_usec - last_update.tv_usec)/1000000.0)/60/60; //measurements are in hours
     dt = dt*time_scale;
-    f1_valve_pos = slew_limit(f1_valve_pos, f1_valve_sp, f1_slew_rate, dt);
-    f2_valve_pos = slew_limit(f2_valve_pos, f2_valve_sp, f2_slew_rate, dt);
-    purge_valve_pos = slew_limit(purge_valve_pos, purge_valve_sp, purge_slew_rate, dt);
-    product_valve_pos = slew_limit(product_valve_pos, product_valve_sp, product_slew_rate, dt);
+    // a stuck valve is physically frozen: it ignores both the commanded
+    // setpoint and any slew-rate fault, ­and stays frozen even through e_stop
+    if (!f1_stuck) {
+        f1_valve_pos = slew_limit(f1_valve_pos, f1_valve_sp, f1_slew_rate, dt);
+    }
+    if (!f2_stuck) {
+        f2_valve_pos = slew_limit(f2_valve_pos, f2_valve_sp, f2_slew_rate, dt);
+    }
+    if (!purge_stuck) {
+        purge_valve_pos = slew_limit(purge_valve_pos, purge_valve_sp, purge_slew_rate, dt);
+    }
+    if (!product_stuck) {
+        product_valve_pos = slew_limit(product_valve_pos, product_valve_sp, product_slew_rate, dt);
+    }
     // TODO double check to make sure I didn't skip anything
     double NL = molar_D;                        // total liquid moles [kmol]
     double VL = NL/Lden;                        // liquid volume [m^3]
@@ -360,6 +386,11 @@ Json::Value TE::get_state_json() {
     state["state"]["f2_cv_scale"] = f2_cv_scale;
     state["state"]["purge_cv_scale"] = purge_cv_scale;
     state["state"]["product_cv_scale"] = product_cv_scale;
+
+    state["state"]["f1_stuck"] = f1_stuck;
+    state["state"]["f2_stuck"] = f2_stuck;
+    state["state"]["purge_stuck"] = purge_stuck;
+    state["state"]["product_stuck"] = product_stuck;
 
 
     return state;

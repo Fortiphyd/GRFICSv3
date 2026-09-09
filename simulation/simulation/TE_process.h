@@ -53,6 +53,12 @@ class TE {
         double f2_cv_scale;
         double purge_cv_scale;
         double product_cv_scale;
+        //stuck faults: actuator frozen at its current position, ignoring setpoint
+        //and slew rate entirely; false = no fault (healthy)
+        bool f1_stuck;
+        bool f2_stuck;
+        bool purge_stuck;
+        bool product_stuck;
 
         //state var derivatives
         double dxdt_molar_A;             //NA        kmol
