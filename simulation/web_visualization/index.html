@@ -126,6 +126,12 @@
         transform: translateY(0px);
       }
 
+      .btn.active {
+        background: var(--accent-soft);
+        border-color: rgba(215,177,20,0.45);
+        box-shadow: 0 0 0 3px var(--accent-faint);
+      }
+
       .icon {
         width: 40px;
         height: 40px;
@@ -219,6 +225,13 @@
         min-width: 0;
       }
 
+      /* .main sets display:flex as an author rule, which otherwise overrides
+         the browser's UA-stylesheet [hidden]{display:none} regardless of
+         specificity (author origin always wins over UA origin) */
+      .main[hidden] {
+        display: none;
+      }
+
       .topbar {
         height: 52px;
         display: flex;
@@ -287,6 +300,114 @@
           max-width: none;
           max-height: none;
         }
+      }
+
+      /* --- Fault injection page --- */
+      .page-content {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 20px 24px 32px;
+        box-sizing: border-box;
+      }
+
+      .fault-intro {
+        max-width: 760px;
+        opacity: 0.6;
+        font-size: 13px;
+        margin: 0 0 20px;
+      }
+
+      .fault-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 16px;
+        max-width: 1300px;
+        margin-bottom: 24px;
+      }
+
+      .fault-section-title {
+        font-size: 13px;
+        font-weight: 650;
+        opacity: 0.7;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin: 0 0 12px;
+      }
+
+      .fault-card {
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 14px;
+        padding: 16px 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .fault-card h3 {
+        margin: 0 0 4px;
+        font-size: 14px;
+        font-weight: 650;
+      }
+
+      .fault-toggle-line {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+      }
+
+      .fault-toggle-line input[type="checkbox"] {
+        accent-color: var(--accent);
+        width: 15px;
+        height: 15px;
+        cursor: pointer;
+      }
+
+      .fault-toggle-line input[type="range"] {
+        flex: 1;
+        accent-color: var(--accent);
+      }
+
+      .fault-toggle-line select {
+        flex: 1;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.14);
+        color: #e8eef6;
+        border-radius: 8px;
+        padding: 5px 8px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+
+      .fault-toggle-line select option {
+        background: #0f1722;
+        color: #e8eef6;
+      }
+
+      .fault-toggle-line .fault-value {
+        width: 54px;
+        flex: 0 0 54px;
+        text-align: right;
+        opacity: 0.8;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .fault-toggle-line label.fault-label {
+        width: 116px;
+        flex: 0 0 116px;
+        opacity: 0.85;
+      }
+
+      .fault-live {
+        font-size: 11px;
+        opacity: 0.5;
+        margin-top: 2px;
+      }
+
+      #faultResetBtn {
+        margin-top: 4px;
       }
 
       /* Mobile-ish: sidebar becomes top bar */
@@ -588,6 +709,337 @@ const SIM_POLL_MS = 3000;
     }
   }
 
+  // ---- Fault injection ----
+
+  const FAULT_VALVES = [
+    { key: 'f1',      label: 'Feed 1' },
+    { key: 'f2',      label: 'Feed 2' },
+    { key: 'purge',   label: 'Purge' },
+    { key: 'product', label: 'Product' },
+  ];
+
+  // per-valve UI state; slew_rate/cv_scale are converted to/from these human units.
+  // sticky and stuck are mutually exclusive: a valve can't be both slowly moving
+  // and completely frozen at once.
+  const faultState = {};
+  for (const v of FAULT_VALVES) {
+    faultState[v.key] = { sticky: false, strokeSeconds: 20, fouled: false, cvPercent: 50, stuck: false };
+  }
+
+  // sensor faults: one mode at a time per sensor (0=healthy, 1=frozen,
+  // 2=drift, 3=noise, 4=dropout), matching TE_process.cc's SENSOR_FAULT_*.
+  // fullScale is each sensor's native-unit full-scale reference (matches the
+  // divisors already used for Modbus register scaling), used only to convert
+  // the UI's human-friendly %-based sliders to/from the severity value the
+  // physics engine expects in native units. fields name what to compare in
+  // the live true-vs-measured readout; analyzer reports three at once.
+  const FAULT_SENSORS = [
+    { key: 'tank_pressure', label: 'Tank Pressure',  fullScale: 3200, fields: [{ field: 'pressure',      unit: 'kPa',     decimals: 0 }] },
+    { key: 'tank_level',    label: 'Tank Level',      fullScale: 100,  fields: [{ field: 'liquid_level', unit: '%',       decimals: 1 }] },
+    { key: 'f1_flow',       label: 'Feed 1 Flow',     fullScale: 1000, fields: [{ field: 'f1_flow',      unit: 'kmol/hr', decimals: 1 }] },
+    { key: 'f2_flow',       label: 'Feed 2 Flow',     fullScale: 500,  fields: [{ field: 'f2_flow',      unit: 'kmol/hr', decimals: 1 }] },
+    { key: 'purge_flow',    label: 'Purge Flow',      fullScale: 2000, fields: [{ field: 'purge_flow',   unit: 'kmol/hr', decimals: 1 }] },
+    { key: 'product_flow',  label: 'Product Flow',    fullScale: 500,  fields: [{ field: 'product_flow', unit: 'kmol/hr', decimals: 1 }] },
+    { key: 'analyzer',      label: 'Analyzer (A/B/C)', fullScale: 1.0, fields: [
+        { field: 'A_in_purge', unit: '', decimals: 3, prefix: 'A: ' },
+        { field: 'B_in_purge', unit: '', decimals: 3, prefix: 'B: ' },
+        { field: 'C_in_purge', unit: '', decimals: 3, prefix: 'C: ' },
+      ] },
+  ];
+
+  const SENSOR_FAULT_NONE = 0;
+  const SENSOR_FAULT_FROZEN = 1;
+  const SENSOR_FAULT_DRIFT = 2;
+  const SENSOR_FAULT_NOISE = 3;
+  const SENSOR_FAULT_DROPOUT = 4;
+
+  const sensorFaultState = {};
+  for (const s of FAULT_SENSORS) {
+    // driftPct/noisePct/dropoutPct persist per-mode UI values across mode
+    // switches so the slider doesn't reset every time you flip modes
+    sensorFaultState[s.key] = { mode: SENSOR_FAULT_NONE, driftPct: 1, noisePct: 5, dropoutPct: 30 };
+  }
+
+  function sensorFullScale(key) {
+    return FAULT_SENSORS.find(s => s.key === key).fullScale;
+  }
+
+  // convert the UI's %-based severity sliders to the native-unit severity
+  // the physics engine expects (see TE_process.cc apply_sensor_fault)
+  function sensorSeverityForPayload(key) {
+    const s = sensorFaultState[key];
+    const fs = sensorFullScale(key);
+    switch (s.mode) {
+      case SENSOR_FAULT_DRIFT:   return (s.driftPct / 100) * fs * 60;   // %FS/min -> native/hour
+      case SENSOR_FAULT_NOISE:   return (s.noisePct / 100) * fs;        // %FS -> native amplitude
+      case SENSOR_FAULT_DROPOUT: return s.dropoutPct / 100;             // % -> 0-1 duty fraction
+      default:                   return 0;
+    }
+  }
+
+  let faultLivePollTimer = null;
+
+  function strokeSecondsToSlewRate(strokeSeconds) {
+    // valve travels 0-100% in strokeSeconds -> %/hour internal rate
+    return 360000.0 / strokeSeconds;
+  }
+
+  function slewRateToStrokeSeconds(slewRate) {
+    if (!slewRate || slewRate <= 0) return 20;
+    return 360000.0 / slewRate;
+  }
+
+  function faultInputsPayload() {
+    const payload = {};
+    for (const v of FAULT_VALVES) {
+      const s = faultState[v.key];
+      payload[`${v.key}_slew_rate`] = s.sticky ? strokeSecondsToSlewRate(s.strokeSeconds) : 0;
+      payload[`${v.key}_cv_scale`] = s.fouled ? (s.cvPercent / 100.0) : 1.0;
+      payload[`${v.key}_stuck`] = s.stuck ? 1 : 0;
+    }
+    for (const sn of FAULT_SENSORS) {
+      payload[`${sn.key}_fault_mode`] = sensorFaultState[sn.key].mode;
+      payload[`${sn.key}_fault_severity`] = sensorSeverityForPayload(sn.key);
+    }
+    return payload;
+  }
+
+  async function pushFaultState() {
+    try {
+      await fetch('/data/index.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(faultInputsPayload()),
+      });
+    } catch { /* best effort; UI still reflects intended state */ }
+  }
+
+  function renderFaultControls() {
+    const container = document.getElementById('faultControlsBody');
+    if (!container) return;
+    let html = '';
+    for (const v of FAULT_VALVES) {
+      const s = faultState[v.key];
+      html += `<div class="fault-card">
+        <h3>${v.label}</h3>
+        <div class="fault-toggle-line">
+          <input type="checkbox" id="${v.key}_sticky_chk" ${s.sticky ? 'checked' : ''} ${s.stuck ? 'disabled' : ''}
+                 onchange="onFaultToggle('${v.key}', 'sticky', this.checked)">
+          <label class="fault-label" for="${v.key}_sticky_chk">Sluggish (slow) valve</label>
+          <input type="range" min="2" max="120" step="1" value="${s.strokeSeconds}"
+                 id="${v.key}_stroke_sld" ${s.sticky ? '' : 'disabled'}
+                 oninput="onFaultSlider('${v.key}', 'strokeSeconds', this.value)">
+          <span class="fault-value" id="${v.key}_stroke_val">${s.strokeSeconds}s stroke</span>
+        </div>
+        <div class="fault-toggle-line">
+          <input type="checkbox" id="${v.key}_stuck_chk" ${s.stuck ? 'checked' : ''} ${s.sticky ? 'disabled' : ''}
+                 onchange="onFaultToggle('${v.key}', 'stuck', this.checked)">
+          <label class="fault-label" for="${v.key}_stuck_chk">Stuck (frozen position)</label>
+          <span style="opacity:0.4;font-size:11px;">ignores PLC setpoint and e-stop</span>
+        </div>
+        <div class="fault-toggle-line">
+          <input type="checkbox" id="${v.key}_fouled_chk" ${s.fouled ? 'checked' : ''}
+                 onchange="onFaultToggle('${v.key}', 'fouled', this.checked)">
+          <label class="fault-label" for="${v.key}_fouled_chk">Fouled (reduced capacity)</label>
+          <input type="range" min="10" max="95" step="5" value="${s.cvPercent}"
+                 id="${v.key}_cv_sld" ${s.fouled ? '' : 'disabled'}
+                 oninput="onFaultSlider('${v.key}', 'cvPercent', this.value)">
+          <span class="fault-value" id="${v.key}_cv_val">${s.cvPercent}% max</span>
+        </div>
+        <div class="fault-live" id="${v.key}_live">position: --</div>
+      </div>`;
+    }
+    container.innerHTML = html;
+  }
+
+  function sensorSliderRow(sensorKey, paramKey, label, value, min, max, step, unit) {
+    return `<div class="fault-toggle-line">
+      <label class="fault-label" for="${sensorKey}_${paramKey}_sld">${label}</label>
+      <input type="range" min="${min}" max="${max}" step="${step}" value="${value}"
+             id="${sensorKey}_${paramKey}_sld"
+             oninput="onSensorSlider('${sensorKey}', '${paramKey}', this.value)">
+      <span class="fault-value" id="${sensorKey}_${paramKey}_val">${value}${unit}</span>
+    </div>`;
+  }
+
+  function renderSensorFaultControls() {
+    const container = document.getElementById('sensorFaultControlsBody');
+    if (!container) return;
+    let html = '';
+    for (const s of FAULT_SENSORS) {
+      const st = sensorFaultState[s.key];
+      let severityRow = '';
+      if (st.mode === SENSOR_FAULT_DRIFT) {
+        severityRow = sensorSliderRow(s.key, 'driftPct', 'Drift rate', st.driftPct, 0.1, 10, 0.1, '%FS/min');
+      } else if (st.mode === SENSOR_FAULT_NOISE) {
+        severityRow = sensorSliderRow(s.key, 'noisePct', 'Noise amplitude', st.noisePct, 1, 30, 1, '%FS');
+      } else if (st.mode === SENSOR_FAULT_DROPOUT) {
+        severityRow = sensorSliderRow(s.key, 'dropoutPct', 'Time flatlined', st.dropoutPct, 5, 90, 5, '%');
+      }
+      html += `<div class="fault-card">
+        <h3>${s.label}</h3>
+        <div class="fault-toggle-line">
+          <label class="fault-label" for="${s.key}_mode_sel">Fault mode</label>
+          <select id="${s.key}_mode_sel" onchange="onSensorModeChange('${s.key}', this.value)">
+            <option value="${SENSOR_FAULT_NONE}" ${st.mode === SENSOR_FAULT_NONE ? 'selected' : ''}>Healthy</option>
+            <option value="${SENSOR_FAULT_FROZEN}" ${st.mode === SENSOR_FAULT_FROZEN ? 'selected' : ''}>Frozen (stuck reading)</option>
+            <option value="${SENSOR_FAULT_DRIFT}" ${st.mode === SENSOR_FAULT_DRIFT ? 'selected' : ''}>Drift (growing bias)</option>
+            <option value="${SENSOR_FAULT_NOISE}" ${st.mode === SENSOR_FAULT_NOISE ? 'selected' : ''}>Noise (random jitter)</option>
+            <option value="${SENSOR_FAULT_DROPOUT}" ${st.mode === SENSOR_FAULT_DROPOUT ? 'selected' : ''}>Dropout (flatlines to 0)</option>
+          </select>
+        </div>
+        ${severityRow}
+        <div class="fault-live" id="${s.key}_live">true: -- / measured: --</div>
+      </div>`;
+    }
+    container.innerHTML = html;
+  }
+
+  function onSensorModeChange(key, value) {
+    sensorFaultState[key].mode = Number(value);
+    renderSensorFaultControls();
+    pushFaultState();
+  }
+
+  function onSensorSlider(key, paramKey, value) {
+    sensorFaultState[key][paramKey] = Number(value);
+    const el = document.getElementById(`${key}_${paramKey}_val`);
+    if (el) {
+      const unit = paramKey === 'driftPct' ? '%FS/min' : paramKey === 'noisePct' ? '%FS' : '%';
+      el.textContent = `${value}${unit}`;
+    }
+    pushFaultState();
+  }
+
+  function onFaultToggle(key, faultType, checked) {
+    faultState[key][faultType] = checked;
+    // sticky (slow) and stuck (frozen) are mutually exclusive actuator faults
+    if (checked && faultType === 'sticky') faultState[key].stuck = false;
+    if (checked && faultType === 'stuck') faultState[key].sticky = false;
+    renderFaultControls();
+    pushFaultState();
+  }
+
+  function onFaultSlider(key, field, value) {
+    faultState[key][field] = Number(value);
+    const suffix = field === 'strokeSeconds' ? 's stroke' : '% max';
+    const el = document.getElementById(`${key}_${field === 'strokeSeconds' ? 'stroke' : 'cv'}_val`);
+    if (el) el.textContent = `${value}${suffix}`;
+    pushFaultState();
+  }
+
+  async function resetAllFaults() {
+    for (const v of FAULT_VALVES) {
+      faultState[v.key].sticky = false;
+      faultState[v.key].fouled = false;
+      faultState[v.key].stuck = false;
+    }
+    for (const s of FAULT_SENSORS) {
+      sensorFaultState[s.key].mode = SENSOR_FAULT_NONE;
+    }
+    renderFaultControls();
+    renderSensorFaultControls();
+    await pushFaultState();
+  }
+
+  async function pollFaultLiveState() {
+    try {
+      const res = await fetch('/data/index.php', { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json();
+      const st = data.state || {};
+      const trueOutputs = data.outputs || {};
+      const measured = data.measured || {};
+      for (const v of FAULT_VALVES) {
+        const el = document.getElementById(`${v.key}_live`);
+        if (!el) continue;
+        const pos = st[`${v.key}_valve_pos`];
+        if (typeof pos === 'number') {
+          el.textContent = `position: ${pos.toFixed(1)}%`;
+        }
+      }
+      for (const s of FAULT_SENSORS) {
+        const el = document.getElementById(`${s.key}_live`);
+        if (!el) continue;
+        const parts = s.fields.map(f => {
+          const t = trueOutputs[f.field];
+          const m = measured[f.field];
+          const prefix = f.prefix || '';
+          if (typeof t !== 'number' || typeof m !== 'number') return `${prefix}--`;
+          return `${prefix}true ${t.toFixed(f.decimals)}${f.unit} / measured ${m.toFixed(f.decimals)}${f.unit}`;
+        });
+        el.textContent = parts.join('  ·  ');
+      }
+    } catch { /* ignore transient errors */ }
+  }
+
+  async function enterFaultsView() {
+    try {
+      const res = await fetch('/data/index.php', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        const st = data.state || {};
+        for (const v of FAULT_VALVES) {
+          const rate = st[`${v.key}_slew_rate`];
+          const scale = st[`${v.key}_cv_scale`];
+          const stuck = st[`${v.key}_stuck`];
+          const s = faultState[v.key];
+          s.stuck = stuck === true || stuck === 1;
+          s.sticky = !s.stuck && typeof rate === 'number' && rate > 0;
+          if (s.sticky) s.strokeSeconds = Math.round(slewRateToStrokeSeconds(rate));
+          s.fouled = typeof scale === 'number' && scale < 1.0;
+          if (s.fouled) s.cvPercent = Math.round(scale * 100);
+        }
+        for (const sn of FAULT_SENSORS) {
+          const mode = st[`${sn.key}_fault_mode`];
+          const severity = st[`${sn.key}_fault_severity`];
+          const fs = sensorFullScale(sn.key);
+          const s = sensorFaultState[sn.key];
+          s.mode = typeof mode === 'number' ? mode : SENSOR_FAULT_NONE;
+          if (typeof severity === 'number' && severity > 0) {
+            if (s.mode === SENSOR_FAULT_DRIFT) s.driftPct = Math.round((severity / (fs * 60)) * 1000) / 10;
+            else if (s.mode === SENSOR_FAULT_NOISE) s.noisePct = Math.round((severity / fs) * 100);
+            else if (s.mode === SENSOR_FAULT_DROPOUT) s.dropoutPct = Math.round(severity * 100);
+          }
+        }
+      }
+    } catch { /* fall back to last-known UI state */ }
+    renderFaultControls();
+    renderSensorFaultControls();
+    if (faultLivePollTimer) clearInterval(faultLivePollTimer);
+    faultLivePollTimer = setInterval(pollFaultLiveState, 1000);
+    pollFaultLiveState();
+  }
+
+  function leaveFaultsView() {
+    if (faultLivePollTimer) {
+      clearInterval(faultLivePollTimer);
+      faultLivePollTimer = null;
+    }
+  }
+
+  // ---- View switching (Process Simulation <-> Fault Injection) ----
+  function showView(view) {
+    const simView = document.getElementById('simulationView');
+    const faultsView = document.getElementById('faultsView');
+    const navSim = document.getElementById('navSimulationBtn');
+    const navFaults = document.getElementById('navFaultsBtn');
+
+    if (view === 'faults') {
+      simView.hidden = true;
+      faultsView.hidden = false;
+      navSim.classList.remove('active');
+      navFaults.classList.add('active');
+      enterFaultsView();
+    } else {
+      faultsView.hidden = true;
+      simView.hidden = false;
+      navFaults.classList.remove('active');
+      navSim.classList.add('active');
+      leaveFaultsView();
+    }
+  }
+
   // ---- One load handler: init everything ----
   window.addEventListener("load", function () {
     // Tool indicators start calm
@@ -631,6 +1083,24 @@ const SIM_POLL_MS = 3000;
           <span id="statusDot" class="status-dot"></span>
           <span id="statusLabel">Starting…</span>
         </div>
+
+        <div class="section-title">Views</div>
+
+        <button class="btn active" id="navSimulationBtn" onclick="showView('simulation')">
+          <div class="icon">🧪</div>
+          <div class="meta">
+            <div class="label">Process Simulation</div>
+            <div class="hint">Chemical plant visualization</div>
+          </div>
+        </button>
+
+        <button class="btn" id="navFaultsBtn" onclick="showView('faults')">
+          <div class="icon">⚠️</div>
+          <div class="meta">
+            <div class="label">Fault Injection</div>
+            <div class="hint">Inject physical faults</div>
+          </div>
+        </button>
 
         <div class="section-title">Connect</div>
 
@@ -693,7 +1163,7 @@ const SIM_POLL_MS = 3000;
       </aside>
 
       <!-- Main content (Unity focus) -->
-      <main class="main">
+      <main class="main" id="simulationView">
         <div class="topbar">
           <div class="title">Chemical Plant Simulation</div>
           <div class="actions">
@@ -706,6 +1176,29 @@ const SIM_POLL_MS = 3000;
 
         <div class="unity-wrap">
           <div id="unityContainer"></div>
+        </div>
+      </main>
+
+      <!-- Fault injection page -->
+      <main class="main" id="faultsView" hidden>
+        <div class="topbar">
+          <div class="title">Fault Injection</div>
+          <div class="actions">
+            <button class="small-btn" id="faultResetBtn" onclick="resetAllFaults()">Reset all faults</button>
+          </div>
+        </div>
+
+        <div class="page-content">
+          <p class="fault-intro">
+            Inject physical faults into the process. Faults act on the physical actuator or sensor
+            itself, so the PLC/HMI will show them as unexplained process behavior (or a suspiciously
+            steady reading) rather than a reported fault.
+          </p>
+          <h2 class="fault-section-title">Valves</h2>
+          <div id="faultControlsBody" class="fault-grid"></div>
+
+          <h2 class="fault-section-title">Sensors</h2>
+          <div id="sensorFaultControlsBody" class="fault-grid"></div>
         </div>
       </main>
     </div>

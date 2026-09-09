@@ -40,8 +40,65 @@ class TE {
         double f2_valve_pos;        //X2        percentage
         double purge_valve_pos;     //X3        percentage
         double product_valve_pos;   //X4        percentage
-        bool   e_stop;                          
-        
+        bool   e_stop;
+
+        //physical fault injection
+        //slew rate faults: max valve travel [%/h]; 0 = no fault (instant, healthy)
+        double f1_slew_rate;
+        double f2_slew_rate;
+        double purge_slew_rate;
+        double product_slew_rate;
+        //fouling faults: fraction of nominal Cv still achievable; 1.0 = no fault (healthy)
+        double f1_cv_scale;
+        double f2_cv_scale;
+        double purge_cv_scale;
+        double product_cv_scale;
+        //stuck faults: actuator frozen at its current position, ignoring setpoint
+        //and slew rate entirely; false = no fault (healthy)
+        bool f1_stuck;
+        bool f2_stuck;
+        bool purge_stuck;
+        bool product_stuck;
+        //sensor faults: each sensor has one active fault mode at a time
+        //(see SENSOR_FAULT_* constants in TE_process.cc) plus a severity
+        //value whose meaning depends on the mode (drift rate, noise
+        //amplitude, or dropout duty cycle - unused for none/frozen). All
+        //fault logic lives here; the true outputs are never touched, only
+        //the corresponding measured_* copy below.
+        int tank_pressure_fault_mode;
+        double tank_pressure_fault_severity;
+        double tank_pressure_bias;          //accumulated drift offset
+        int tank_level_fault_mode;
+        double tank_level_fault_severity;
+        double tank_level_bias;
+        int f1_flow_fault_mode;
+        double f1_flow_fault_severity;
+        double f1_flow_bias;
+        int f2_flow_fault_mode;
+        double f2_flow_fault_severity;
+        double f2_flow_bias;
+        int purge_flow_fault_mode;
+        double purge_flow_fault_severity;
+        double purge_flow_bias;
+        int product_flow_fault_mode;
+        double product_flow_fault_severity;
+        double product_flow_bias;
+        int analyzer_fault_mode;
+        double analyzer_fault_severity;
+        double analyzer_bias;
+        //measured (possibly faulted) sensor values - this is what Modbus
+        //devices report; they have no fault logic of their own and simply
+        //relay these values as-is
+        double measured_pressure;
+        double measured_liquid_level;
+        double measured_f1_flow;
+        double measured_f2_flow;
+        double measured_purge_flow;
+        double measured_product_flow;
+        double measured_A_in_purge;
+        double measured_B_in_purge;
+        double measured_C_in_purge;
+
         //state var derivatives
         double dxdt_molar_A;             //NA        kmol
         double dxdt_molar_B;             //NB        kmol

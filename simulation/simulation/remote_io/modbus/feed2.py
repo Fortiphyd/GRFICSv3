@@ -10,7 +10,7 @@ async def handlefeed2(context, reader, writer, interval):
 
         try:
             valve_pos = int(data["state"]["f2_valve_pos"] / 100.0 * 65535)
-            flow = int(data["outputs"]["f2_flow"] / 500.0 * 65535)
+            flow = int(data["measured"]["f2_flow"] / 500.0 * 65535)
 
             # Clamp to valid range
             valve_pos = modbusdevice.clamp_value(valve_pos)

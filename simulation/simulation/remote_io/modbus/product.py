@@ -10,7 +10,7 @@ async def handleproduct(context, reader, writer, interval):
 
         try:
             valve_pos = int(data["state"]["product_valve_pos"] / 100.0 * 65535)
-            flow = int(data["outputs"]["product_flow"] / 500.0 * 65535)
+            flow = int(data["measured"]["product_flow"] / 500.0 * 65535)
 
             # Clamp to valid range
             valve_pos = modbusdevice.clamp_value(valve_pos)
