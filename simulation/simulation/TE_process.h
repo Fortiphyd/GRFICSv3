@@ -59,6 +59,30 @@ class TE {
         bool f2_stuck;
         bool purge_stuck;
         bool product_stuck;
+        //sensor freeze faults: when set, the corresponding measured_* value
+        //below stops tracking its true output and holds its last value,
+        //mirroring a real transmitter whose signal loop stops updating (e.g. a
+        //plugged impulse line) while the process keeps moving. The true
+        //outputs are never touched by these flags - only the measured_* copy.
+        bool tank_pressure_freeze;
+        bool tank_level_freeze;
+        bool f1_flow_freeze;
+        bool f2_flow_freeze;
+        bool purge_flow_freeze;
+        bool product_flow_freeze;
+        bool analyzer_freeze;
+        //measured (possibly faulted) sensor values - this is what Modbus
+        //devices report; they have no fault logic of their own and simply
+        //relay these values as-is
+        double measured_pressure;
+        double measured_liquid_level;
+        double measured_f1_flow;
+        double measured_f2_flow;
+        double measured_purge_flow;
+        double measured_product_flow;
+        double measured_A_in_purge;
+        double measured_B_in_purge;
+        double measured_C_in_purge;
 
         //state var derivatives
         double dxdt_molar_A;             //NA        kmol

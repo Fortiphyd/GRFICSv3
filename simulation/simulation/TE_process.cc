@@ -39,6 +39,22 @@ TE::TE() {
     f2_stuck = false;
     purge_stuck = false;
     product_stuck = false;
+    tank_pressure_freeze = false;
+    tank_level_freeze = false;
+    f1_flow_freeze = false;
+    f2_flow_freeze = false;
+    purge_flow_freeze = false;
+    product_flow_freeze = false;
+    analyzer_freeze = false;
+    measured_pressure = 0.0;
+    measured_liquid_level = 0.0;
+    measured_f1_flow = 0.0;
+    measured_f2_flow = 0.0;
+    measured_purge_flow = 0.0;
+    measured_product_flow = 0.0;
+    measured_A_in_purge = 0.0;
+    measured_B_in_purge = 0.0;
+    measured_C_in_purge = 0.0;
     pressure = 2700;
     product_flow = 100;
     A_in_purge = 0.47;
@@ -205,6 +221,27 @@ void TE::update(Json::Value inputs) {
     if (inputs["inputs"].isMember("product_stuck")) {
         product_stuck = inputs["inputs"]["product_stuck"].asInt() ? true : false;
     }
+    if (inputs["inputs"].isMember("tank_pressure_freeze")) {
+        tank_pressure_freeze = inputs["inputs"]["tank_pressure_freeze"].asInt() ? true : false;
+    }
+    if (inputs["inputs"].isMember("tank_level_freeze")) {
+        tank_level_freeze = inputs["inputs"]["tank_level_freeze"].asInt() ? true : false;
+    }
+    if (inputs["inputs"].isMember("f1_flow_freeze")) {
+        f1_flow_freeze = inputs["inputs"]["f1_flow_freeze"].asInt() ? true : false;
+    }
+    if (inputs["inputs"].isMember("f2_flow_freeze")) {
+        f2_flow_freeze = inputs["inputs"]["f2_flow_freeze"].asInt() ? true : false;
+    }
+    if (inputs["inputs"].isMember("purge_flow_freeze")) {
+        purge_flow_freeze = inputs["inputs"]["purge_flow_freeze"].asInt() ? true : false;
+    }
+    if (inputs["inputs"].isMember("product_flow_freeze")) {
+        product_flow_freeze = inputs["inputs"]["product_flow_freeze"].asInt() ? true : false;
+    }
+    if (inputs["inputs"].isMember("analyzer_freeze")) {
+        analyzer_freeze = inputs["inputs"]["analyzer_freeze"].asInt() ? true : false;
+    }
 
     last_update = current;
     gettimeofday(&current, NULL);
@@ -323,9 +360,34 @@ void TE::update(Json::Value inputs) {
     molar_C = std::max(molar_C, 0.0);
     molar_D = std::max(molar_D, 0.0);
 
-    
-    
-    
+    // measured (possibly faulted) sensor values: track the true output each
+    // tick unless a freeze fault holds this one at its last-tracked value.
+    // Modbus devices read only these measured_* fields, never the true
+    // outputs above, so they stay unaware of whether a fault is active.
+    if (!tank_pressure_freeze) {
+        measured_pressure = pressure;
+    }
+    if (!tank_level_freeze) {
+        measured_liquid_level = liquid_level;
+    }
+    if (!f1_flow_freeze) {
+        measured_f1_flow = f1_flow;
+    }
+    if (!f2_flow_freeze) {
+        measured_f2_flow = f2_flow;
+    }
+    if (!purge_flow_freeze) {
+        measured_purge_flow = purge_flow;
+    }
+    if (!product_flow_freeze) {
+        measured_product_flow = product_flow;
+    }
+    if (!analyzer_freeze) {
+        measured_A_in_purge = A_in_purge;
+        measured_B_in_purge = B_in_purge;
+        measured_C_in_purge = C_in_purge;
+    }
+
     if (product_flow <= 0.0) {
         //hold at last cost
         cost = cost;
@@ -392,6 +454,26 @@ Json::Value TE::get_state_json() {
     state["state"]["purge_stuck"] = purge_stuck;
     state["state"]["product_stuck"] = product_stuck;
 
+    state["state"]["tank_pressure_freeze"] = tank_pressure_freeze;
+    state["state"]["tank_level_freeze"] = tank_level_freeze;
+    state["state"]["f1_flow_freeze"] = f1_flow_freeze;
+    state["state"]["f2_flow_freeze"] = f2_flow_freeze;
+    state["state"]["purge_flow_freeze"] = purge_flow_freeze;
+    state["state"]["product_flow_freeze"] = product_flow_freeze;
+    state["state"]["analyzer_freeze"] = analyzer_freeze;
+
+    // measured (possibly faulted) sensor values - this is what a Modbus
+    // device/PLC/HMI actually sees, as opposed to the true physical values
+    // under "outputs" above
+    state["measured"]["pressure"] = measured_pressure;
+    state["measured"]["liquid_level"] = measured_liquid_level;
+    state["measured"]["f1_flow"] = measured_f1_flow;
+    state["measured"]["f2_flow"] = measured_f2_flow;
+    state["measured"]["purge_flow"] = measured_purge_flow;
+    state["measured"]["product_flow"] = measured_product_flow;
+    state["measured"]["A_in_purge"] = measured_A_in_purge;
+    state["measured"]["B_in_purge"] = measured_B_in_purge;
+    state["measured"]["C_in_purge"] = measured_C_in_purge;
 
     return state;
 

@@ -6,6 +6,9 @@ $port = 55555;
 $boolean_fields = [
     'e_stop',
     'f1_stuck', 'f2_stuck', 'purge_stuck', 'product_stuck',
+    'tank_pressure_freeze', 'tank_level_freeze',
+    'f1_flow_freeze', 'f2_flow_freeze', 'purge_flow_freeze', 'product_flow_freeze',
+    'analyzer_freeze',
 ];
 
 // numeric fault/setpoint fields the simulation will accept, and their valid ranges

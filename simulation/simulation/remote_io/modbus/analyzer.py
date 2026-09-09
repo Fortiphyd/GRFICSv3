@@ -7,9 +7,9 @@ async def handleanalyzer(context, reader, writer, interval):
         slave_id = 0x01
         data = await modbusdevice.readData(reader, writer, interval)
         try:
-            a_in_purge = int(data["outputs"]["A_in_purge"]*65535)
-            b_in_purge = int(data["outputs"]["B_in_purge"]*65535)
-            c_in_purge = int(data["outputs"]["C_in_purge"]*65535)
+            a_in_purge = int(data["measured"]["A_in_purge"]*65535)
+            b_in_purge = int(data["measured"]["B_in_purge"]*65535)
+            c_in_purge = int(data["measured"]["C_in_purge"]*65535)
             context[slave_id].setValues(4, 1, [a_in_purge,b_in_purge,c_in_purge])
             context[slave_id].getValues(0x03, 0, 2)
         except:
