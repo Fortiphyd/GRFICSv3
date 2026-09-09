@@ -225,6 +225,13 @@
         min-width: 0;
       }
 
+      /* .main sets display:flex as an author rule, which otherwise overrides
+         the browser's UA-stylesheet [hidden]{display:none} regardless of
+         specificity (author origin always wins over UA origin) */
+      .main[hidden] {
+        display: none;
+      }
+
       .topbar {
         height: 52px;
         display: flex;
@@ -916,6 +923,14 @@ const SIM_POLL_MS = 3000;
           </div>
         </button>
 
+        <button class="btn" id="navFaultsBtn" onclick="showView('faults')">
+          <div class="icon">⚠️</div>
+          <div class="meta">
+            <div class="label">Fault Injection</div>
+            <div class="hint">Inject valve faults into the process</div>
+          </div>
+        </button>
+
         <div class="section-title">Connect</div>
 
         <button class="btn" onclick="openTool('attacker')">
@@ -967,16 +982,6 @@ const SIM_POLL_MS = 3000;
                 <span id="wazuhText" class="tool-status-text">Checking…</span>
               </span>
             </div>
-          </div>
-        </button>
-
-        <div class="section-title">Instructor Tools</div>
-
-        <button class="btn" id="navFaultsBtn" onclick="showView('faults')">
-          <div class="icon">⚠️</div>
-          <div class="meta">
-            <div class="label">Fault Injection</div>
-            <div class="hint">Inject valve faults into the process</div>
           </div>
         </button>
 
