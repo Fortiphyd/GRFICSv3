@@ -286,7 +286,7 @@ HMI
 ### Network interface errors
 
 If build or startup fails with a message about creating a network interface,
-edit `docker-compose.yml` (around lines 140 and 149) to match your actual network interface name (e.g., `eth0`, `enp0s3`, or your WSL adapter).
+edit `docker-compose.yml` (search under the `networks` entrance the both lines starting with the key-value pair `parent: eth0`) and replace the value to match your actual network interface name (e.g., `eth0` for `enp0s3`, or your WSL adapter).
 
 ### Permission errors
 
