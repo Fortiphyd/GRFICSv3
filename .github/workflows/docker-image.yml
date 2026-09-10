@@ -14,6 +14,7 @@ on:
       - 'docs/**'
   release:
     types: [ published ]
+  workflow_dispatch: {}
 
 env:
   DOCKERHUB_NAMESPACE: fortiphyd
@@ -25,6 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       services: ${{ steps.set-services.outputs.services }}
+      smoke_services: ${{ steps.set-services.outputs.smoke_services }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,7 +39,13 @@ jobs:
           SERVICES=()
           BASE_REF="${{ github.event.before }}"
           if [ -z "$BASE_REF" ]; then
-            BASE_REF="$(git rev-parse HEAD~1)"
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              # manual runs are usually "does this branch's stack still work",
+              # so diff against main rather than just the last commit
+              BASE_REF="origin/main"
+            else
+              BASE_REF="$(git rev-parse HEAD~1)"
+            fi
           fi
 
           CHANGED=$(git diff --name-only "$BASE_REF" HEAD)
@@ -65,15 +73,77 @@ jobs:
                 SERVICES+=("$SERVICE")
               fi
             done
-          
+
             # If shared files changed, rebuild everything
             if echo "$CHANGED" | grep -Eq "^(docker-compose.yml|\.github/)"; then
               SERVICES=("${!MAP[@]}")
             fi
           fi
 
-
           echo "services=$(printf '%s\n' "${SERVICES[@]}" | jq -R . | jq -cs .)" >> "$GITHUB_OUTPUT"
+
+          # ----------------------------------------------------------------
+          # Smoke test scope: which docker-compose services to bring up and
+          # health-check. This is NOT just "smoke-test whatever image list
+          # changed" - most of these services only work meaningfully wired
+          # together on the ICS/DMZ macvlan networks, and a per-container
+          # healthcheck alone (e.g. the PLC's own web UI coming up) can't
+          # catch a wiring regression between them. So: if anything in the
+          # OT-networked core changed, bring up the whole core group
+          # together; a genuinely standalone service can be smoke-tested on
+          # its own (plus the router, for basic reachability). wazuh is
+          # deliberately excluded - optional siem profile, heavy ELK stack,
+          # not part of the default `docker compose up`.
+          declare -A COMPOSE_SERVICE=(
+            ["plc"]="plc"
+            ["router"]="router"
+            ["workstation"]="ews"
+            ["simulation"]="simulation"
+            ["scadalts"]="hmi"
+            ["attacker"]="kali"
+            ["caldera"]="caldera"
+          )
+          CORE_GROUP=(simulation plc router workstation scadalts)
+          STANDALONE=(attacker caldera)
+
+          SMOKE_SERVICES=()
+          if [ "${{ github.event_name }}" = "release" ] || echo "$CHANGED" | grep -Eq "^(docker-compose\.yml|\.github/)"; then
+            SMOKE_SERVICES=("${CORE_GROUP[@]}" "${STANDALONE[@]}")
+          else
+            CORE_CHANGED=false
+            for s in "${SERVICES[@]}"; do
+              for c in "${CORE_GROUP[@]}"; do
+                if [ "$s" = "$c" ]; then CORE_CHANGED=true; fi
+              done
+            done
+
+            if [ "$CORE_CHANGED" = true ]; then
+              SMOKE_SERVICES+=("${CORE_GROUP[@]}")
+            fi
+
+            for s in "${SERVICES[@]}"; do
+              for st in "${STANDALONE[@]}"; do
+                if [ "$s" = "$st" ]; then
+                  SMOKE_SERVICES+=("$st")
+                  if [ "$CORE_CHANGED" = false ]; then
+                    SMOKE_SERVICES+=("router")
+                  fi
+                fi
+              done
+            done
+
+            if [ "${#SMOKE_SERVICES[@]}" -gt 0 ]; then
+              mapfile -t SMOKE_SERVICES < <(printf '%s\n' "${SMOKE_SERVICES[@]}" | sort -u)
+            fi
+          fi
+
+          SMOKE_COMPOSE_SERVICES=()
+          for s in "${SMOKE_SERVICES[@]}"; do
+            SMOKE_COMPOSE_SERVICES+=("${COMPOSE_SERVICE[$s]}")
+          done
+
+          echo "Smoke-test services: ${SMOKE_COMPOSE_SERVICES[*]:-(none)}"
+          echo "smoke_services=$(printf '%s\n' "${SMOKE_COMPOSE_SERVICES[@]}" | jq -R . | jq -cs 'map(select(length > 0))')" >> "$GITHUB_OUTPUT"
 
   # ================================================================
   # Build AMD64 images
@@ -227,3 +297,94 @@ jobs:
             cosign sign -y "${REPO}@${DIGEST}"
             echo "✅ Signed ${IMAGE}@${DIGEST}"
           done
+
+  # ================================================================
+  # Smoke test: bring up the just-published images and verify the
+  # stack actually comes up healthy with no obvious startup errors.
+  # Scope is decided by detect-changes (see the comment there) - this
+  # job just brings up whatever service list it's handed.
+  # ================================================================
+  smoke-test:
+    runs-on: ubuntu-latest
+    needs: [ detect-changes, create-manifests ]
+    if: needs.detect-changes.outputs.smoke_services != '[]'
+    steps:
+      - uses: actions/checkout@v4
+
+      # avoid Docker Hub's anonymous-pull rate limit, which shared GH-hosted
+      # runner IPs run into far more easily than a real user would
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Bring up smoke-test services
+        run: |
+          set -euo pipefail
+          SERVICES=$(echo '${{ needs.detect-changes.outputs.smoke_services }}' | jq -r '.[]' | tr '\n' ' ')
+          echo "Smoke-testing: $SERVICES"
+          docker compose pull $SERVICES
+          docker compose up -d --no-build $SERVICES
+
+      - name: Wait for services to become healthy
+        run: |
+          set -euo pipefail
+          SERVICES=$(echo '${{ needs.detect-changes.outputs.smoke_services }}' | jq -r '.[]')
+          TIMEOUT=300
+          ELAPSED=0
+          while true; do
+            ALL_HEALTHY=true
+            for s in $SERVICES; do
+              CID=$(docker compose ps -q "$s" || true)
+              if [ -z "$CID" ]; then
+                echo "$s: no container found"
+                ALL_HEALTHY=false
+                continue
+              fi
+              STATUS=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}healthy{{end}}' "$CID")
+              echo "$s: $STATUS"
+              if [ "$STATUS" != "healthy" ]; then
+                ALL_HEALTHY=false
+              fi
+            done
+            if [ "$ALL_HEALTHY" = true ]; then
+              echo "✅ All smoke-tested services are healthy"
+              break
+            fi
+            if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
+              echo "::error::Timed out waiting for services to become healthy"
+              exit 1
+            fi
+            sleep 5
+            ELAPSED=$((ELAPSED + 5))
+          done
+
+      - name: Scan logs for obvious errors
+        run: |
+          set -uo pipefail
+          SERVICES=$(echo '${{ needs.detect-changes.outputs.smoke_services }}' | jq -r '.[]')
+          # deliberately narrow: broad words like "error" show up in benign
+          # startup/retry noise (e.g. healthcheck retries before a service is
+          # ready) and would make this check flaky. Widen this pattern only
+          # after seeing a real miss, not preemptively.
+          PATTERN='(?i)(traceback|unhandled exception|fatal error|panic:|segfault)'
+          FOUND=false
+          for s in $SERVICES; do
+            if docker compose logs "$s" 2>&1 | grep -P "$PATTERN"; then
+              echo "::warning::possible error in $s logs (see above)"
+              FOUND=true
+            fi
+          done
+          if [ "$FOUND" = true ]; then
+            exit 1
+          fi
+
+      - name: Dump state on failure
+        if: failure()
+        run: |
+          docker compose ps
+          docker compose logs
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
