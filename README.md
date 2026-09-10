@@ -1,5 +1,8 @@
 # GRFICSv3 —  Open Source OT Security Lab
 
+[![Build and Push Multi-Arch Docker Images](https://github.com/Fortiphyd/GRFICSv3/actions/workflows/docker-image.yml/badge.svg)](https://github.com/Fortiphyd/GRFICSv3/actions/workflows/docker-image.yml)
+[![License: GPLv3](https://img.shields.io/github/license/Fortiphyd/GRFICSv3)](LICENSE)
+
 > **GRFICSv3** is a fully containerized OT / ICS cyber-physical security lab that simulates a industrial chemical plant.
 > It brings together realistic process dynamics, industrial protocols, engineering tools, and attacker infrastructure all inside Docker.
 >

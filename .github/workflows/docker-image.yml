@@ -395,11 +395,15 @@ jobs:
             if docker compose logs "$s" 2>&1 | grep -P "$PATTERN"; then
               echo "::warning::possible error in $s logs (see above)"
               FOUND=true
+            else
+              echo "$s: no obvious errors"
             fi
           done
           if [ "$FOUND" = true ]; then
+            echo "::error::one or more services had a possible error in their logs (see warnings above)"
             exit 1
           fi
+          echo "✅ No obvious errors found in logs for: $(echo "$SERVICES" | tr '\n' ' ')"
 
       - name: Dump state on failure
         if: failure()
