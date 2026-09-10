@@ -9,6 +9,13 @@ WORKDIR /workdir
 
 RUN find . -type f -name "*.sh" -exec chmod +x {} \;
 
+# bullseye is EOL: deb.debian.org no longer serves a valid (non-expired)
+# bullseye-security Release file. Point at the archive mirror instead, which
+# freezes EOL releases with stable metadata; archive.debian.org doesn't
+# publish security updates for archived releases at all, so drop that line
+# rather than point it somewhere that will also go stale.
+RUN sed -i 's|deb.debian.org|archive.debian.org|g; /security/d' /etc/apt/sources.list
+
 # 1. Install dependencies (runs once, cached unless package list changes)
 
 RUN apt-get update && apt-get install -y \
@@ -17,9 +24,9 @@ RUN apt-get update && apt-get install -y \
       && find utils/ -type f -exec dos2unix {} \; \
       && cd utils/matiec_src && rm -f config/missing \
       && autoreconf --install --force --verbose \
-      && rm -rf /var/lib/apt/lists/* \
+      && rm -rf /var/lib/apt/lists/*
 
-RUN  ./install.sh docker
+RUN ./install.sh docker
 
 # 2. Copy static configs and scripts that rarely change
 COPY webserver/dnp3.cfg /workdir/webserver/dnp3_default.cfg
