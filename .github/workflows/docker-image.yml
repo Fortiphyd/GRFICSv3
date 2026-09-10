@@ -184,24 +184,18 @@ jobs:
             IMAGE="${DOCKERHUB_NAMESPACE}/grfics-${SERVICE}"
             echo "🚀 Building ${IMAGE}:${DOCKER_TAG} (amd64)"
 
-            ATTEST_FLAGS="--provenance=true --sbom=true"
-            if [ "$SERVICE" = "attacker" ]; then
-              # kali + kali-tools-top10 + burpsuite pulls in thousands of
-              # packages; the generated SBOM exceeds BuildKit's attestation
-              # blob size limit (~40MiB) and fails image export. Skip
-              # attestations for this one image until upstream raises/removes
-              # that limit: https://github.com/moby/buildkit/issues/2773
-              echo "ℹ️ Skipping SBOM/provenance for ${SERVICE}: image is too large for BuildKit's attestation size limit"
-              ATTEST_FLAGS=""
-            fi
-
+            # SBOM/provenance attestation is disabled entirely: it hits
+            # BuildKit's ~40MiB attestation blob size limit on any
+            # sufficiently large image (hit attacker/kali first, then wazuh -
+            # a recurring pattern, not a one-off), and per-service exceptions
+            # are a losing game as base images keep growing.
+            # https://github.com/moby/buildkit/issues/2773
             docker buildx build \
               --platform linux/amd64 \
               --tag "${IMAGE}:${DOCKER_TAG}-amd64" \
               --push \
               --cache-from type=gha \
               --cache-to type=gha,mode=max \
-              $ATTEST_FLAGS \
               --build-arg "BUILD_VERSION=${{ steps.meta.outputs.version }}" \
               --build-arg "BUILD_CREATED=${{ steps.meta.outputs.created }}" \
               "./${SERVICE}"
@@ -247,24 +241,18 @@ jobs:
             IMAGE="${DOCKERHUB_NAMESPACE}/grfics-${SERVICE}"
             echo "🚀 Building ${IMAGE}:${DOCKER_TAG} (arm64)"
 
-            ATTEST_FLAGS="--provenance=true --sbom=true"
-            if [ "$SERVICE" = "attacker" ]; then
-              # kali + kali-tools-top10 + burpsuite pulls in thousands of
-              # packages; the generated SBOM exceeds BuildKit's attestation
-              # blob size limit (~40MiB) and fails image export. Skip
-              # attestations for this one image until upstream raises/removes
-              # that limit: https://github.com/moby/buildkit/issues/2773
-              echo "ℹ️ Skipping SBOM/provenance for ${SERVICE}: image is too large for BuildKit's attestation size limit"
-              ATTEST_FLAGS=""
-            fi
-
+            # SBOM/provenance attestation is disabled entirely: it hits
+            # BuildKit's ~40MiB attestation blob size limit on any
+            # sufficiently large image (hit attacker/kali first, then wazuh -
+            # a recurring pattern, not a one-off), and per-service exceptions
+            # are a losing game as base images keep growing.
+            # https://github.com/moby/buildkit/issues/2773
             docker buildx build \
               --platform linux/arm64 \
               --tag "${IMAGE}:${DOCKER_TAG}-arm64" \
               --push \
               --cache-from type=gha \
               --cache-to type=gha,mode=max \
-              $ATTEST_FLAGS \
               --build-arg "BUILD_VERSION=${{ steps.meta.outputs.version }}" \
               --build-arg "BUILD_CREATED=${{ steps.meta.outputs.created }}" \
               "./${SERVICE}"
