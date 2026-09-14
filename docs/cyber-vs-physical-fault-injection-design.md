@@ -71,11 +71,24 @@ and HMI *disagree*.
 
 ## 4. Cyber injects — four pairings
 
-### 4.1 Sensor freeze (cyber)
+### 4.1 Sensor freeze (cyber) — implemented and validated end-to-end
 
 - **Mechanism**: Kali ARP-spoofs the HMI's gateway, intercepts PLC→HMI
   responses for a given tag, captures one legitimate response, and replays it
   on a loop instead of forwarding fresh data.
+- **Implementation**: `attacker/cyber_injects/modbus_relay.py` - continuously
+  polls the real target and re-serves it on its own Modbus TCP port, with
+  frozen mode caching the first reading. An `iptables` PREROUTING REDIRECT
+  rule on Kali (port 502 → the relay's listen port) makes the ARP-spoofed
+  traffic actually terminate at the relay instead of merely flowing through.
+  Verified against real running containers: HMI, using its completely normal
+  connection to the PLC's real IP, received the frozen value, while a direct
+  read from the ICS side (the simulation container) showed the true,
+  still-changing value at the same moment - the PLC-vs-HMI disagreement tell
+  below, demonstrated live, not just designed on paper. Drift/noise/dropout
+  modes are implemented in the same script (mirroring
+  `TE_process.cc`'s `SENSOR_FAULT_*` constants) but not yet individually
+  validated the same way.
 - **Symptom**: HMI shows a static reading; PLC's own behavior keeps tracking
   the real, still-changing process.
 - **Tell**: PLC-vs-HMI disagreement (§3). Bonus forensic tell: a packet
@@ -280,6 +293,31 @@ more than statistical elegance when recruitment itself is the bottleneck.
   installed in the Kali image by default (only `dsniff`, `kali-tools-top10`,
   `python3-pymodbus`, `net-tools` are) - needs adding to
   `attacker/Dockerfile` for the real build.
+- ~~**Full Modbus-specific end-to-end validation**~~ — **done, not just the
+  HTTP stand-in above.** Built `attacker/cyber_injects/modbus_relay.py` and
+  ran the complete chain (ARP spoof + REDIRECT + the relay in frozen mode)
+  against real `plc`/`simulation`/`HMI`/`router`/`kali` containers. HMI,
+  polling the PLC's real IP exactly as it normally would, received a frozen
+  value while a direct read from the ICS side showed the true value still
+  changing at the same moment. Three things learned along the way, worth
+  recording so they don't get rediscovered:
+  - `python3-pymodbus` from kali-rolling's apt repo is 3.14+, which has a
+    substantially different, simulator-based datastore API than
+    `pymodbus==3.9.2`, already used by `simulation/remote_io/modbus/*.py`.
+    Fixed by pinning the same version via pip at build time instead (the lab
+    network is intentionally isolated at runtime, so this can't happen live
+    in a running container).
+  - A container reporting "healthy" doesn't mean every service inside it is
+    actually ready — `plc`'s healthcheck only probes its web UI (port 8080),
+    not its Modbus server, so there's a real gap where the container is
+    "healthy" but a fresh Modbus connection attempt still fails. Worth
+    building in a retry rather than assuming healthy = fully ready.
+  - The PLC's Modbus server exposes live, changing telemetry at input
+    register addresses starting around 100 (confirmed non-zero, live values
+    at 100-109), consistent with the `%IW100-112` mapping noted in
+    `plc/st_files/326339.st` from the earlier physical-fault investigation -
+    useful as a known-good target for testing without needing to reverse
+    ScadaLTS's own (serialized, not human-readable) point configuration.
 - **Where the "PLC's own view" check actually happens** for the read-path
   tells — via the EWS UI, a new diagnostic surface, or something else —
   isn't decided yet.
