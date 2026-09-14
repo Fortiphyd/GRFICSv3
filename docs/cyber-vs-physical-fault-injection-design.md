@@ -247,14 +247,26 @@ more than statistical elegance when recruitment itself is the bottleneck.
 
 ## 8. Open risks / questions to resolve before or during implementation
 
-- **ARP spoofing reliability** in this specific Docker macvlan setup,
-  Kali↔HMI specifically, hasn't been tested (the CI smoke-test work
-  validated macvlan connectivity in general, not ARP spoofing behavior on
-  it).
-- **Reset between trials**: a full container restart (HMI, and Kali to kill
-  the attack process) is the simplest reliable way to clear ARP-poisoning
-  state between participants — HMI's healthcheck has a slow ramp (~60s+
-  `start_period`), so this costs real time between trials.
+- ~~**ARP spoofing reliability** in this specific Docker macvlan setup~~ —
+  **resolved, confirmed working.** Verified empirically against real running
+  containers (`router`, `HMI`, `kali`, images pulled from Docker Hub):
+  `arpspoof -i eth1 -t <HMI> <router-IP>` (from `dsniff`, already installed
+  in the Kali image) successfully and continuously poisoned HMI's ARP cache
+  to point the router's IP at Kali's MAC. Better still, Kali's `ip_forward`
+  is already `1`, so the kernel transparently relayed a real HTTP request
+  from HMI through Kali to the actual router and back with no extra proxy
+  code — basic interception works out of the box. Rewriting Modbus content
+  in flight (rather than pure passthrough) will still need an explicit
+  userspace proxy (e.g. `iptables`/`NFQUEUE` + a `pymodbus`-based rewriter,
+  which is also already installed in the Kali image) rather than relying on
+  kernel forwarding alone.
+- ~~**Reset between trials**~~ — **resolved, cheaper than assumed.** A full
+  container restart is not necessary. Simply killing the `arpspoof` process
+  is enough — HMI's ARP cache self-healed back to the router's real MAC
+  within seconds on its own (confirmed via repeated checks and a forced
+  fresh request), no restart or manual cache-clearing needed. This avoids
+  paying HMI's slow healthcheck ramp (~60s+ `start_period`) between every
+  trial.
 - **Where the "PLC's own view" check actually happens** for the read-path
   tells — via the EWS UI, a new diagnostic surface, or something else —
   isn't decided yet.
