@@ -267,6 +267,19 @@ more than statistical elegance when recruitment itself is the bottleneck.
   fresh request), no restart or manual cache-clearing needed. This avoids
   paying HMI's slow healthcheck ramp (~60s+ `start_period`) between every
   trial.
+- ~~**Connection redirect + local termination**~~ — **resolved, confirmed
+  working.** Verified that ARP spoofing alone (kernel forwarding) only
+  gives passthrough, not rewriting capability, so also tested an
+  `iptables` PREROUTING REDIRECT rule on Kali (port 5000 &rarr; a local
+  listener on 8888) alongside the ARP spoof: HMI's request was served by
+  Kali's own local process, not passed through to the real router,
+  confirming the connection genuinely terminates at Kali rather than
+  merely flowing through it. This is the mechanism a pymodbus-based proxy
+  (server side accepting HMI's connection, client side talking to the real
+  PLC) would sit behind. **Implementation note**: `iptables` is not
+  installed in the Kali image by default (only `dsniff`, `kali-tools-top10`,
+  `python3-pymodbus`, `net-tools` are) - needs adding to
+  `attacker/Dockerfile` for the real build.
 - **Where the "PLC's own view" check actually happens** for the read-path
   tells — via the EWS UI, a new diagnostic surface, or something else —
   isn't decided yet.
