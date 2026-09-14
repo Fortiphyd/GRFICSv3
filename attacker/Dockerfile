@@ -35,9 +35,15 @@ RUN mkdir -p /var/run/xvfb /var/run/x11vnc /opt/novnc/utils && chown -R ${USERNA
 
 
 # Install tools
+# pymodbus comes from pip, not apt: kali-rolling's python3-pymodbus (3.14+)
+# has a substantially different, simulator-based datastore API than the
+# pymodbus==3.9.2 already used by simulation/remote_io/modbus/*.py, and the
+# lab network is intentionally isolated at runtime, so this must happen at
+# build time.
 RUN apt-get update && \
     apt-get -y install --no-install-recommends \
-    kali-tools-top10 python3-pymodbus
+    kali-tools-top10 iptables python3-pip \
+    && pip install --break-system-packages --no-cache-dir pymodbus==3.9.2
 
 # Supervisor config (to run xvfb, x11vnc, websockify)
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
