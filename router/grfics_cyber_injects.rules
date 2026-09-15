@@ -1,0 +1,14 @@
+# GRFICSv3 custom detection rules for the cyber fault-injection scenarios.
+# See docs/cyber-vs-physical-fault-injection-design.md.
+#
+# Deliberately not trying to distinguish "authorized" from "unauthorized"
+# writes here - Modbus has no authentication, and a compromised HMI can
+# issue a write that looks identical on the wire to a legitimate operator
+# action (same source IP, same protocol, same everything). No content-based
+# or source-based Suricata rule can reliably tell those apart. Instead this
+# logs every Modbus write, unconditionally, so the actual "tell" is a
+# frequency anomaly visible in Wazuh: baseline write rate vs. the burst rate
+# during an attack. That's checkable regardless of how legitimate the
+# traffic looks at the protocol level.
+
+alert modbus any any -> $MODBUS_SERVER 502 (msg:"GRFICS: Modbus Write Command Detected"; modbus: access write; classtype:misc-activity; priority:3; sid:9000001; rev:1;)

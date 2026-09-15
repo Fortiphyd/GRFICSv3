@@ -151,58 +151,84 @@ and HMI *disagree*.
   against an actual documented change record and check whether the timing
   and behavior genuinely match it.
 
-### 4.4 Stuck valve (cyber) — implemented and validated end-to-end
+### 4.4 Stuck valve (cyber) — revised to a compromised-HMI model, implemented and validated end-to-end
 
-- **Mechanism**: Kali intercepts an HMI→PLC setpoint write and injects
-  its own value. The PLC executes it as if it came from the operator,
-  because as far as the PLC can tell, it did — the real valve genuinely
-  moves.
-- **Implementation**: `attacker/cyber_injects/setpoint_inject.py`. Modbus TCP
-  has no authentication at all, so unlike 4.1-4.3 this doesn't need to
-  intercept anything — it's a direct write to the real PLC. Uses the
-  existing OpenPLC "manual mode" mechanism (already in
+**Revised from the original MITM-based plan.** The original design had Kali
+intercepting an HMI→PLC write in flight. The current version instead assumes
+the HMI itself is compromised (a CrashOverride/Industroyer-style model: the
+attacker either drops their own tool or leverages whatever's already on the
+host) and issues the write directly, using HMI's own real identity — no
+interception needed. This is both more realistic (real OT incidents
+overwhelmingly start with a compromised engineering workstation or HMI, not
+L2 MITM) and, deliberately, harder to catch: a write from a genuinely
+compromised HMI is indistinguishable on the wire from a legitimate operator
+action. That last point drove a real change in the tell (below) - the
+original "check the local audit log" design doesn't survive this revision,
+since a sufficiently capable host compromise could tamper with that same
+local log.
+
+- **Mechanism**: a script running on the HMI host issues the write directly
+  to the PLC. Uses the existing OpenPLC "manual mode" mechanism (already in
   `plc/st_files/326339.st`): a coil (`manual_mode`, `%QX0.0` → Modbus coil
   0) that, when set, makes the ladder logic use fixed manual setpoints
   (`%QW10-13` → holding registers 10-13, one per valve) instead of its own
-  closed-loop control. Verified against the real running PLC: with f1's
-  valve fully open (input register 100 = 65535) under normal automatic
-  control, writing coil 0 = `true` (manual mode on, no setpoint change
-  needed since the manual register already defaulted to 0) closed the valve
-  completely within about a second, with zero operator action - a script
-  running on Kali was the only thing that touched it. Disabling manual mode
-  immediately handed control back and the valve returned to its
-  automatically-controlled position. Also confirmed this is genuinely
-  "stuck," not just a one-off move: while manual mode stays set, the ladder
-  logic's `IF manual_mode THEN ... ELSE` means *no* normal operator
-  adjustment does anything until manual mode is turned back off.
+  closed-loop control.
+- **Implementation**: `attacker/cyber_injects/setpoint_inject.py` (usable
+  directly, e.g. from Kali, for a simpler MITM-free demo of the same
+  mechanism) plus a raw-socket equivalent for the "runs on HMI itself"
+  version - HMI is a Java/Mango-derived app (ScadaLTS) with no `pymodbus`
+  available, so the validated compromised-HMI test used nothing but
+  Python's stdlib `socket` module, which is itself a better match for
+  "leveraging what's already there" than dropping a new dependency would
+  have been. Verified against the real running PLC, executed from *inside*
+  HMI's own container: with f1's valve fully open (input register 100 =
+  65535) under normal automatic control, writing coil 0 = `true` closed the
+  valve completely within about a second, zero operator action. Disabling
+  manual mode immediately handed control back. Also confirmed this is
+  genuinely "stuck," not just a one-off move: while manual mode stays set,
+  the ladder logic's `IF manual_mode THEN ... ELSE` means *no* normal
+  operator adjustment does anything until manual mode is turned back off.
 - **Symptom**: operator sees a valve at an unexpected position with no memory
   of commanding it there.
-- **Tell**: check ScadaLTS/EWS's own local session/command audit log for a
-  matching authorized action at that timestamp. Since this is a pure
-  network-path attack (Kali never touched the HMI host), the HMI's local
-  audit log is untampered — no matching legitimate entry is real evidence.
-  **Not yet verified**: whether ScadaLTS actually keeps an accessible audit
-  log of operator actions, and if so how to query it, hasn't been checked -
-  this is the one part of the tell that's still just designed, not
-  confirmed to work as described.
-- **Distractor**: have a genuine, legitimate operator setpoint change happen
-  on a *different* valve close in time to the attack. Forces participants to
-  correctly correlate which specific change lacks an audit entry, rather
-  than simply noticing "a valve moved recently" and assuming that's
-  automatically the attack.
-- **Important finding — no MITM position was actually needed for this to
-  work**: every test above was a direct connection from Kali straight to the
-  PLC's Modbus port, no ARP spoofing involved, because the router's default
-  firewall (§8) forwards everything with no restrictions. Under a properly
-  locked-down deployment (only the HMI's IP permitted to reach the ICS
-  segment), this attack would need to run from behind the same ARP-spoofed
-  MITM position as 4.1-4.3 to reach the PLC at all. **Recommendation**: a
-  real training/study deployment of this lab should configure the router's
-  firewall to only permit HMI→PLC on the ICS segment (blocking Kali→PLC
-  directly) — otherwise the cyber side of the exercise is unrealistically
-  easy to *set up* (though this doesn't affect what a participant
-  diagnoses, only how faithfully the instructor's attack mirrors a real
-  segmented network).
+- **Tell — revised to a frequency anomaly in Wazuh, not a content or source
+  check.** No Suricata rule can reliably distinguish a legitimate write from
+  a compromised-HMI write - same source IP, same protocol, same everything.
+  So `router/grfics_cyber_injects.rules` (sid `9000001`) doesn't try: it
+  logs *every* Modbus write, unconditionally, regardless of source or
+  target address. The actual tell is the write *rate* Wazuh sees, ingesting
+  these via Suricata's existing `alerts.json` → wazuh-agent pipeline:
+  baseline is near-zero (confirmed: 0 alerts over a 30s idle window, since
+  ScadaLTS's default seed config doesn't do any writes on its own), while a
+  burst of repeated writes (e.g. malware re-asserting control, matching a
+  real pattern from actual ICS malware) produces a sharp, checkable spike -
+  confirmed 1:1: 10 writes issued, 10 alerts logged, no noise, no false
+  negatives. A locked-down deployment should still restrict the ICS segment
+  to just the HMI's IP (recommended in the prior revision of this section),
+  but that's now more about good network hygiene than about this specific
+  tell, since the whole point of the compromised-HMI model is that the
+  traffic looks legitimate regardless of firewall posture.
+- **Distractor**: a legitimate but unusual *burst* of writes that isn't an
+  attack - e.g. an engineer doing a batch of setpoint tuning across several
+  *different* valves during a documented commissioning/maintenance window.
+  Forces participants to look past raw count alone: a real tuning session
+  produces a scattered set of distinct, once-each adjustments across
+  different tags, while malware re-asserting control looks like rapid,
+  repeated writes to the *same* coil/register - the shape of the burst
+  matters, not just that a burst happened.
+- **Notable finding along the way**: the pre-existing Quickdraw rule most
+  obviously suited to this ("Unauthorized Write Request to a PLC",
+  sid `1111007`) never actually fires for *any* traffic in this lab -
+  `MODBUS_CLIENT`/`MODBUS_SERVER` are both defined as `$HOME_NET`, which
+  covers the entire lab, so its "not a recognized client" condition can
+  never be true internally. This was true before this revision too (it
+  wouldn't have fired for the original Kali-direct version either) - it's
+  a pre-existing gap, not something this revision introduced. Also found,
+  as a byproduct of testing rule-loading: `quickdraw.rules` has 17
+  pre-existing parse errors on this Suricata version (7.0.10) - undefined
+  rule-vars for BACnet/Modicon/FINS/S7, duplicate SIDs, and PCRE syntax
+  Suricata 7 rejects - meaning several vendored protections for other
+  protocols likely aren't loading at all. Worth a separate investigation;
+  out of scope for this change.
 
 ### Bonus: drift mode exists but isn't one of the four scoped pairings
 
@@ -290,7 +316,7 @@ Target: ~45-60 minutes total per participant.
 | 0. Briefing | ~5 min | Role, available tools (Wazuh, Suricata, ScadaLTS, EWS), what "done" looks like (stated conclusion + confidence + cited evidence). Do **not** disclose that scenarios are deliberately ambiguous or that distractors exist. |
 | 1. Familiarization | ~15-20 min | Environment is live under normal control; noise floor already running. This is where *ambient* distractor elements are established as baseline: near-equilibrium state, the historically-noisy tag, the maintenance-window note, one benign operator action observed. Also separates "do they know these tools" from "can they diagnose the ambiguity." |
 | 2. Event window | timed (core metric) | Real fault/attack triggered. Noise floor continues (minus quiet buffer). Episodic distractor patterns (second legitimate setpoint change, second benign ARP event) recur here too, reinforcing they're a stable feature of the environment. |
-| 3. Decision | ~5 min | Participant states cyber/physical, confidence, and specific evidence. Score against a rubric (did they check PLC-vs-HMI agreement? the audit log? IDS/ARP?) for richer data than right/wrong alone. |
+| 3. Decision | ~5 min | Participant states cyber/physical, confidence, and specific evidence. Score against a rubric (did they check PLC-vs-HMI agreement? Wazuh's write-frequency alerts? IDS/ARP?) for richer data than right/wrong alone. |
 | 4. Debrief | ~10-15 min | Reveal ground truth; gather qualitative feedback (did the distractor feel fair, how confident vs. how accurate were they) — useful material for the talk beyond raw numbers. |
 
 **Structural decision**: given recruiting real OT SOC analysts is the binding
