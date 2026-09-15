@@ -92,6 +92,9 @@ RUN if [ -f /usr/bin/xfce4-screensaver-command ] && [ ! -f /usr/bin/xfce4-screen
 COPY xfce-no-lock.sh /usr/local/bin/xfce-no-lock.sh
 RUN chmod +x /usr/local/bin/xfce-no-lock.sh
 
+# Cyber fault-injection tooling (see docs/cyber-vs-physical-fault-injection-design.md)
+COPY cyber_injects /opt/cyber_injects
+
 
 EXPOSE ${NOVNC_PORT} ${VNC_PORT}
 

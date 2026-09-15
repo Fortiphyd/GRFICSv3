@@ -85,10 +85,10 @@ and HMI *disagree*.
   connection to the PLC's real IP, received the frozen value, while a direct
   read from the ICS side (the simulation container) showed the true,
   still-changing value at the same moment - the PLC-vs-HMI disagreement tell
-  below, demonstrated live, not just designed on paper. Drift/noise/dropout
-  modes are implemented in the same script (mirroring
-  `TE_process.cc`'s `SENSOR_FAULT_*` constants) but not yet individually
-  validated the same way.
+  below, demonstrated live, not just designed on paper. Noise and dropout
+  (§4.2, §4.3) and drift (bonus, see below) are implemented in the same
+  script and validated the same way - direct relay logic plus one full
+  ARP-spoof+redirect chain test each.
 - **Symptom**: HMI shows a static reading; PLC's own behavior keeps tracking
   the real, still-changing process.
 - **Tell**: PLC-vs-HMI disagreement (§3). Bonus forensic tell: a packet
@@ -102,11 +102,14 @@ and HMI *disagree*.
   static (real equilibrium) or still changing while the readout never budges
   (fake).
 
-### 4.2 Sensor noise (cyber)
+### 4.2 Sensor noise (cyber) — implemented and validated
 
 - **Mechanism**: same MITM position; Kali adds randomized jitter to each
   intercepted read-path value before forwarding it. PLC's control loop still
-  runs on the true, smooth value.
+  runs on the true, smooth value. Same `modbus_relay.py` as 4.1 (`--mode 3
+  --severity <amplitude>`) - verified the reported value stays within
+  ±amplitude of the true value, varies unpredictably in both directions, and
+  shows no accumulating bias (unlike drift, below).
 - **Symptom**: HMI trend looks erratic; PLC-driven behavior (valve movement,
   downstream flows) stays smooth.
 - **Tell**: PLC-vs-HMI disagreement, plus a statistical tell — naive
@@ -120,11 +123,21 @@ and HMI *disagree*.
   comparison against that specific tag's own history rather than
   pattern-matching on "is anything noisy right now."
 
-### 4.3 Sensor dropout (cyber)
+### 4.3 Sensor dropout (cyber) — implemented and validated, mechanism revised
 
-- **Mechanism**: Kali drops or RSTs the HMI↔PLC Modbus TCP session for a
-  given tag on a duty cycle (same duty-cycle concept as the physical dropout
-  fault). PLC's connection to the actual field device is untouched.
+- **Mechanism** (revised from the original "drops or RSTs the session" plan):
+  same MITM position; on a fixed duty cycle (10s period, matching the
+  physical dropout fault), Kali substitutes `0` for the real value instead of
+  forwarding it - the TCP connection itself stays up throughout, both on the
+  HMI↔relay side and the relay↔PLC side. Deliberately *not* an actual
+  connection drop: breaking the TCP session would look like an obvious
+  network problem (an error, not a plausible reading), which would make this
+  *easier* to distinguish from the physical dropout fault, undermining the
+  whole point of a symptom-alike pairing. Serving `0` on a live connection is
+  exactly what the physical dropout fault already does (a NAMUR NE43-style
+  fail-low reading), so the two are indistinguishable at the HMI. Verified:
+  reported value cycles between `0` and the true value on the expected
+  cadence while the underlying connections never drop.
 - **Symptom**: HMI periodically shows a stale/error/zero reading.
 - **Tell**: a genuine field-device comms failure would *also* raise a
   loss-of-comms alarm at the PLC's own diagnostics level, since the PLC
@@ -155,6 +168,21 @@ and HMI *disagree*.
   correctly correlate which specific change lacks an audit entry, rather
   than simply noticing "a valve moved recently" and assuming that's
   automatically the attack.
+- **Status**: not yet implemented. This is a write-path attack (a different
+  mechanism than 4.1-4.3's read-path relay - see §3), so it needs its own
+  build, not just a new mode on `modbus_relay.py`.
+
+### Bonus: drift mode exists but isn't one of the four scoped pairings
+
+`modbus_relay.py` implements a fourth mode (`--mode 2`, drift) mirroring
+`TE_process.cc`'s `SENSOR_FAULT_DRIFT`, since it came for free from sharing
+one `FaultState` class across all modes. It's validated the same way as
+noise/dropout (steadily growing gap between true and reported values,
+confirmed both directly and through the full ARP-spoof+redirect chain), but
+there's no cyber-drift pairing in the four scoped in §4 - the physical drift
+fault doesn't currently have a cyber counterpart in this plan. Worth keeping
+in mind as a fifth pairing option later, or as one more type of event for the
+noise floor (§5), rather than scoping new work around it now.
 
 ### Cross-cutting distractor (applies to any/all of the above)
 
@@ -318,6 +346,12 @@ more than statistical elegance when recruitment itself is the bottleneck.
     `plc/st_files/326339.st` from the earlier physical-fault investigation -
     useful as a known-good target for testing without needing to reverse
     ScadaLTS's own (serialized, not human-readable) point configuration.
+  - Not a design gotcha, just a testing trap worth naming: a connection
+    failure from Kali to the PLC that looks identical to a firewall block or
+    a not-ready-yet PLC can also just mean the `router` container isn't
+    running - the actual error (`connect_ex` returning errno 113, "No route
+    to host") is diagnostic and worth checking before assuming anything more
+    interesting is going on.
 - **Where the "PLC's own view" check actually happens** for the read-path
   tells — via the EWS UI, a new diagnostic surface, or something else —
   isn't decided yet.
