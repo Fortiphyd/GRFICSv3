@@ -151,26 +151,58 @@ and HMI *disagree*.
   against an actual documented change record and check whether the timing
   and behavior genuinely match it.
 
-### 4.4 Stuck valve (cyber)
+### 4.4 Stuck valve (cyber) — implemented and validated end-to-end
 
 - **Mechanism**: Kali intercepts an HMI→PLC setpoint write and injects
   its own value. The PLC executes it as if it came from the operator,
   because as far as the PLC can tell, it did — the real valve genuinely
   moves.
+- **Implementation**: `attacker/cyber_injects/setpoint_inject.py`. Modbus TCP
+  has no authentication at all, so unlike 4.1-4.3 this doesn't need to
+  intercept anything — it's a direct write to the real PLC. Uses the
+  existing OpenPLC "manual mode" mechanism (already in
+  `plc/st_files/326339.st`): a coil (`manual_mode`, `%QX0.0` → Modbus coil
+  0) that, when set, makes the ladder logic use fixed manual setpoints
+  (`%QW10-13` → holding registers 10-13, one per valve) instead of its own
+  closed-loop control. Verified against the real running PLC: with f1's
+  valve fully open (input register 100 = 65535) under normal automatic
+  control, writing coil 0 = `true` (manual mode on, no setpoint change
+  needed since the manual register already defaulted to 0) closed the valve
+  completely within about a second, with zero operator action - a script
+  running on Kali was the only thing that touched it. Disabling manual mode
+  immediately handed control back and the valve returned to its
+  automatically-controlled position. Also confirmed this is genuinely
+  "stuck," not just a one-off move: while manual mode stays set, the ladder
+  logic's `IF manual_mode THEN ... ELSE` means *no* normal operator
+  adjustment does anything until manual mode is turned back off.
 - **Symptom**: operator sees a valve at an unexpected position with no memory
   of commanding it there.
 - **Tell**: check ScadaLTS/EWS's own local session/command audit log for a
   matching authorized action at that timestamp. Since this is a pure
   network-path attack (Kali never touched the HMI host), the HMI's local
   audit log is untampered — no matching legitimate entry is real evidence.
+  **Not yet verified**: whether ScadaLTS actually keeps an accessible audit
+  log of operator actions, and if so how to query it, hasn't been checked -
+  this is the one part of the tell that's still just designed, not
+  confirmed to work as described.
 - **Distractor**: have a genuine, legitimate operator setpoint change happen
   on a *different* valve close in time to the attack. Forces participants to
   correctly correlate which specific change lacks an audit entry, rather
   than simply noticing "a valve moved recently" and assuming that's
   automatically the attack.
-- **Status**: not yet implemented. This is a write-path attack (a different
-  mechanism than 4.1-4.3's read-path relay - see §3), so it needs its own
-  build, not just a new mode on `modbus_relay.py`.
+- **Important finding — no MITM position was actually needed for this to
+  work**: every test above was a direct connection from Kali straight to the
+  PLC's Modbus port, no ARP spoofing involved, because the router's default
+  firewall (§8) forwards everything with no restrictions. Under a properly
+  locked-down deployment (only the HMI's IP permitted to reach the ICS
+  segment), this attack would need to run from behind the same ARP-spoofed
+  MITM position as 4.1-4.3 to reach the PLC at all. **Recommendation**: a
+  real training/study deployment of this lab should configure the router's
+  firewall to only permit HMI→PLC on the ICS segment (blocking Kali→PLC
+  directly) — otherwise the cyber side of the exercise is unrealistically
+  easy to *set up* (though this doesn't affect what a participant
+  diagnoses, only how faithfully the instructor's attack mirrors a real
+  segmented network).
 
 ### Bonus: drift mode exists but isn't one of the four scoped pairings
 
@@ -268,11 +300,21 @@ cyber or physical, with or without its distractor), not multiple. Trades a
 larger required N for a much smaller per-participant time ask, which matters
 more than statistical elegance when recruitment itself is the bottleneck.
 
-## 7. Implementation surfaces (not yet built)
+## 7. Implementation surfaces
 
-- Kali: one parameterized MITM script (ARP-spoof + Modbus-rewriting proxy),
-  modes for freeze/noise/dropout (read-path) and inject (write-path), rather
-  than four separate scripts.
+- ~~Kali: one parameterized MITM script...~~ **done**:
+  `attacker/cyber_injects/modbus_relay.py` (read-path: frozen/drift/noise/
+  dropout) and `attacker/cyber_injects/setpoint_inject.py` (write-path:
+  stuck valve) — two scripts rather than one, since the read-path relay and
+  the write-path injection turned out to need genuinely different
+  mechanisms (intercept-and-reserve vs. a direct unauthenticated write),
+  not just different modes of the same tool. Both baked into
+  `attacker/Dockerfile` via `COPY cyber_injects /opt/cyber_injects`. Neither
+  has runtime control yet — both take their configuration via CLI args,
+  restart/rerun to change.
+
+Still not built:
+
 - EWS: small automation for periodic legitimate setpoint nudges (noise
   floor).
 - Kali or router: small script for benign ARP churn (noise floor).
@@ -283,8 +325,9 @@ more than statistical elegance when recruitment itself is the bottleneck.
   controls (mode/severity where applicable, a seed input for the noise
   floor).
 - Some new control surface on Kali the dashboard can reach to start/stop/
-  configure the MITM script and noise floor (mirrors how the simulation
-  container already exposes a control channel for physical faults).
+  configure the relay/injection scripts and noise floor (mirrors how the
+  simulation container already exposes a control channel for physical
+  faults).
 
 ## 8. Open risks / questions to resolve before or during implementation
 
