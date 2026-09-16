@@ -151,7 +151,7 @@ and HMI *disagree*.
   against an actual documented change record and check whether the timing
   and behavior genuinely match it.
 
-### 4.4 Stuck valve (cyber) — revised to a compromised-HMI model, implemented and validated end-to-end
+### 4.4 Stuck valve (cyber) — compromised-HMI model; core mechanism validated, beacon delivery not yet
 
 **Revised from the original MITM-based plan.** The original design had Kali
 intercepting an HMI→PLC write in flight. The current version instead assumes
@@ -188,6 +188,37 @@ local log.
   genuinely "stuck," not just a one-off move: while manual mode stays set,
   the ladder logic's `IF manual_mode THEN ... ELSE` means *no* normal
   operator adjustment does anything until manual mode is turned back off.
+- **Delivery mechanism — beacon/C2, not SSH-in, implemented but not yet
+  live-validated.** Considered having Kali actively SSH into HMI to run the
+  write (simpler, and still more realistic than the earlier MITM plan), but
+  settled on a persistent outbound-beaconing implant instead:
+  `scadalts/cyber_injects/beacon_client.py` runs continuously on HMI from
+  container start (wired into `scadalts/supervisord.conf`, matching how
+  every other daemon in that container is managed), periodically checking
+  in with `attacker/cyber_injects/c2_listener.py` on Kali (wired into
+  `attacker/supervisord.conf` the same way) over a small JSON-over-TCP
+  protocol, and executing whatever command is queued there (reusing the
+  same raw-socket `write_coil`/`write_register` logic already validated in
+  `setpoint_inject.py`). This is a better match for how real ICS
+  malware actually persists and gets commanded (Stuxnet, TRITON, and most
+  real APT tooling beacon outbound rather than requiring the attacker to
+  hold working inbound credentials - egress filtering is far less commonly
+  enforced than ingress filtering, including in real OT networks), and it
+  opens up beaconing detection specifically as a distinct, valuable
+  teachable skill (a host making periodic outbound connections with
+  regular timing/size to an unusual destination is a classic, well-known
+  SOC/C2-hunting technique, and a natural pairing with a legitimate
+  periodic connection as a noise-floor distractor - see §5). Both scripts
+  are written and manually reviewed, and the Dockerfile/supervisord wiring
+  for both containers is in place, but **live end-to-end validation
+  (confirmed beacon check-ins actually reaching Kali, a queued command
+  actually being picked up and executed, and - the open question this
+  would also answer - whether Suricata on the router's eth2 can even see
+  Kali↔HMI traffic at all, since they're on the same DMZ segment and
+  same-subnet traffic between macvlan endpoints may never actually transit
+  the router's interface) has not been done yet**, unlike everything else
+  in this document, which was validated against the real running stack
+  before being written up here.
 - **Symptom**: operator sees a valve at an unexpected position with no memory
   of commanding it there.
 - **Tell — revised to a frequency anomaly in Wazuh, not a content or source
@@ -331,13 +362,22 @@ more than statistical elegance when recruitment itself is the bottleneck.
 - ~~Kali: one parameterized MITM script...~~ **done**:
   `attacker/cyber_injects/modbus_relay.py` (read-path: frozen/drift/noise/
   dropout) and `attacker/cyber_injects/setpoint_inject.py` (write-path:
-  stuck valve) — two scripts rather than one, since the read-path relay and
-  the write-path injection turned out to need genuinely different
-  mechanisms (intercept-and-reserve vs. a direct unauthenticated write),
-  not just different modes of the same tool. Both baked into
-  `attacker/Dockerfile` via `COPY cyber_injects /opt/cyber_injects`. Neither
-  has runtime control yet — both take their configuration via CLI args,
-  restart/rerun to change.
+  stuck valve, MITM-free demo version) — two scripts rather than one, since
+  the read-path relay and the write-path injection turned out to need
+  genuinely different mechanisms (intercept-and-reserve vs. a direct
+  unauthenticated write), not just different modes of the same tool. Both
+  baked into `attacker/Dockerfile` via `COPY cyber_injects /opt/cyber_injects`.
+- **Written, not yet live-validated** (§4.4, §8): `attacker/cyber_injects/
+  c2_listener.py` (Kali, always-on via `attacker/supervisord.conf`) and
+  `scadalts/cyber_injects/beacon_client.py` (HMI, always-on via
+  `scadalts/supervisord.conf`) — the beacon/C2 delivery mechanism for the
+  stuck-valve pairing's compromised-HMI model. Both baked into their
+  respective Dockerfiles.
+- None of the above has runtime control yet — everything takes its
+  configuration via CLI args/hardcoded startup flags, restart/rerun to
+  change (the beacon/C2 pair's one exception: a command can be queued for
+  the implant without restarting anything, by writing to
+  `/tmp/c2_pending_command.json` on Kali - see the script's docstring).
 
 Still not built:
 
@@ -353,7 +393,9 @@ Still not built:
 - Some new control surface on Kali the dashboard can reach to start/stop/
   configure the relay/injection scripts and noise floor (mirrors how the
   simulation container already exposes a control channel for physical
-  faults).
+  faults). For the beacon/C2 pair specifically, this could be as simple as
+  the dashboard writing to the same pending-command file/API a manual
+  `docker exec` currently would.
 
 ## 8. Open risks / questions to resolve before or during implementation
 
@@ -427,6 +469,25 @@ Still not built:
 - **Statistical power**: given the likely small volunteer N and a
   between-subjects design, results should be framed explicitly as a pilot,
   not a statistically powered study.
+- **Can Suricata even see the beacon traffic? Not yet checked.** Kali and
+  HMI are both on the DMZ segment (§3); Suricata sits on the router's eth2
+  interface. Same-subnet macvlan traffic between two endpoints on the same
+  segment may never actually transit the router's interface at all (macvlan
+  switches it directly), in which case Suricata would never see the
+  beacon's check-ins no matter how it's configured - a fundamentally
+  different problem than "no rule matches it" (§4.4's Suricata finding),
+  and one that would need a real network-level fix (a SPAN/mirror port, or
+  moving the beacon to cross a router-monitored boundary) rather than a
+  rule change. This needs checking before assuming beaconing detection is
+  buildable at all with the current monitoring setup.
+- **Live validation of the beacon/C2 mechanism is outstanding** (§4.4) -
+  written and reviewed, wired into both containers' supervisord configs,
+  but not yet run against the real stack. This session hit a tooling
+  restriction partway through that blocked further container manipulation;
+  picking this back up just means bringing up `router`, `hmi`, `kali`,
+  `plc`, `simulation` and confirming beacon check-ins arrive, a queued
+  command gets executed, and (per the point above) what if anything
+  Suricata logs about the beacon connection itself.
 
 ## 9. Broader evidence plan for the talk (context, not part of this build)
 
