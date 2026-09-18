@@ -45,13 +45,43 @@ def save_offset(offset):
         f.write(str(offset))
 
 
+def sanitize_keys(obj):
+    """Rename a nested-object "id" field to "conn_id", recursively.
+
+    Zeek's JSON logs write connection endpoints as a dotted key
+    ("id.orig_h", "id.orig_p", ...) for what's conceptually a nested "id"
+    object. Wazuh's own JSON decoder already reconstructs this into a
+    real nested object (confirmed by inspecting the raw alerts.json:
+    "data": {"id": {"orig_h": ..., "orig_p": ..., ...}}) before this
+    script ever sees it - so there are no literal dots left to replace by
+    the time an alert reaches here. The actual conflict is a field-name
+    collision: Wazuh's pre-baked wazuh-template.json already maps
+    "data.id" as a plain keyword string (several built-in decoders use a
+    simple "id" field that way), so OpenSearch rejects any document where
+    the same path is an object instead - confirmed live with
+    mapper_parsing_exception, silently for every single Zeek-sourced
+    alert (any Zeek log with a conn_id field, not just Modbus) until this
+    fix. Renaming just the colliding key avoids the conflict without
+    needing to touch Wazuh's own template or Zeek's upstream output.
+    """
+    if isinstance(obj, dict):
+        out = {}
+        for k, v in obj.items():
+            key = "conn_id" if k == "id" and isinstance(v, dict) else k
+            out[key] = sanitize_keys(v)
+        return out
+    if isinstance(obj, list):
+        return [sanitize_keys(v) for v in obj]
+    return obj
+
+
 def index_batch(alerts):
     today = datetime.now(timezone.utc).strftime("%Y.%m.%d")
     index = f"wazuh-alerts-4.x-{today}"
     bulk = ""
     for a in alerts:
         bulk += json.dumps({"index": {"_index": index}}) + "\n"
-        bulk += json.dumps(a) + "\n"
+        bulk += json.dumps(sanitize_keys(a)) + "\n"
     data = bulk.encode()
     req = urllib.request.Request(
         OPENSEARCH + "/_bulk", data=data,
@@ -60,8 +90,22 @@ def index_batch(alerts):
     )
     try:
         with urllib.request.urlopen(req, context=ctx, timeout=15) as r:
-            return r.status in (200, 201)
-    except Exception:
+            if r.status not in (200, 201):
+                return False
+            # A 200 only means the bulk request itself was processed - it
+            # says nothing about whether individual documents inside it
+            # succeeded. This is exactly how the original mapping-conflict
+            # bug went unnoticed: silently dropped, zero-error, offset
+            # still advanced. Check each item explicitly.
+            resp = json.loads(r.read())
+            if resp.get("errors"):
+                for item in resp.get("items", []):
+                    err = item.get("index", {}).get("error")
+                    if err:
+                        print(f"[alerts-indexer] index error: {err.get('type')}: {err.get('reason')}", flush=True)
+            return True
+    except Exception as e:
+        print(f"[alerts-indexer] bulk request failed: {e}", flush=True)
         return False
 
 

@@ -474,6 +474,54 @@ being aware of as a real, if apparently not load-bearing, design gap in a
 third-party package - just not confirmed to cause a practical problem
 under normal (non-churning) operation.
 
+### 5.11 Zeek's `id` field collides with Wazuh's own schema - alerts were generated correctly but silently never indexed, for a long time
+
+After §4.3/§5.6 appeared to be fully working (real alerts confirmed in
+`alerts.log`), the user still reported seeing nothing in the actual Wazuh
+dashboard. The full pipeline turned out to have a third, independent
+failure stage beyond collection and alerting: **indexing**.
+`/usr/local/bin/alerts-indexer.py` (this project's own lightweight
+Filebeat replacement - see its own docstring) tails `alerts.json` and
+bulk-indexes into OpenSearch, but only checked the *overall* HTTP status
+of each bulk request (200/201), never each item's individual result -
+which is exactly how this went unnoticed. OpenSearch's bulk API returns
+200 for a request that was *processed*, independent of whether individual
+documents inside it succeeded.
+
+Root cause, confirmed by inspecting the raw `alerts.json` structure
+directly: Wazuh's own JSON decoder reconstructs Zeek's dotted
+`"id.orig_h"`/`"id.orig_p"`/etc. keys into a real nested object -
+`"data": {"id": {"orig_h": ..., "orig_p": ..., ...}}` - before the alert
+is ever written to `alerts.json`. But Wazuh's pre-baked
+`wazuh-template.json` already maps `data.id` as a plain `keyword` string
+(several built-in decoders use a simple string "id" field that way), so
+OpenSearch's dynamic mapper rejects every document where that same path
+is an object instead, with `mapper_parsing_exception`. This affects *any*
+Zeek log with a `conn_id`-shaped `id` field (which is nearly all of
+them - `conn.log`, `notice.log`, `modbus_detailed.log`), not just Modbus.
+
+Confirmed as the real cause by testing both wrong and right hypotheses
+directly against the live index rather than guessing:
+- First attempt: assumed the literal dots in Zeek's *raw* key names were
+  the problem and tried replacing `.` with `_` in a general JSON-key
+  sanitizer. Redeployed, same error - because by the time this script
+  sees the alert, there are no dots left; Wazuh already expanded them
+  into a real nested object.
+- Second attempt, verified against the actual raw JSON: renaming the
+  specific colliding field - `data.id` (when it's an object, not the
+  unrelated top-level alert `id` or `agent.id`, both plain strings) to
+  `data.conn_id` - tested directly via a manual `_bulk` call first
+  (`"errors":false`), *then* deployed. Confirmed live: `wazuh-alerts-*`
+  document count went from 2,157 (stuck, despite 111,000+ matching lines
+  already in `alerts.log`) to growing continuously within seconds of the
+  fix landing, with zero new mapping errors.
+
+Also fixed alongside, since it's what let this go unnoticed for as long
+as it did: `index_batch()` now parses the bulk response body and logs
+each item's individual error (previously: completely silent, and the
+read offset still advanced past the failed documents regardless, so they
+were gone for good, not just delayed).
+
 ## 6. Open risks / questions
 
 - ~~CIDR-scoped `tc flower` filtering~~ — **resolved, validated live**
@@ -502,6 +550,14 @@ under normal (non-churning) operation.
   specifically. What's still open: a *frequency/correlation* rule for the
   beacon signature demonstrated in §3 (connection-pattern anomaly, not
   Modbus content) - the current rules cover ICS content, not that.
+- ~~Alerts generated correctly but never reaching the dashboard~~ —
+  **resolved** (§5.11): a field-name collision between Zeek's `id` (a
+  nested conn_id object once Wazuh's own decoder reconstructs it) and
+  Wazuh's pre-baked template (`data.id` mapped as a plain keyword) was
+  silently dropping every Zeek-sourced alert at the indexing stage - the
+  one pipeline stage after collection (§4.3) and rule-matching (§5.6)
+  that hadn't been checked yet. `alerts-indexer.py` now renames the
+  colliding field and logs indexing errors instead of swallowing them.
 - ~~Zeek reporting from an admin-bridge IP instead of a real subnet IP~~ —
   **resolved** (§4.1): `zeek` now joins `c-dmz-net` too (`192.168.90.30`),
   matching every other agent's convention.
