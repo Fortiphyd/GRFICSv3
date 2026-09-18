@@ -249,6 +249,28 @@ services:
         ipv4_address: 192.168.90.20
         priority: 100
 
+  zeek:
+    profiles: [siem]
+    image: fortiphyd/grfics-zeek
+    container_name: zeek
+    hostname: zeek
+    build:
+      context: ./zeek
+      args:
+        BUILD_VERSION: ${BUILD_VERSION:-unknown}
+        BUILD_CREATED: ${BUILD_CREATED:-unknown}
+    restart: unless-stopped
+    dns:
+      - 192.168.90.200
+    networks:
+      a-grfics-admin:
+    # No b-ics-net/c-dmz-net membership, and no special capabilities - this
+    # container gets its traffic from a "mirror0" interface that only
+    # exists once an instructor separately runs zeek/enable-mirror.sh on
+    # the host (see docs/zeek-network-mirroring-design.md). Idles safely
+    # otherwise. Same [siem] profile as wazuh, since it's useless without
+    # a manager to ship logs to.
+
 networks:
   b-ics-net:
     driver: macvlan

@@ -113,86 +113,114 @@ container's own netns. (First attempt at checking this looked like another
 dropped-packet problem — only 1 of 5 packets visible — but that was just
 checking the log file too early; the full log had all 10.)
 
-**Not yet validated**: CIDR-scoped filtering. `matchall` mirrors literally
+**CIDR-scoped filtering — done, validated.** `matchall` mirrors literally
 everything on the physical interface — confirmed via interface counters,
 which jumped by 480 packets for a 5-ping test, almost all unrelated
-background host/NIC traffic. The real script needs `tc flower` filters
-matching the lab's actual subnets (`192.168.90.0/24`, `192.168.95.0/24`,
-both as source and destination, both directions) instead of `matchall`, so
-Zeek only ever sees lab traffic. This is a standard, well-understood tc
-capability, but hasn't been tested with the real flower syntax yet — treat
-as the next concrete implementation step, not a settled fact.
+background host/NIC traffic. Replaced with `tc flower` filters matching
+`dst_ip` against the lab's two subnets (both `ingress` and `egress`, both
+subnets — 4 filters total; matching on destination alone in both
+directions was enough to see complete two-way exchanges with zero
+duplication, confirmed live). Validated two ways: a clean synthetic 5-ping
++ 1-ping test showed every packet, correctly ordered, no duplicates; and,
+unprompted, the filter picked up real background lab traffic (PLC↔remote-IO
+Modbus polling) once the real `plc`/`simulation` containers turned out to
+already be running — confirming the scoping works on genuine multi-host
+traffic, not just a synthetic pair.
 
-### Why this closes the Suricata blind spot specifically
+### Why this closes the Suricata blind spot specifically — confirmed live, not just in theory
 
 This isn't just "better visibility in general" — it's the direct fix for
-the exact gap found in §4.4 of the fault-injection doc. The beacon/C2
-channel between Kali and HMI is same-subnet macvlan traffic, which is
-precisely the category this mechanism captures (it's parent-NIC-level, not
-macvlan-sub-interface-level). Once built, Zeek would have a real shot at
-beaconing detection (periodic outbound check-ins with regular timing/size)
-for that scenario — the thing §4.4 flagged as needing "a different sensor"
-than Suricata.
+the exact gap found in §4.4 of the fault-injection doc, and this was
+confirmed directly during implementation, not just argued for: with the
+real `zeek` compose service running and mirroring enabled via the real
+`enable-mirror.sh` (not a stand-in), Zeek's `conn.log` immediately showed
+the actual beacon/C2 channel from the stuck-valve cyber inject —
+`192.168.90.107` (HMI) → `192.168.90.6:4444` (Kali's C2 listener) —
+recurring every ~5 seconds, exactly matching `beacon_client.py`'s
+`--interval 5.0` default. That's a genuine, live beaconing signature,
+now visible, that Suricata is structurally blind to (§4.4). The same
+capture simultaneously showed PLC↔remote-IO Modbus polling on the ICS-LAN
+subnet - one sensor, both subnets, at once, as designed.
 
 ## 4. Architecture / implementation surfaces
 
-**Not yet built** — this section describes the design to implement, not
-completed work.
+**Built and validated end-to-end** against the real stack, including a live
+capture of the real beacon/C2 channel (§3).
 
-### 4.1 Zeek service (`docker-compose.yml`)
+### 4.1 Zeek service (`docker-compose.yml`, `zeek/`)
 
-- New `zeek` service, completely standard Docker networking — joins
-  `a-grfics-admin` only (to reach Wazuh for log shipping), *not*
-  `b-ics-net`/`c-dmz-net`, and no `network_mode: host`. It gets its traffic
-  from the mirror veth, not from network membership.
-- Needs a wrapper/entrypoint that tolerates `mirror0` not existing (the
-  default state — mirroring is opt-in) and existing/disappearing at
-  arbitrary times (`disable-mirror.sh` deletes the veth pair, which removes
-  `mirror0` out from under a running Zeek process). Exact supervision
-  strategy — retry loop, restart on interface loss — still to be designed.
-- **Open risk, not yet checked**: does the official Zeek package (Debian/
-  Ubuntu-based, per zeek.org's own repos) link against a working libpcap on
-  this class of host, or does it inherit the exact bug found in §5.1? Needs
-  testing against a real Zeek build before assuming it's fine — this bit
-  us once already in this exact investigation.
+- New `zeek` service, behind the same `profiles: [siem]` gate as `wazuh` —
+  it's useless without a manager to ship logs to, so it doesn't start with
+  a plain `docker compose up` either. Completely standard Docker
+  networking — joins `a-grfics-admin` only, *not* `b-ics-net`/`c-dmz-net`,
+  no `network_mode: host`, no added capabilities (confirmed live: the
+  container starts and captures fine with zero `cap_add` — Docker's
+  default `NET_RAW` is enough, and the mirror veth's own setup happens
+  from the *host* side via `enable-mirror.sh`, not from anything the
+  container itself needs to do).
+- Base image: the official `zeek/zeek:9.0.0` (Debian **trixie**, not
+  bookworm) — resolves the open risk below. `zeek/local.zeek` keeps most
+  of Zeek's own recommended default policy (asset tracking, software
+  version/vulnerability tracking, SQL-injection detection) and adds
+  `LogAscii::use_json = T` plus the lab's two subnets as `Site::local_nets`.
+- `zeek/zeek-start.sh`: waits for `mirror0` to exist (polling every 5s)
+  before starting `zeek -i mirror0 local`; supervisord's `autorestart`
+  handles the rest. **Validated live, including the exact failure mode
+  this exists for**: mirroring was disabled (deleting `mirror0`) while
+  Zeek was running, then re-enabled — Zeek kept running the whole time and
+  picked up traffic on the recreated interface with no restart needed at
+  all. Better than the design called for; worth knowing this held on this
+  host, though the exact mechanism (why an AF_PACKET capture survives its
+  interface being deleted and recreated with the same name) wasn't dug
+  into further.
+- ~~**Open risk, not yet checked**: does the official Zeek package link
+  against a working libpcap on this class of host, or does it inherit the
+  exact bug found in §5.1?~~ **Resolved, no.** `zeek/zeek:9.0.0` runs
+  Debian trixie, a different libpcap build than bookworm's broken one —
+  confirmed working via a live loopback TCP test (a real connection logged
+  correctly in `conn.log`) before building anything else on top of it.
 
-### 4.2 `enable-mirror.sh` / `disable-mirror.sh`
+### 4.2 `enable-mirror.sh` / `disable-mirror.sh` — built and validated
 
 Run separately from `docker compose up`, by design — deep packet mirroring
-becomes a clearly-labeled, opt-in advanced feature, not part of the default
+is a clearly-labeled, opt-in advanced feature, not part of the default
 install path. Requires a native Linux Docker host (WSL2 counts, per all the
 testing in this doc) and root/`sudo`; not usable from Docker Desktop's VM.
 
-`enable-mirror.sh`:
-1. Resolve the Zeek container's PID (`docker inspect -f '{{.State.Pid}}' zeek`).
-2. Resolve the macvlan parent interface automatically from the existing
-   network config (`docker network inspect grficsv3_c-dmz-net`) rather than
-   asking the user to re-specify it — it's already the same value set once
-   in `docker-compose.yml`'s `driver_opts.parent`. Keeps the script itself
-   zero-configuration: `sudo ./enable-mirror.sh` and nothing else.
-3. Create the veth pair, wire one end into Zeek's netns as `mirror0`.
-4. Install the `tc mirred` filters on the parent interface (§3).
-5. Idempotent — detect and no-op (with a message) if already enabled,
-   rather than erroring or double-installing filters.
+`enable-mirror.sh`: resolves the zeek container's PID and the macvlan
+parent interface/both subnets straight from the existing Docker network
+config (`docker network inspect grficsv3_c-dmz-net`/`grficsv3_b-ics-net`) -
+zero hardcoded IPs, zero user-supplied config, just `sudo ./enable-mirror.sh`.
+Creates the veth pair, wires one end into Zeek's netns as `mirror0`,
+installs the `tc flower` filters (§3). Idempotent — no-ops with a message
+if already enabled. **Validated by actually running the committed script
+file** (not a hand-typed reproduction) via a root-equivalent helper against
+the real `zeek` compose service, twice (enable → disable → re-enable), with
+the real beacon channel showing up in Zeek's `conn.log` each time.
 
-`disable-mirror.sh`: remove the `tc qdisc` from the parent interface (this
-takes all its filters with it in one operation) and delete the veth pair.
-Graceful no-op if not currently enabled.
+`disable-mirror.sh`: removes the `tc qdisc` from the parent interface
+(takes all its filters with it in one step) and deletes the veth pair.
+Graceful no-op if not enabled. Validated the same way - confirmed clean
+teardown via `tc qdisc show`/`ip link show` afterward, no residual state
+left on the host.
 
-### 4.3 Wazuh log shipping
+### 4.3 Wazuh log shipping — config written, not live-tested
 
 Same pattern as the existing Suricata → Wazuh pipeline
 (`router/Dockerfile`'s `<localfile><log_format>json</log_format>...`):
-
-- Configure Zeek for JSON logs (`redef LogAscii::use_json = T;` or the
-  equivalent policy load) instead of its default TSV.
-- Install a wazuh-agent in the Zeek container (matching `scadalts/
-  Dockerfile`'s pattern), reporting to `192.168.90.20`.
-- Ship `notice.log` first — Zeek's own anomaly/notice framework, the
-  closest equivalent to Suricata's `alerts.json`. `conn.log` (full
-  connection summaries) is useful supplementary context for future
-  correlation rules but high-volume; whether to ship it too, and how much
-  of it, is an open question rather than a default-yes.
+`zeek/Dockerfile` installs a wazuh-agent (reporting to `192.168.90.20`,
+matching every other agent in the lab) and adds a `<localfile>` entry for
+`/usr/local/zeek/logs/notice.log` with `log_format json`. **Not yet
+live-tested against a running Wazuh manager** - config matches the working
+Suricata pattern exactly, but (like the pre-existing note in the
+fault-injection doc about the Wazuh manager container being stale/
+untested) actually confirming ingestion wasn't done as part of this build.
+`conn.log` is not shipped - `notice.log` only, for now; whether to add
+`conn.log` too, and how much of it, is still an open question rather than
+a default-yes (it's high-volume, and the beacon-detection payoff already
+demonstrated in §3 came from reading `conn.log` by hand, not through
+Wazuh - a real correlation/frequency rule for beaconing based on it doesn't
+exist yet).
 
 ## 5. Gotchas found along the way (worth recording so they don't get rediscovered)
 
@@ -232,13 +260,22 @@ directly.
 
 ## 6. Open risks / questions
 
-- CIDR-scoped `tc flower` filtering — designed, not yet tested (§3).
-- Zeek's own supervision strategy for a mirror interface that can appear/
-  disappear at runtime — not designed yet (§4.1).
-- Whether the official Zeek package inherits the §5.1 libpcap bug — not
-  checked.
-- How much of `conn.log` (if any) to ship to Wazuh alongside `notice.log` —
-  not decided (§4.3).
+- ~~CIDR-scoped `tc flower` filtering~~ — **resolved, validated live**
+  (§3, §4.2).
+- ~~Zeek's own supervision strategy for a mirror interface that can appear/
+  disappear at runtime~~ — **turned out not to need one.** Zeek survived a
+  disable/re-enable cycle with no restart and no dropped visibility,
+  confirmed live (§4.1). Worth re-checking if this is ever deployed on a
+  meaningfully different host/kernel, since the exact mechanism isn't
+  understood, just the outcome.
+- ~~Whether the official Zeek package inherits the §5.1 libpcap bug~~ —
+  **resolved, no** (§4.1).
+- Live Wazuh ingestion of `notice.log` - config written and matches the
+  working Suricata pattern, but not actually run against a live manager
+  (§4.3).
+- How much of `conn.log` (if any) to ship to Wazuh alongside `notice.log`,
+  and whether a real frequency/correlation rule for the beacon signature
+  found in §3 gets built - not decided (§4.3).
 - No dashboard/runtime control for any of this — `enable-mirror.sh`/
   `disable-mirror.sh` are deliberately separate, manual, host-level scripts
   for now, consistent with keeping this feature out of the default install
