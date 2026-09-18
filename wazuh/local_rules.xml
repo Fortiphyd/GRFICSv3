@@ -24,19 +24,35 @@
   events to the manager; without a rule, they're received and then
   silently dropped (logall_json is off by default) - a rule is what
   actually turns them into visible alerts.
+
+  Both rules are level 0 (categorize, don't alert) - DELIBERATELY, not a
+  placeholder. Level 3 (any event) produced ~1000 alerts/sec against this
+  lab's real PLC traffic and started overwhelming the indexer within
+  minutes of going live - confirmed live, not theoretical. Worse: the
+  plan to instead alert only on writes doesn't work either, because this
+  lab's remote-IO simulation issues a WRITE_MULTIPLE_REGISTERS on every
+  single normal poll cycle (not just during an attack) - "a write
+  happened" isn't an anomaly signal here at all, unlike the coarser
+  network-level (Suricata) write-frequency tell designed in
+  docs/cyber-vs-physical-fault-injection-design.md §4.4, which only sees
+  writes it wouldn't otherwise see baseline-zero of. A real rule needs to
+  be a *rate/threshold* rule (Wazuh's <frequency>/<timeframe>, comparing
+  against this traffic's real baseline write rate) or a *content* rule
+  (an unexpected address/value/source), not "did a write happen" - that
+  hasn't been designed yet, see docs/zeek-network-mirroring-design.md §6.
 -->
 <group name="modbus,ics,zeek,">
 
-  <rule id="100100" level="3">
+  <rule id="100100" level="0">
     <location>/usr/local/zeek/logs/modbus_detailed.log</location>
-    <description>Zeek: Modbus protocol event</description>
+    <description>Zeek: Modbus protocol event (categorization only, not alerted)</description>
     <group>modbus,ics,</group>
   </rule>
 
-  <rule id="100101" level="7">
+  <rule id="100101" level="0">
     <if_sid>100100</if_sid>
     <field name="func">WRITE</field>
-    <description>Zeek: Modbus write command ($(func)) to $(id.resp_h), address $(address)</description>
+    <description>Zeek: Modbus write command (categorization only, not alerted)</description>
     <group>modbus,ics,ics_write,</group>
   </rule>
 

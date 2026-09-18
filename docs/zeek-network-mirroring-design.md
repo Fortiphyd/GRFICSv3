@@ -522,8 +522,65 @@ each item's individual error (previously: completely silent, and the
 read offset still advanced past the failed documents regardless, so they
 were gone for good, not just delayed).
 
+### 5.12 With indexing finally working, the alert *volume* itself became the problem - "any write" isn't a usable signal against real traffic
+
+Within minutes of §5.11 landing, real alerts were flowing at roughly
+1000/sec, on track to overwhelm the indexer and OpenSearch (not yet
+critical when checked - 605GB free, 15% memory used, cluster status
+"yellow" only from normal single-node unassigned-replica behavior - but
+clearly unsustainable on that trajectory, and the user was right to flag
+it immediately rather than wait and see). Root cause: rule `100100`
+matched *every* `modbus_detailed.log` line unconditionally, and this
+lab's PLC polls continuously - that alone is enough volume to be a
+problem regardless of what the rule alerts on.
+
+The planned fallback - alert on writes only (`100101`) - turns out not to
+work either, for a reason only visible once real content-level data was
+flowing: **this lab's remote-IO simulation issues a
+`WRITE_MULTIPLE_REGISTERS` on every single normal poll cycle**, not just
+during an attack. "A write happened" carries zero information here - it's
+indistinguishable from constant, expected operation. This directly
+contradicts the assumption baked into the original write-frequency tell
+designed in `docs/cyber-vs-physical-fault-injection-design.md` §4.4
+("baseline is near-zero... a burst of writes produces a sharp spike") -
+but that tell was built against *Suricata's* network-level view, where
+writes really were rare because Suricata could only ever see the ones
+that happened to be malicious ARP-spoofed/beacon-triggered traffic, not
+the PLC's own normal control-loop writes to its remote I/O (different
+traffic entirely, on the ICS-LAN side, that Suricata was never watching).
+Zeek's much richer content-level visibility exposes a different, truer
+baseline: writes are the *normal* state of this process, not the
+exception. A tell built assuming otherwise would be constantly false.
+
+Immediate fix: both rules set to level `0` (Wazuh's "categorize but don't
+alert" level) - confirmed live, alert count stopped changing entirely
+within 15 seconds of the change. This isn't a placeholder pending a
+"real" fix later - it's the correct state until a genuinely different
+rule exists, and `wazuh/local_rules.xml` documents why inline so this
+isn't casually bumped back to level 3/7 in a future edit without also
+solving the underlying volume problem.
+
+**Not yet designed**: what a real Modbus-content rule should actually
+detect here. Two directions worth considering, not decided:
+- **Rate-based**: Wazuh's `<frequency>`/`<timeframe>` correlation
+  (multiple rule matches within a window) to catch a write *rate* well
+  above this lab's own real baseline (which is now known, concretely -
+  worth measuring precisely before picking a threshold), rather than
+  assuming baseline-zero.
+- **Content-based**: writes to addresses or from sources outside an
+  explicit allowlist of what normal polling actually touches - closer to
+  the stuck-valve pairing's original manual-mode coil write, which *is*
+  distinguishable by address/value from routine polling, unlike the
+  routine polling writes seen here.
+
 ## 6. Open risks / questions
 
+- **A real Modbus-content Wazuh rule** (§5.12) - both existing rules are
+  intentionally suppressed at level 0. Needs either a rate/threshold
+  approach (measure this lab's actual baseline write rate first) or a
+  content/allowlist approach (unexpected address/source) - not "any
+  write happened," which was tested live and immediately overwhelmed the
+  indexer at ~1000 alerts/sec.
 - ~~CIDR-scoped `tc flower` filtering~~ — **resolved, validated live**
   (§3, §4.2).
 - ~~Zeek's own supervision strategy for a mirror interface that can appear/
