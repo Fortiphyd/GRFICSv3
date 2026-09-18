@@ -227,8 +227,13 @@ local log.
   teaches), it would need a different sensor: HMI already has a
   configured Wazuh agent (`scadalts/Dockerfile` installs one reporting to
   the manager at `192.168.90.20`), and host-based telemetry doesn't care
-  about network segments the way a network IDS does - that's the natural
-  next place to look, not more Suricata rules.
+  about network segments the way a network IDS does - that's one option.
+  A network-level fix also turned out to exist:
+  `docs/zeek-network-mirroring-design.md` designs (not yet built) a Zeek
+  sensor with real visibility into same-subnet traffic like this, via a
+  host-level mirror that Suricata's macvlan-sub-interface placement
+  structurally can't achieve - which would give this exact beacon channel
+  a network-level tell too, not just a host-based one.
 - **Symptom**: operator sees a valve at an unexpected position with no memory
   of commanding it there.
 - **Tell — revised to a frequency anomaly in Wazuh, not a content or source
@@ -485,9 +490,12 @@ Still not built:
   traffic between two endpoints on the same segment never transits the
   router's interface at all. See §4.4 for the implication - this makes the
   write-frequency tell the only network-level detection surface for this
-  scenario, and points at HMI's existing Wazuh agent (host-based, segment-
-  agnostic) as the right place to look if beaconing detection is wanted
-  later, not more Suricata rules.
+  scenario *today*. Two follow-on avenues, not yet built: HMI's existing
+  Wazuh agent (host-based, segment-agnostic), and a Zeek sensor with real
+  network-level visibility into same-subnet traffic - see
+  `docs/zeek-network-mirroring-design.md`, which designs the latter and
+  documents exactly how Suricata's blind spot here can be closed without
+  changing the lab's install process.
 - ~~**Live validation of the beacon/C2 mechanism**~~ — **resolved,
   confirmed working end-to-end** (§4.4): queuing a command on Kali's state
   file, the implant picked it up on its next check-in and executed the
