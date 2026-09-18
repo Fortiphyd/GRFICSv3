@@ -57,3 +57,9 @@ redef LogAscii::use_json = T;
 
 # Enable MD5 and SHA1 hashing for all files.
 @load frameworks/files/hash-all-files
+
+# OT protocol parsers (CISA's ICSNPP, installed via zkg - see Dockerfile).
+# Zeek's own base analyzers cover general IT protocols only; without this,
+# Modbus traffic (the lab's primary protocol) shows up as plain TCP
+# connections in conn.log with no function codes, addresses, or values.
+@load packages

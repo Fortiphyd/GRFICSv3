@@ -151,18 +151,33 @@ capture of the real beacon/C2 channel (§3).
 
 - New `zeek` service, behind the same `profiles: [siem]` gate as `wazuh` —
   it's useless without a manager to ship logs to, so it doesn't start with
-  a plain `docker compose up` either. Completely standard Docker
-  networking — joins `a-grfics-admin` only, *not* `b-ics-net`/`c-dmz-net`,
-  no `network_mode: host`, no added capabilities (confirmed live: the
-  container starts and captures fine with zero `cap_add` — Docker's
-  default `NET_RAW` is enough, and the mirror veth's own setup happens
-  from the *host* side via `enable-mirror.sh`, not from anything the
-  container itself needs to do).
+  a plain `docker compose up` either. Joins both `a-grfics-admin` and
+  `c-dmz-net` (static `192.168.90.30`) — **revised from the original
+  admin-only design.** The admin-only version worked, but reported to
+  Wazuh from an admin-bridge IP that didn't look like any other agent in
+  the lab; every other agent reports from a real, attributable subnet IP.
+  `c-dmz-net` membership is only for that identity - it captures nothing
+  and needs no added capabilities either way. Confirmed live: the manager
+  sees the agent's actual TCP connection sourced from `192.168.90.30`, not
+  the admin network.
 - Base image: the official `zeek/zeek:9.0.0` (Debian **trixie**, not
   bookworm) — resolves the open risk below. `zeek/local.zeek` keeps most
   of Zeek's own recommended default policy (asset tracking, software
   version/vulnerability tracking, SQL-injection detection) and adds
-  `LogAscii::use_json = T` plus the lab's two subnets as `Site::local_nets`.
+  `LogAscii::use_json = T`, the lab's two subnets as `Site::local_nets`,
+  and CISA's [ICSNPP](https://github.com/cisagov/ICSNPP) Modbus parser
+  (`zeek/cisagov/icsnpp-modbus`, installed via `zkg` in the Dockerfile) -
+  without it, Zeek's own base analyzers only cover general IT protocols,
+  so Modbus (the lab's only protocol in use today) showed up in `conn.log`
+  as opaque TCP connections with no function codes, addresses, or values
+  at all. With it, confirmed live against real PLC traffic:
+  `modbus_detailed.log` shows real function names
+  (`READ_INPUT_REGISTERS`, `WRITE_MULTIPLE_REGISTERS`), register
+  addresses, and actual values read/written - genuine content-level
+  visibility, not just connection metadata. Only the Modbus parser is
+  installed for now, since it's the only ICS protocol this lab actually
+  uses; ICSNPP has several others (DNP3, S7comm, ENIP, BACnet, ...) worth
+  adding if/when the lab does.
 - `zeek/zeek-start.sh`: waits for `mirror0` to exist (polling every 5s)
   before starting `zeek -i mirror0 local`; supervisord's `autorestart`
   handles the rest. **Validated live, including the exact failure mode
@@ -348,6 +363,51 @@ works. A real Zeek decoder + rule set (or at minimum a rule for
 `notice.log`'s structure) is genuinely new work, not a config tweak - see
 §6.
 
+### 5.7 The mirror veth needs `-C` (ignore checksums) - without it, every protocol-level analyzer is silently blind, even though `conn.log` looks fine
+
+Found while validating the ICSNPP Modbus parser (§4.1): `zeek -i mirror0`
+logged a `Reporter::WARNING` about "likely receiving invalid TCP and UDP
+checksums, most likely from NIC checksum offloading" and, without `-C`,
+produced **zero** protocol-level output against real, live PLC Modbus
+traffic - no `modbus.log`, no `modbus_detailed.log`, nothing. `mirror0` is
+a veth (a virtual device, like loopback), and veth devices commonly have
+checksum offloading enabled by the kernel the same way loopback does -
+Zeek's default checksum validation reads the result as corruption and
+discards the packet before any application-layer analysis runs.
+
+The genuinely important part: **`conn.log` looked completely normal the
+whole time** (this is how the earlier beacon-channel and PLC-polling
+captures in §3/§4.1 looked convincing before this was caught) - because
+basic connection tracking only needs packet *headers*, which checksum
+validation doesn't gate. Only deeper content parsing does. That means
+every content-level script already loaded in `local.zeek` before this fix
+- SQL-injection detection, software-version tracking, file hashing, all
+of it, not just the new Modbus parser - was silently non-functional the
+entire time, with no error visible anywhere except that one easy-to-miss
+reporter warning. Fixed by adding `-C` to `zeek-start.sh`'s invocation
+(inherent to any veth-based mirror, not a one-off workaround for this
+specific test) and confirmed live: real function codes, register
+addresses, and values immediately appeared in `modbus_detailed.log`
+against genuine PLC↔remote-IO traffic.
+
+### 5.8 rootcheck's generic "trojaned binary" signature check false-positives on Zeek's base image specifically
+
+Wazuh's `rootcheck` module includes a decades-old, generic string-matching
+heuristic (`check_trojans`, signature `'bash|file\.h|proc\.h|/dev/ttyo|
+/dev/[A-Z]|/dev/[a-s,uvxz]'`) meant to catch classic rootkit-modified
+system binaries. It fired on `/bin/passwd`, `/bin/chsh`, `/bin/chfn`, and
+others in the Zeek image - all false positives (a fresh official image,
+zero chance of real compromise). Confirmed this is specific to Zeek's
+base, not a lab-wide issue: `router`/`EWS`/`scadalts`, on older bases,
+don't trip it at all, while Zeek's is the only container on Debian
+**trixie** - a newer coreutils/glibc build evidently contains incidental
+substring matches the legacy signature wasn't designed to distinguish
+from a real trojan. Fixed by disabling just that one rootcheck sub-check
+(`check_trojans: no`) - files/dev/sys/pids/ports/interfaces checks all
+stay on. Worth remembering if a future agent container lands on an even
+newer base and starts showing the same "Trojaned version of file"
+alerts - it's very likely this same false positive, not a real finding.
+
 ## 6. Open risks / questions
 
 - ~~CIDR-scoped `tc flower` filtering~~ — **resolved, validated live**
@@ -373,7 +433,20 @@ works. A real Zeek decoder + rule set (or at minimum a rule for
 - A Zeek decoder + rule set for Wazuh (§5.6) - the concrete next step for
   turning the beacon signature demonstrated in §3 into something that
   shows up in the Wazuh UI/API on its own, instead of requiring someone to
-  read `conn.log` by hand.
+  read `conn.log` by hand. Now that `modbus_detailed.log` exists (§4.1,
+  §5.7) with real addresses/values, a rule here could also key off
+  ICS-relevant content, not just connection metadata.
+- ~~Zeek reporting from an admin-bridge IP instead of a real subnet IP~~ —
+  **resolved** (§4.1): `zeek` now joins `c-dmz-net` too (`192.168.90.30`),
+  matching every other agent's convention.
+- ~~OT protocol parsing (ICSNPP)~~ — **resolved for Modbus** (§4.1). Other
+  ICSNPP parsers (DNP3, S7comm, ENIP, BACnet, ...) not installed - nothing
+  in this lab uses those protocols today.
+- ~~Every protocol-level analyzer silently non-functional against real
+  mirrored traffic~~ — **resolved** (§5.7): `-C` was missing from the
+  Zeek invocation. This was serious enough that it's worth flagging
+  explicitly even though it's also listed as resolved - anyone modifying
+  `zeek-start.sh` later should know why `-C` is there before removing it.
 - How much of `conn.log` (if any) to ship to Wazuh alongside `notice.log` -
   still not decided (§4.3), and somewhat blocked on the point above: no
   decoder/rule for either one yet, so shipping more log types doesn't add

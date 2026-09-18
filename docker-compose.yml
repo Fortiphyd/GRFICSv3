@@ -260,14 +260,22 @@ services:
         BUILD_VERSION: ${BUILD_VERSION:-unknown}
         BUILD_CREATED: ${BUILD_CREATED:-unknown}
     restart: unless-stopped
+    dns:
+      - 192.168.90.200
     networks:
       a-grfics-admin:
-    # No b-ics-net/c-dmz-net membership, and no special capabilities - this
-    # container gets its traffic from a "mirror0" interface that only
+        priority: 10
+      c-dmz-net:
+        ipv4_address: 192.168.90.30
+        priority: 100
+    # c-dmz-net membership is only for a normal, attributable reporting
+    # identity (matches how every other agent reports from a real subnet
+    # IP, not an admin-bridge one) - it does NOT capture traffic. Traffic
+    # visibility comes entirely from a "mirror0" interface that only
     # exists once an instructor separately runs zeek/enable-mirror.sh on
-    # the host (see docs/zeek-network-mirroring-design.md). Idles safely
-    # otherwise. Same [siem] profile as wazuh, since it's useless without
-    # a manager to ship logs to.
+    # the host (see docs/zeek-network-mirroring-design.md). Same [siem]
+    # profile as wazuh, since it's useless without a manager to ship logs
+    # to.
 
 networks:
   b-ics-net:
