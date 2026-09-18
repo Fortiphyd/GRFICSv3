@@ -42,11 +42,16 @@ RUN curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH \
     && rm -rf /var/lib/apt/lists/*
 
 # Ship Zeek's notice.log (the closest equivalent to Suricata's alerts.json)
-# to Wazuh, same pipeline as the existing Suricata -> Wazuh integration.
+# and modbus_detailed.log (real Modbus content - function codes, addresses,
+# values, not just connection metadata) to Wazuh, same pipeline as the
+# existing Suricata -> Wazuh integration. See wazuh/local_rules.xml for the
+# rules that actually turn these into visible alerts - collection alone
+# isn't enough (see docs/zeek-network-mirroring-design.md, "Shipping logs
+# to Wazuh only gets them collected, not alerted on").
 # Agent-package ossec.conf has more than one </ossec_config> block (one per
 # top-level config section) - "0,/re/{s/re/.../}" limits the substitution
 # to just the first, avoiding a duplicated <localfile> entry.
-RUN sed -i '0,/<\/ossec_config>/{s|</ossec_config>|<localfile>\n    <log_format>json</log_format>\n    <location>/usr/local/zeek/logs/notice.log</location>\n  </localfile>\n</ossec_config>|}' \
+RUN sed -i '0,/<\/ossec_config>/{s|</ossec_config>|<localfile>\n    <log_format>json</log_format>\n    <location>/usr/local/zeek/logs/notice.log</location>\n  </localfile>\n  <localfile>\n    <log_format>json</log_format>\n    <location>/usr/local/zeek/logs/modbus_detailed.log</location>\n  </localfile>\n</ossec_config>|}' \
     /var/ossec/etc/ossec.conf
 
 # rootcheck's "trojaned binary" signature check (check_trojans) is a

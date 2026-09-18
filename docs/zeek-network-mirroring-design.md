@@ -219,22 +219,37 @@ Graceful no-op if not enabled. Validated the same way - confirmed clean
 teardown via `tc qdisc show`/`ip link show` afterward, no residual state
 left on the host.
 
-### 4.3 Wazuh log shipping — live-tested, two real bugs found and fixed, one real gap found and left open
+### 4.3 Wazuh log shipping — fully working now: collection *and* alerting
 
 Same pattern as the existing Suricata → Wazuh pipeline
 (`router/Dockerfile`'s `<localfile><log_format>json</log_format>...`):
-`zeek/Dockerfile` installs a wazuh-agent and adds a `<localfile>` entry for
-`/usr/local/zeek/logs/notice.log` with `log_format json`. This section
-originally said "not yet live-tested" - it has been now, against the real
-running `[siem]` profile stack, and turned up real problems worth recording
-(§5.3-§5.5).
+`zeek/Dockerfile` ships `notice.log` and `modbus_detailed.log` (real Modbus
+content - function codes, addresses, values, not just connection metadata,
+per §4.1/§5.7) as `<localfile>` entries. This section originally stopped at
+"collection works, but nothing shows up as a visible alert without a
+decoder/rule" (§5.6) - that gap is now closed too: `wazuh/local_rules.xml`
+(new file, `COPY`'d into the manager image) adds two rules -
 
-`conn.log` is still not shipped - `notice.log` only. That decision holds for
-a new reason found during this testing, not just log volume: shipping raw
-JSON to Wazuh only gets it *collected*, not *alerted on* - see §5.5. A real
-frequency/correlation rule for the beacon signature demonstrated in §3
-doesn't exist yet; until one does, shipping more log types doesn't add
-visible value in the Wazuh UI.
+- `100100` (level 3): any `modbus_detailed.log` event, matched purely by
+  `<location>` (no decoder needed - Wazuh's JSON auto-parsing already
+  exposes every field as `data.<key>`, including dotted keys like
+  `id.orig_h` as literal flat field names, not nested objects).
+- `100101` (level 7): the same event, but only when `func` contains
+  `WRITE` - the actually security-relevant subset - with the description
+  interpolating real field values (`$(func)`, `$(id.resp_h)`,
+  `$(address)`).
+
+Confirmed live, from a genuinely fresh build (not just a live-patched
+running container): real `WRITE_MULTIPLE_REGISTERS` commands from the
+PLC's normal remote-IO polling show up in `/var/ossec/logs/alerts/
+alerts.log` as `Rule: 100101 (level 7) -> 'Zeek: Modbus write command
+(WRITE_MULTIPLE_REGISTERS) to 192.168.95.13, address 1'`.
+
+`conn.log` is still not shipped. That's now genuinely just a volume/scope
+decision, not blocked on anything - the decoder/rule question that used to
+gate this is resolved. A real frequency/correlation rule for the beacon
+signature demonstrated in §3 still doesn't exist - `100100`/`100101` cover
+Modbus content, not connection-frequency anomalies on the DMZ side.
 
 ## 5. Gotchas found along the way (worth recording so they don't get rediscovered)
 
@@ -408,6 +423,57 @@ stay on. Worth remembering if a future agent container lands on an even
 newer base and starts showing the same "Trojaned version of file"
 alerts - it's very likely this same false positive, not a real finding.
 
+### 5.9 `enable-mirror.sh` didn't survive a container recreate without `disable-mirror.sh` run first
+
+Recreating the `zeek` container (e.g. after an image rebuild) destroys its
+network namespace, which silently deletes `mirror0`/`mirror0-host` -
+removing one end of a veth pair removes both. But it does *not* clean up
+the `clsact` qdisc left on the host's parent interface, since qdiscs
+aren't tied to the veth's lifecycle. The result: `enable-mirror.sh`'s
+idempotency check (`ip link show mirror0-host`) correctly sees nothing and
+proceeds, but `tc qdisc add ... clsact` then fails with `Error: Exclusivity
+flag on, cannot modify` against the orphaned qdisc - a real failure hit
+live while rebuilding zeek for §4.3's changes, not a hypothetical.
+Fixed by having `enable-mirror.sh` unconditionally clear any existing
+`clsact` qdisc on the parent before setting up fresh state (harmless if
+there wasn't one - the `|| true` no-ops cleanly). Confirmed live: recreated
+`zeek` without running `disable-mirror.sh` first, then ran `enable-mirror.sh`
+directly, and it self-healed with no manual cleanup needed.
+
+### 5.10 A suspected ICSNPP memory leak - investigated, evidence didn't hold up, worth recording so it isn't re-suspected without cause
+
+While validating §4.1/§5.7, Zeek's packet processing stalled completely
+after roughly 10-15 minutes of live mirroring (`stats.log`'s `pkts_proc`
+dropped from ~18,000/5min to exactly 0, while the interface itself kept
+receiving traffic at the kernel level) - a real, observed failure, not
+imagined. Code inspection of `icsnpp-modbus/main.zeek` found a real,
+verifiable design gap: its `modbus_pending: table[string] of
+table[count] of Modbus_Detailed` correlation table has no expiration
+attributes at all, and only removes entries on a successful request/
+response match - unmatched entries (confirmed present: `"matched":false`
+was directly observed in real output) are never cleaned up. For this lab's
+long-lived, continuously-polling PLC↔remote-IO connections, that's a
+plausible unbounded-growth mechanism, and it was reported to the user as
+the likely cause with that reasoning.
+
+It didn't hold up under a longer test. A subsequent 3-hour continuous run
+(no mirror churn, no concurrent rebuilds - the conditions the earlier stall
+happened under) showed **flat memory (273MB, unchanged) and steady
+throughput (~100k packets/5min) the entire time**, with no sign of the
+stall recurring. A genuine unconditional table leak should have shown
+*some* growth trend over 3 hours; it showed none. The evidence points
+instead at the turbulent conditions during the original test - repeated
+`enable-mirror.sh`/`disable-mirror.sh` cycles tearing the capture interface
+out from under a running Zeek process, concurrent image rebuilds, and
+several other test containers competing for host resources, all within a
+few minutes - rather than a standing bug in the package.
+
+Left as: not filed upstream (would be reporting a bug no longer believed
+to be real), and the `modbus_pending` expiration gap itself is still worth
+being aware of as a real, if apparently not load-bearing, design gap in a
+third-party package - just not confirmed to cause a practical problem
+under normal (non-churning) operation.
+
 ## 6. Open risks / questions
 
 - ~~CIDR-scoped `tc flower` filtering~~ — **resolved, validated live**
@@ -430,12 +496,12 @@ alerts - it's very likely this same false positive, not a real finding.
   `scadalts`/`zeek` all at once via two `wazuh/Dockerfile` changes, and
   confirmed to survive a full recreate of both the manager and an agent
   container with zero manual steps needed afterward.
-- A Zeek decoder + rule set for Wazuh (§5.6) - the concrete next step for
-  turning the beacon signature demonstrated in §3 into something that
-  shows up in the Wazuh UI/API on its own, instead of requiring someone to
-  read `conn.log` by hand. Now that `modbus_detailed.log` exists (§4.1,
-  §5.7) with real addresses/values, a rule here could also key off
-  ICS-relevant content, not just connection metadata.
+- ~~A Zeek decoder + rule set for Wazuh~~ — **resolved** (§4.3, §5.6):
+  `wazuh/local_rules.xml` turns `modbus_detailed.log` events into visible
+  alerts, including a dedicated higher-severity rule for write commands
+  specifically. What's still open: a *frequency/correlation* rule for the
+  beacon signature demonstrated in §3 (connection-pattern anomaly, not
+  Modbus content) - the current rules cover ICS content, not that.
 - ~~Zeek reporting from an admin-bridge IP instead of a real subnet IP~~ —
   **resolved** (§4.1): `zeek` now joins `c-dmz-net` too (`192.168.90.30`),
   matching every other agent's convention.
@@ -447,10 +513,16 @@ alerts - it's very likely this same false positive, not a real finding.
   Zeek invocation. This was serious enough that it's worth flagging
   explicitly even though it's also listed as resolved - anyone modifying
   `zeek-start.sh` later should know why `-C` is there before removing it.
-- How much of `conn.log` (if any) to ship to Wazuh alongside `notice.log` -
-  still not decided (§4.3), and somewhat blocked on the point above: no
-  decoder/rule for either one yet, so shipping more log types doesn't add
-  visible value on its own.
+- ~~`enable-mirror.sh` not surviving a container recreate~~ — **resolved**
+  (§5.9): it now clears any stale `clsact` qdisc unconditionally before
+  setting up fresh state.
+- A suspected ICSNPP memory leak - investigated, initial evidence didn't
+  hold up under a longer test (§5.10). Not filed upstream. Worth
+  re-examining only if the stall is actually seen again under normal
+  (non-churning) operation - not assumed to still be a live risk.
+- How much of `conn.log` (if any) to ship to Wazuh alongside `notice.log`/
+  `modbus_detailed.log` - a genuine scope/volume decision now, not blocked
+  on anything (§4.3).
 - No dashboard/runtime control for any of this — `enable-mirror.sh`/
   `disable-mirror.sh` are deliberately separate, manual, host-level scripts
   for now, consistent with keeping this feature out of the default install

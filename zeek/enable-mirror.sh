@@ -47,6 +47,17 @@ fi
 
 echo "Mirroring $PARENT_IF ($DMZ_SUBNET, $ICS_SUBNET) into the zeek container..."
 
+# Recreating the zeek container (e.g. a rebuild) destroys its netns, which
+# silently deletes mirror0/mirror0-host - removing one end of a veth pair
+# removes both - but does NOT clean up the clsact qdisc left on the host's
+# parent interface. That leaves a stale qdisc that the $HOST_IF check above
+# won't catch (mirror0-host is legitimately gone), and "tc qdisc add" fails
+# with "Exclusivity flag on, cannot modify" on the leftover one. Confirmed
+# live - this exact sequence happened during testing. Clear it
+# unconditionally before setting up fresh state, since we're about to
+# create authoritative state anyway.
+tc qdisc del dev "$PARENT_IF" clsact 2>/dev/null || true
+
 ip link add "$HOST_IF" type veth peer name "$MIRROR_IF"
 ip link set "$MIRROR_IF" netns "$ZEEK_PID"
 ip link set "$HOST_IF" up

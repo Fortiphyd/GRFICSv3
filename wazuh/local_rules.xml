@@ -1,0 +1,43 @@
+<!-- Local rules -->
+
+<!-- Modify it at your will. -->
+<!-- Copyright (C) 2015, Wazuh Inc. -->
+
+<!-- Example -->
+<group name="local,syslog,sshd,">
+
+  <!--
+  Dec 10 01:02:02 host sshd[1234]: Failed none for root from 1.1.1.1 port 1066 ssh2
+  -->
+  <rule id="100001" level="5">
+    <if_sid>5716</if_sid>
+    <srcip>1.1.1.1</srcip>
+    <description>sshd: authentication failed from IP 1.1.1.1.</description>
+    <group>authentication_failed,pci_dss_10.2.4,pci_dss_10.2.5,</group>
+  </rule>
+
+</group>
+
+<!--
+  Zeek/ICSNPP Modbus events - see docs/zeek-network-mirroring-design.md.
+  Collection (the <localfile> entries in zeek/Dockerfile) only gets these
+  events to the manager; without a rule, they're received and then
+  silently dropped (logall_json is off by default) - a rule is what
+  actually turns them into visible alerts.
+-->
+<group name="modbus,ics,zeek,">
+
+  <rule id="100100" level="3">
+    <location>/usr/local/zeek/logs/modbus_detailed.log</location>
+    <description>Zeek: Modbus protocol event</description>
+    <group>modbus,ics,</group>
+  </rule>
+
+  <rule id="100101" level="7">
+    <if_sid>100100</if_sid>
+    <field name="func">WRITE</field>
+    <description>Zeek: Modbus write command ($(func)) to $(id.resp_h), address $(address)</description>
+    <group>modbus,ics,ics_write,</group>
+  </rule>
+
+</group>

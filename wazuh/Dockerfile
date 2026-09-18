@@ -75,6 +75,11 @@ RUN sed -i 's|</auth>|<force>\n      <enabled>yes</enabled>\n      <key_mismatch
     && sed -i 's|<agents_disconnection_time>15m</agents_disconnection_time>|<agents_disconnection_time>30s</agents_disconnection_time>|' \
     /var/ossec/etc/ossec.conf
 
+# Rules to turn collected Zeek/Modbus events into visible alerts - without
+# these, notice.log/modbus_detailed.log get received and silently dropped
+# (see docs/zeek-network-mirroring-design.md).
+COPY local_rules.xml /var/ossec/etc/rules/local_rules.xml
+
 COPY entrypoint.sh /entrypoint.sh
 COPY alerts-indexer.py /usr/local/bin/alerts-indexer.py
 RUN chmod +x /entrypoint.sh
