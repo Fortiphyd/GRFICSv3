@@ -26,12 +26,15 @@ RUN curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH \
        https://packages.wazuh.com/4.x/apt/ stable main" \
        > /etc/apt/sources.list.d/wazuh.list \
     && apt-get update \
-    && WAZUH_MANAGER=192.168.90.20 WAZUH_AGENT_NAME=zeek apt-get install -y wazuh-agent \
+    && WAZUH_MANAGER=wazuh WAZUH_AGENT_NAME=zeek apt-get install -y wazuh-agent \
     && rm -rf /var/lib/apt/lists/*
 
 # Ship Zeek's notice.log (the closest equivalent to Suricata's alerts.json)
 # to Wazuh, same pipeline as the existing Suricata -> Wazuh integration.
-RUN sed -i 's|</ossec_config>|<localfile>\n    <log_format>json</log_format>\n    <location>/usr/local/zeek/logs/notice.log</location>\n  </localfile>\n</ossec_config>|' \
+# Agent-package ossec.conf has more than one </ossec_config> block (one per
+# top-level config section) - "0,/re/{s/re/.../}" limits the substitution
+# to just the first, avoiding a duplicated <localfile> entry.
+RUN sed -i '0,/<\/ossec_config>/{s|</ossec_config>|<localfile>\n    <log_format>json</log_format>\n    <location>/usr/local/zeek/logs/notice.log</location>\n  </localfile>\n</ossec_config>|}' \
     /var/ossec/etc/ossec.conf
 
 COPY local.zeek /usr/local/zeek/share/zeek/site/local.zeek

@@ -51,6 +51,30 @@ COPY opensearch_dashboards.yml /etc/wazuh-dashboard/opensearch_dashboards.yml
 RUN curl -s https://raw.githubusercontent.com/wazuh/wazuh/v4.14.4/extensions/elasticsearch/7.x/wazuh-template.json \
     -o /etc/wazuh-indexer/wazuh-template.json
 
+# Agent containers in this lab (router, scadalts, EWS, zeek, ...) have no
+# persistent volume of their own, so every `docker compose up`/recreate
+# loses their client.keys and forces a fresh enrollment - but
+# wazuh_manager_data *is* a persistent volume, so the manager still
+# remembers the old registration under the same name and rejects the new
+# one as a duplicate by default. Two changes needed together to make
+# re-enrollment actually work automatically instead of requiring a manual
+# `manage_agents -r`:
+#   - authd's <force> block allows replacing a same-named agent instead of
+#     rejecting it, but only once the manager considers the old one
+#     disconnected.
+#   - agents_disconnection_time (default 15m) is how long that takes -
+#     15m is reasonable for a real always-on deployment, but far too slow
+#     for how often containers get recreated in this lab during normal
+#     development/testing. agents_disconnection_alert_time is already 0
+#     (disabled) in the package default, so shortening this doesn't add
+#     alert noise, just updates agent status bookkeeping faster.
+# Verified live against the real stack: without both changes, a recreated
+# agent container gets stuck retrying "Duplicate agent name" forever.
+RUN sed -i 's|</auth>|<force>\n      <enabled>yes</enabled>\n      <key_mismatch>yes</key_mismatch>\n      <disconnected_time enabled="yes">0s</disconnected_time>\n      <after_registration_time>0s</after_registration_time>\n    </force>\n  </auth>|' \
+    /var/ossec/etc/ossec.conf \
+    && sed -i 's|<agents_disconnection_time>15m</agents_disconnection_time>|<agents_disconnection_time>30s</agents_disconnection_time>|' \
+    /var/ossec/etc/ossec.conf
+
 COPY entrypoint.sh /entrypoint.sh
 COPY alerts-indexer.py /usr/local/bin/alerts-indexer.py
 RUN chmod +x /entrypoint.sh

@@ -204,23 +204,22 @@ Graceful no-op if not enabled. Validated the same way - confirmed clean
 teardown via `tc qdisc show`/`ip link show` afterward, no residual state
 left on the host.
 
-### 4.3 Wazuh log shipping — config written, not live-tested
+### 4.3 Wazuh log shipping — live-tested, two real bugs found and fixed, one real gap found and left open
 
 Same pattern as the existing Suricata → Wazuh pipeline
 (`router/Dockerfile`'s `<localfile><log_format>json</log_format>...`):
-`zeek/Dockerfile` installs a wazuh-agent (reporting to `192.168.90.20`,
-matching every other agent in the lab) and adds a `<localfile>` entry for
-`/usr/local/zeek/logs/notice.log` with `log_format json`. **Not yet
-live-tested against a running Wazuh manager** - config matches the working
-Suricata pattern exactly, but (like the pre-existing note in the
-fault-injection doc about the Wazuh manager container being stale/
-untested) actually confirming ingestion wasn't done as part of this build.
-`conn.log` is not shipped - `notice.log` only, for now; whether to add
-`conn.log` too, and how much of it, is still an open question rather than
-a default-yes (it's high-volume, and the beacon-detection payoff already
-demonstrated in §3 came from reading `conn.log` by hand, not through
-Wazuh - a real correlation/frequency rule for beaconing based on it doesn't
-exist yet).
+`zeek/Dockerfile` installs a wazuh-agent and adds a `<localfile>` entry for
+`/usr/local/zeek/logs/notice.log` with `log_format json`. This section
+originally said "not yet live-tested" - it has been now, against the real
+running `[siem]` profile stack, and turned up real problems worth recording
+(§5.3-§5.5).
+
+`conn.log` is still not shipped - `notice.log` only. That decision holds for
+a new reason found during this testing, not just log volume: shipping raw
+JSON to Wazuh only gets it *collected*, not *alerted on* - see §5.5. A real
+frequency/correlation rule for the beacon signature demonstrated in §3
+doesn't exist yet; until one does, shipping more log types doesn't add
+visible value in the Wazuh UI.
 
 ## 5. Gotchas found along the way (worth recording so they don't get rediscovered)
 
@@ -258,6 +257,97 @@ OVS port), but worth remembering if OVS is revisited later — don't debug
 "no packets" on an OVS port by reaching for `tcpdump` on that port
 directly.
 
+### 5.3 Two copy-paste bugs from following router/scadalts too literally
+
+Both found live, testing against the real `[siem]` profile stack:
+
+- `zeek/Dockerfile` installed the wazuh-agent with the same
+  `WAZUH_MANAGER=192.168.90.20` used by `router`/`scadalts`. Those two are
+  on `c-dmz-net`, where that static DMZ IP is directly reachable; `zeek`
+  deliberately isn't (§4.1) - only `a-grfics-admin`, so that address is
+  simply unreachable from it. Confirmed directly (`wazuh` the DNS hostname
+  connects, the hardcoded IP times out) and fixed: `WAZUH_MANAGER=wazuh`,
+  matching the network zeek is actually on.
+- `docker-compose.yml`'s `zeek` service also copied `dns: [192.168.90.200]`
+  from the DMZ-attached services (`caldera`, `wazuh`) - same problem,
+  unreachable from `a-grfics-admin`, serving no purpose. Removed; Docker's
+  own embedded resolver (the default when no override is set) already
+  handles `a-grfics-admin` name resolution correctly.
+
+### 5.4 `sed 's|</ossec_config>|...|'` duplicates the injected block when there's more than one `</ossec_config>` in the file
+
+The agent-package `ossec.conf` has more than one top-level
+`<ossec_config>...</ossec_config>` block, so a plain (non-anchored) `sed`
+substitution matches - and duplicates the injected `<localfile>` - at
+*every* occurrence, not just the first. Found live: wazuh-logcollector
+logged `WARNING: (1958): Log file '.../notice.log' is duplicated`, and
+`grep -c "</ossec_config>"` confirmed 2 occurrences in `zeek`'s
+`ossec.conf`. **This is a pre-existing pattern, not something this branch
+introduced** - `router/Dockerfile`'s identical `sed` has the exact same
+duplicate (confirmed: 2 occurrences there too). Harmless in practice
+(Wazuh tolerates monitoring the same file twice, just wastes a little and
+logs a warning), so left alone in `router`/`scadalts` as out of scope for
+this work, but fixed in `zeek/Dockerfile`'s own new injection using
+`sed -i '0,/<\/ossec_config>/{s|...|...|}'` (range-address the
+substitution to only the first occurrence) since it's new code with no
+reason to carry the same bug forward.
+
+### 5.5 Agent containers have no persistent state, but the manager's registration database does - a structural collision, not specific to Zeek
+
+The real "0 agents reporting" symptom that prompted this whole
+investigation. `router`/`EWS`/`scadalts` (and now `zeek`) have no
+declared volume for `/var/ossec` - every `docker compose up`/recreate
+loses each agent's own enrollment key, forcing a fresh enrollment attempt
+on every start. But `wazuh_manager_data` *is* a persistent named volume
+(mounted at `/var/ossec` on the manager - the entire agent database lives
+there), so the manager still remembers the old registration under the
+same name and rejects the new enrollment as a duplicate by default
+(`wazuh-authd: WARNING: Duplicate name 'X', rejecting enrollment` /
+agent-side `ERROR: Duplicate agent name: X`). This is exactly the
+"Wazuh manager stale, 4+ months, config-only verified" situation flagged
+in the fault-injection doc - now actually exercised live, and it's why
+`router`/`EWS`/`scadalts` all showed "Disconnected" despite being
+registered.
+
+Two changes to the manager's `ossec.conf`, both required together, both
+now baked into `wazuh/Dockerfile` (confirmed they survive a full
+`--force-recreate` of both the `wazuh` and an agent container, and that
+agents then auto-reconnect on their own with zero manual steps):
+
+- authd's `<auth><force>` block, which allows replacing a same-named
+  agent instead of rejecting it - but only once the manager considers the
+  *previous* registration disconnected, which by itself didn't fix
+  anything (confirmed: still rejected immediately after adding just this).
+- `<global><agents_disconnection_time>`, which controls how long that
+  takes - the package default (15m) is reasonable for a real always-on
+  deployment, but far slower than how often containers get recreated
+  during normal development in this lab. Lowered to 30s.
+  `agents_disconnection_alert_time` is already `0` (disabled) in the
+  package default, so this doesn't add alert noise, just updates status
+  bookkeeping faster.
+
+Immediate unblock for *this* running lab (its `wazuh_manager_data` volume
+already existed before these Dockerfile changes, so it needed a live fix
+too, not just a rebuild): manually removed the three stale registrations
+(`manage_agents -r`) and applied the same two `ossec.conf` changes
+directly to the running manager before baking them into the image.
+
+### 5.6 Shipping logs to Wazuh only gets them *collected*, not *alerted on*, without a matching decoder/rule
+
+Once `notice.log` genuinely existed and the agent picked it up
+(confirmed: logcollector's "Could not open file" error went away, and a
+synthetic test line was written and detected), it still never appeared
+anywhere in `/var/ossec/logs/alerts/` on the manager. Root cause: Wazuh's
+own `<global><logall_json>` (whether to store *every* collected event,
+not just ones that match a rule) is `no` by default, and there's no
+built-in Wazuh decoder/rule that recognizes Zeek's JSON log structure the
+way there is for Suricata's `eve.json` alerts. Collection (agent → manager
+transport) and alerting (manager → visible in the dashboard/API) are two
+separate pipeline stages, and this build only confirmed the first one
+works. A real Zeek decoder + rule set (or at minimum a rule for
+`notice.log`'s structure) is genuinely new work, not a config tweak - see
+§6.
+
 ## 6. Open risks / questions
 
 - ~~CIDR-scoped `tc flower` filtering~~ — **resolved, validated live**
@@ -270,12 +360,24 @@ directly.
   understood, just the outcome.
 - ~~Whether the official Zeek package inherits the §5.1 libpcap bug~~ —
   **resolved, no** (§4.1).
-- Live Wazuh ingestion of `notice.log` - config written and matches the
-  working Suricata pattern, but not actually run against a live manager
-  (§4.3).
-- How much of `conn.log` (if any) to ship to Wazuh alongside `notice.log`,
-  and whether a real frequency/correlation rule for the beacon signature
-  found in §3 gets built - not decided (§4.3).
+- ~~Live Wazuh ingestion of `notice.log`~~ — **partially resolved.**
+  Collection works end-to-end (agent connects, ships, manager receives) -
+  confirmed live, along with two real bugs along the way (§5.3, §5.4). What
+  doesn't exist yet: a Wazuh decoder/rule that turns collected Zeek events
+  into visible alerts (§5.6) - genuinely new work, not a config fix.
+- ~~"0 agents reporting" / agent enrollment~~ — **resolved.** Root cause
+  was structural (§5.5), not Zeek-specific - fixed for `router`/`EWS`/
+  `scadalts`/`zeek` all at once via two `wazuh/Dockerfile` changes, and
+  confirmed to survive a full recreate of both the manager and an agent
+  container with zero manual steps needed afterward.
+- A Zeek decoder + rule set for Wazuh (§5.6) - the concrete next step for
+  turning the beacon signature demonstrated in §3 into something that
+  shows up in the Wazuh UI/API on its own, instead of requiring someone to
+  read `conn.log` by hand.
+- How much of `conn.log` (if any) to ship to Wazuh alongside `notice.log` -
+  still not decided (§4.3), and somewhat blocked on the point above: no
+  decoder/rule for either one yet, so shipping more log types doesn't add
+  visible value on its own.
 - No dashboard/runtime control for any of this — `enable-mirror.sh`/
   `disable-mirror.sh` are deliberately separate, manual, host-level scripts
   for now, consistent with keeping this feature out of the default install

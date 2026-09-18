@@ -260,8 +260,6 @@ services:
         BUILD_VERSION: ${BUILD_VERSION:-unknown}
         BUILD_CREATED: ${BUILD_CREATED:-unknown}
     restart: unless-stopped
-    dns:
-      - 192.168.90.200
     networks:
       a-grfics-admin:
     # No b-ics-net/c-dmz-net membership, and no special capabilities - this
