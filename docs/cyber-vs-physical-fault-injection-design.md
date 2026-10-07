@@ -348,6 +348,49 @@ automation.
   accuracy/speed against it — a stronger, more quantifiable result for the
   talk than a flat two-condition comparison.
 
+**Implemented and validated** (the 3 reuse-based event types only — EWS
+setpoint nudges and ARP churn are still not built, see §7):
+`simulation/noise_floor/scheduler.py`, a new always-on supervisord program
+in the `simulation` container, talking to the same TE_process control
+socket (`127.0.0.1:55555`, same JSON protocol) already used by `index.php`
+and the Modbus remote-IO devices. Defaults to fully quiet — confirmed live,
+a fresh container generates zero ambient events until explicitly enabled.
+
+Control plane: `web_visualization/data/index.php` gained three new POST
+fields (`noise_floor_enabled`, `noise_floor_seed`,
+`noise_floor_mean_interval_s`), written to a small shared JSON state file
+the scheduler polls - chosen over giving the scheduler its own socket
+server, consistent with this project's existing low-tech patterns (the
+same shape as the beacon/C2 "pending command" state file). GET requests to
+the same endpoint now also echo back the current noise-floor state.
+
+Real bug caught and fixed during validation: the scheduler (running as
+root via supervisord) creates the state file, but `index.php` runs as
+`www-data` under php-fpm - the first POST appeared to succeed (echoed the
+new state back) but silently never reached disk, since file *write*
+permission (not just the containing directory's) governs overwriting an
+existing file's content in PHP, and the file was `root`-owned, `644`.
+Fixed by making the file (and its directory) world-writable - acceptable
+for one small, non-sensitive state file in a lab environment.
+
+Validated live, each independently:
+- **Default-quiet**: confirmed no ambient activity until enabled.
+- **Ambient events genuinely affect the physics engine and self-revert**:
+  watched real output fields (e.g. `product_flow` noise, `f1_stuck`)
+  change during an event's hold window and cleanly return to normal after.
+- **Automatic quiet buffer**: POSTing any real fault field (e.g.
+  `f2_stuck`) through the same `index.php` endpoint was confirmed to set
+  `suppress_until` ~60s out without any separate dashboard action, and the
+  scheduler was confirmed to generate zero new events during that window,
+  then resume immediately after.
+- **Seed reproducibility**: two independent enable/disable cycles with
+  the same seed produced byte-for-byte identical event sequences (same
+  kind, tag, and duration, in the same order). An earlier comparison
+  across two *different* seeds happened to share a couple of events by
+  coincidence (small search space: 3 event kinds × ~7 sensor tags/4 valve
+  tags × a narrow duration range) - caught by rerunning with a controlled,
+  marked, same-seed comparison instead of trusting the first result.
+
 ## 6. Session flow
 
 Target: ~45-60 minutes total per participant.
@@ -389,13 +432,20 @@ more than statistical elegance when recruitment itself is the bottleneck.
   the implant without restarting anything, by writing to
   `/tmp/c2_pending_command.json` on Kali - see the script's docstring).
 
+- ~~Noise-floor scheduler: seeded, needs a home~~ **done, validated**
+  (§5): `simulation/noise_floor/scheduler.py`, an always-on supervisord
+  program in the `simulation` container. Covers 3 of the 5 ambient event
+  types (sensor noise/dropout, valve stickiness) - reuses the existing
+  physical fault control socket, so no new container/script needed for
+  those three.
+
 Still not built:
 
 - EWS: small automation for periodic legitimate setpoint nudges (noise
-  floor).
-- Kali or router: small script for benign ARP churn (noise floor).
-- Noise-floor scheduler: seeded, needs a home (likely a small controller
-  process — TBD where).
+  floor) - the 4th ambient event type, needs its own script since it
+  doesn't go through the simulation container's control socket at all.
+- Kali or router: small script for benign ARP churn (noise floor) - the
+  5th ambient event type, same reasoning.
 - Dashboard: new "Cyber Injects" and "Noise Floor" sections on the existing
   Fault Injection page, following the same pattern as the physical fault
   controls (mode/severity where applicable, a seed input for the noise

@@ -2,6 +2,22 @@
 $address = '127.0.0.1';
 $port = 55555;
 
+// Noise-floor scheduler state - see simulation/noise_floor/scheduler.py and
+// docs/cyber-vs-physical-fault-injection-design.md §5. Shared JSON file: this
+// script writes config, the scheduler polls it. Defaults to OFF/quiet -
+// nothing here ever turns it on by itself.
+$noise_floor_state_file = '/app/noise_floor/state.json';
+$noise_floor_default_state = [
+    'enabled' => false,
+    'seed' => 0,
+    'mean_interval_s' => 30.0,
+    'suppress_until' => 0.0,
+];
+// How long a real triggered fault (any field below) suppresses the ambient
+// scheduler for, so the seed can't occasionally land an ambient blip right
+// on top of the real event by chance (see design doc's "quiet buffer").
+$quiet_buffer_seconds = 60;
+
 // boolean fault/control fields the simulation will accept
 $boolean_fields = [
     'e_stop',
@@ -39,6 +55,32 @@ $numeric_fields = [
     'analyzer_fault_severity'    => [0.0, 1000000.0],
 ];
 
+// noise_floor_* fields are handled separately below - they configure the
+// scheduler (simulation/noise_floor/scheduler.py), not the TE_process
+// itself, so they're written to $noise_floor_state_file instead of being
+// forwarded over the simulator socket.
+$noise_floor_fields = [
+    'noise_floor_enabled'         => 'bool',
+    'noise_floor_seed'            => 'int',
+    'noise_floor_mean_interval_s' => 'float',
+];
+
+function read_noise_floor_state($path, $default) {
+    $state = $default;
+    if (file_exists($path)) {
+        $decoded = json_decode(file_get_contents($path), true);
+        if (is_array($decoded)) {
+            $state = array_merge($default, $decoded);
+        }
+    }
+    return $state;
+}
+
+function write_noise_floor_state($path, $state) {
+    @mkdir(dirname($path), 0775, true);
+    file_put_contents($path, json_encode($state));
+}
+
 $httpMethod = $_SERVER['REQUEST_METHOD'];
 $fp = pfsockopen($address, $port, $errno, $errstr);
 echo $errstr;
@@ -64,13 +106,48 @@ if ($httpMethod === 'POST') {
     }
 
     if (!empty($inputs)) {
+        // A real fault was just triggered through this same endpoint -
+        // suppress the ambient scheduler briefly so it can't coincidentally
+        // overlap the real event (see $quiet_buffer_seconds above).
+        $nf_state = read_noise_floor_state($noise_floor_state_file, $noise_floor_default_state);
+        $nf_state['suppress_until'] = microtime(true) + $quiet_buffer_seconds;
+        write_noise_floor_state($noise_floor_state_file, $nf_state);
+
         $request = json_encode(['request' => 'write', 'data' => ['inputs' => $inputs]]);
         fwrite($fp, $request);
         echo fgets($fp, 1500);
     }
+
+    if (is_array($cmd)) {
+        $nf_updates = [];
+        foreach ($noise_floor_fields as $key => $type) {
+            if (array_key_exists($key, $cmd)) {
+                $value = $cmd[$key];
+                if ($type === 'bool') $value = (bool)$value;
+                if ($type === 'int') $value = (int)$value;
+                if ($type === 'float') $value = max(1.0, (float)$value);
+                $nf_updates[substr($key, strlen('noise_floor_'))] = $value;
+            }
+        }
+        if (!empty($nf_updates)) {
+            $nf_state = read_noise_floor_state($noise_floor_state_file, $noise_floor_default_state);
+            $nf_state = array_merge($nf_state, $nf_updates);
+            write_noise_floor_state($noise_floor_state_file, $nf_state);
+            if (empty($inputs)) {
+                echo json_encode(['noise_floor' => $nf_state]);
+            }
+        }
+    }
 } else {
     fwrite($fp, '{"request":"read"}\n');
-    echo fgets($fp, 1500);
+    $response = fgets($fp, 1500);
+    $decoded = json_decode($response, true);
+    if (is_array($decoded)) {
+        $decoded['noise_floor'] = read_noise_floor_state($noise_floor_state_file, $noise_floor_default_state);
+        echo json_encode($decoded);
+    } else {
+        echo $response;
+    }
 }
 
 ?>
