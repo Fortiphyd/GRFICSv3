@@ -573,14 +573,142 @@ detect here. Two directions worth considering, not decided:
   distinguishable by address/value from routine polling, unlike the
   routine polling writes seen here.
 
+### 5.13 Both directions from §5.12 built and validated - including a Wazuh correlation mechanic that isn't documented anywhere obvious
+
+`wazuh/local_rules.xml` now has two real, validated rules on top of the
+suppressed 100100/100101:
+
+- **100102 (content-based, level 12)**: any write targeting the PLC
+  itself. No frequency logic needed - measured baseline is genuinely
+  zero (§5.12's own measurement: 301 real events reached the PLC over
+  133s, zero writes). Validated against the real attack:
+  `attacker/cyber_injects/setpoint_inject.py` run from Kali fired this
+  immediately and correctly, for both the register write and the
+  manual-mode coil write, with the true source (192.168.90.6) correctly
+  attributed.
+- **100103 (rate-based, level 10)**: more than 120 matches of 100101
+  (writes) to the same `id.resp_h` within 2 seconds. Covers the
+  PLC-to-remote-IO polling channel that 100102 doesn't (no existing
+  cyber inject attacks that channel, so this is more a validated
+  template for future scenarios there than an active detection today).
+
+Getting 100103 working at all surfaced a real Wazuh mechanic that isn't
+obviously documented and cost real debugging time - worth recording
+precisely:
+
+- **Level 0 rules are excluded from `if_matched_sid`/`frequency`
+  correlation entirely, not just from alert output.** Confirmed directly
+  with `wazuh-logtest`: feeding 50 matching events through a single
+  session, a level-0 base rule's own `firedtimes` counter climbed
+  normally (1→50), but a rule depending on it via `if_matched_sid` never
+  fired - not even once. Bumping the base rule to any non-zero level
+  (tested with 1 and 3) made correlation work immediately.
+- **`<options>no_log</options>` does not mean what its name suggests.**
+  The natural next guess - "match for correlation, just don't log it" -
+  doesn't do that. Confirmed directly: a rule with `no_log` set still
+  produced full alerts with complete `full_log` content, identical to
+  without it.
+- **The actual mechanism is the manager's global `<log_alert_level>`**
+  (`ossec.conf`, default `3`) - independent of correlation, this is the
+  real floor below which a match never gets written to `alerts.log`/
+  `alerts.json` at all. Rules 100100/100101 are level `1` - non-zero
+  (satisfies correlation) but below the floor (satisfies "don't flood
+  the indexer again"). Confirmed live: zero new `Rule: 100101` alerts
+  over a clean window with real write traffic continuously flowing,
+  while 100103's correlation against it worked correctly in the same
+  test.
+
+### 5.14 The §5.10 "not load-bearing" conclusion about the modbus_pending leak needs a correction - it does have a real, observed effect, just not the one originally suspected
+
+While validating 100103's threshold, a single long-running connection
+(15+ hours uptime) periodically produced the *exact same* stale event -
+identical `uid`, identical original `ts` - written to the log and
+delivered to Wazuh at a *different*, much later wall-clock moment,
+minutes to hours after that `ts`. Every one of these had
+`"matched":false`. A cluster of these flushing out close together was
+enough to cross 100103's frequency threshold as a false positive,
+confirmed directly by inspecting the alert content (the embedded `ts`
+was from an entirely different, much earlier point in the session than
+the alert's own real delivery time).
+
+§5.10 investigated a *stall* hypothesis for the `modbus_pending`
+expiration gap, found the evidence for a stall didn't hold up over a
+longer clean run, and concluded the gap probably wasn't load-bearing in
+practice. That conclusion was too reassuring. The gap is real and has a
+real, reproducible effect - just a different one than originally
+suspected: not a stall, but unmatched entries eventually getting flushed
+out individually, long after the fact, with their stale original
+timestamp intact. For a one-shot rule like 100102 this is harmless
+(content, not timing, is what matters). For a timing-sensitive rule like
+100103 it's a genuine false-positive source. Fixed with a `matched=true`
+field requirement on rule 100101 (so both 100102 and 100103 inherit
+it) - a real attacker burst is always a completed, matched request/
+response exchange happening in real time, so this costs nothing on the
+detection side. Confirmed: a fresh synthetic burst (6,882 writes/1.5s
+from a genuinely separate, mirrored container) still fired 100103
+correctly with the fix in place, and a 4-minute clean window afterward
+produced zero new matches where the unfixed version had been producing
+one every 20-90 seconds.
+
+### 5.15 Measuring a write-rate baseline needs more care than a single sample - two mistakes made and caught before the threshold was trusted
+
+Calibrating 100103's threshold took two wrong attempts, both caught by
+testing against real traffic rather than trusting the measurement:
+
+- **First baseline (133s sample)**: steady ~8.5 writes/sec per
+  remote-IO target, peaking at ~21 writes in any 2-second window.
+  Threshold set to 40 (~2x that peak). `same_field` grouping confirmed
+  working correctly (matches distributed evenly across all 6 targets)
+  but the rule still fired constantly against real, unmodified baseline
+  traffic - the sample wasn't representative.
+- **Contaminated remeasurement**: a second, longer sample showed one
+  target (192.168.95.10) spiking to max=79 and another
+  (192.168.95.13) to max=248 - but this sample unknowingly included
+  leftover traffic from an earlier burst test, not genuine new baseline
+  variance. Caught by noticing the numbers didn't match the "clean"
+  methodology this doc otherwise follows, not by any error or crash.
+- **Actually-clean remeasurement** (log truncated immediately before,
+  zero test traffic during): 5 of 6 targets tight and consistent
+  (max ~19-20/2s), but 192.168.95.13 is a genuine, reproducible
+  outlier (max ~60/2s) - a real structural difference from the other
+  five (cause not fully diagnosed: same single persistent connection as
+  the others, just a different read/write cadence), not measurement
+  noise.
+
+Final threshold (120, ~2x the worst real target's observed peak) trades
+sensitivity for the 5 quieter targets to get zero false positives against
+the noisiest one, since `same_field` applies one threshold across every
+grouped value. Per-target thresholds (a separate rule per target) would
+be more precise but weren't built this round - noted as a possible
+follow-up in §6.
+
+A separate lesson from the same testing: `simulation` is not a stand-in
+for 6 separate remote-IO containers - the "remote-IO units"
+(`192.168.95.10`-`.15`) are secondary IP addresses on `simulation`'s own
+single interface. A test that connects from `simulation` to one of its
+own secondary IPs never leaves that container's network stack - it's
+genuine intra-host loopback, and (correctly) never reaches the mirror at
+all. Burst tests need to originate from a genuinely separate container.
+
 ## 6. Open risks / questions
 
-- **A real Modbus-content Wazuh rule** (§5.12) - both existing rules are
-  intentionally suppressed at level 0. Needs either a rate/threshold
-  approach (measure this lab's actual baseline write rate first) or a
-  content/allowlist approach (unexpected address/source) - not "any
-  write happened," which was tested live and immediately overwhelmed the
-  indexer at ~1000 alerts/sec.
+- ~~A real Modbus-content Wazuh rule~~ — **resolved** (§5.13): both a
+  content-based rule (100102, any write to the PLC itself - zero
+  measured baseline, validated against the real stuck-valve attack) and
+  a rate-based rule (100103, write-rate anomaly per target, validated
+  against a real synthetic burst) are built and live, with no false
+  positives over multiple clean windows.
+- **Per-target thresholds for 100103** (§5.15) - the current single
+  threshold (120/2s) is calibrated to the noisiest of the 6 remote-IO
+  targets, which means real sensitivity for the other 5 (whose own
+  baseline would tolerate a much lower bar) is worse than it could be.
+  Would need a separate rule per target rather than one `same_field`-
+  grouped rule.
+- **Why `192.168.95.13` runs a structurally different write rate than
+  the other 5 remote-IO targets** (§5.15) - confirmed real and
+  reproducible, not explained. Possibly relevant to the §5.14 finding
+  too (that target may also be where stale flushed entries are most
+  visible) - not confirmed either way.
 - ~~CIDR-scoped `tc flower` filtering~~ — **resolved, validated live**
   (§3, §4.2).
 - ~~Zeek's own supervision strategy for a mirror interface that can appear/

@@ -25,35 +25,113 @@
   silently dropped (logall_json is off by default) - a rule is what
   actually turns them into visible alerts.
 
-  Both rules are level 0 (categorize, don't alert) - DELIBERATELY, not a
-  placeholder. Level 3 (any event) produced ~1000 alerts/sec against this
-  lab's real PLC traffic and started overwhelming the indexer within
-  minutes of going live - confirmed live, not theoretical. Worse: the
-  plan to instead alert only on writes doesn't work either, because this
-  lab's remote-IO simulation issues a WRITE_MULTIPLE_REGISTERS on every
-  single normal poll cycle (not just during an attack) - "a write
-  happened" isn't an anomaly signal here at all, unlike the coarser
-  network-level (Suricata) write-frequency tell designed in
-  docs/cyber-vs-physical-fault-injection-design.md §4.4, which only sees
-  writes it wouldn't otherwise see baseline-zero of. A real rule needs to
-  be a *rate/threshold* rule (Wazuh's <frequency>/<timeframe>, comparing
-  against this traffic's real baseline write rate) or a *content* rule
-  (an unexpected address/value/source), not "did a write happen" - that
-  hasn't been designed yet, see docs/zeek-network-mirroring-design.md §6.
+  100100/100101 are level 1, not 0 - this matters more than it looks.
+  Level 0 ("ignore") rules are excluded from Wazuh's frequency/
+  if_matched_sid correlation entirely, not just from alert output -
+  confirmed directly with wazuh-logtest: a rule depending on
+  if_matched_sid against a level-0 rule never fires, no matter how many
+  times the base rule matches. <options>no_log</options> looks like the
+  fix (the name suggests "match, but don't log") but doesn't suppress
+  output either - also confirmed directly, still produced full alerts.
+  The actual mechanism: the manager's global <log_alert_level> (ossec.conf,
+  default 3) is the real output floor, independent of correlation. Level 1
+  is low enough to stay under that floor (no output, no indexing) while
+  still being non-zero, which is all correlation needs.
+
+  100101 requires matched=true - this closes a real false-positive path
+  tied to the modbus_pending expiration gap recorded (and, at the time,
+  believed not load-bearing) in the design doc's §5.10: unmatched pending
+  requests in ICSNPP's table apparently do eventually get flushed out
+  individually, but keep their *original* request timestamp in "ts" while
+  being written to the log at whatever later wall-clock moment they
+  actually flush - confirmed live, a single long-running connection
+  (15+ hours uptime) periodically re-emitted the exact same stale,
+  matched=false event over and over, minutes to hours apart, and a
+  cluster of these flushing close together was enough to cross the
+  frequency threshold in §100103 as a false positive. Requiring
+  matched=true excludes these - a genuine attacker burst is always a
+  completed, matched request/response exchange in real time, so this
+  costs nothing on the detection side.
 -->
 <group name="modbus,ics,zeek,">
 
-  <rule id="100100" level="0">
+  <rule id="100100" level="1">
     <location>/usr/local/zeek/logs/modbus_detailed.log</location>
     <description>Zeek: Modbus protocol event (categorization only, not alerted)</description>
     <group>modbus,ics,</group>
   </rule>
 
-  <rule id="100101" level="0">
+  <rule id="100101" level="1">
     <if_sid>100100</if_sid>
     <field name="func">WRITE</field>
+    <field name="matched">true</field>
     <description>Zeek: Modbus write command (categorization only, not alerted)</description>
     <group>modbus,ics,ics_write,</group>
+  </rule>
+
+  <!--
+    Writes targeting the PLC itself (192.168.95.2) - its manual-mode
+    registers (coil 0, holding registers 10-13; see
+    docs/cyber-vs-physical-fault-injection-design.md §4.4's stuck-valve
+    pairing). Measured live against 133s of real normal operation: 301
+    legitimate read-only events reached the PLC, zero writes. Automatic
+    control never writes to the PLC over Modbus - only a real maintenance
+    action or an attack would - so this needs no frequency/threshold
+    logic at all. "It happened" already is the signal. Validated live
+    against the real attack: attacker/cyber_injects/setpoint_inject.py
+    run from Kali against the real PLC fired this rule immediately and
+    correctly for both the register write and the manual-mode coil write,
+    with the true source (192.168.90.6) correctly attributed.
+  -->
+  <rule id="100102" level="12">
+    <if_sid>100101</if_sid>
+    <field name="id.resp_h">^192\.168\.95\.2$</field>
+    <description>Zeek: Unauthorized Modbus write to PLC $(id.resp_h), address $(address) - PLC manual-mode registers are never written during normal automatic operation</description>
+    <group>modbus,ics,ics_write,ics_unauthorized_write,</group>
+  </rule>
+
+  <!--
+    Write-rate anomaly on the PLC<->remote-IO polling channel (separate
+    from 100102 - this is the PLC's own normal control-loop traffic, not
+    writes targeting the PLC). No existing cyber inject attacks this
+    specific channel, so there's no real attack to validate this against
+    yet - included as a template for future scenarios there.
+
+    Threshold calibrated from two live measurements, not a guess - the
+    first one was wrong and worth recording why. An initial 133s sample
+    showed a steady ~8.5 writes/sec per remote-IO target, peaking at ~21
+    writes in any 2-second window, so the threshold was first set to 40
+    (~2x that peak) - same_field grouping confirmed working correctly
+    (matches distributed evenly across all 6 targets), but it still fired
+    constantly against real, unmodified baseline traffic. A second,
+    longer, re-verified-clean measurement (log truncated immediately
+    before, zero test traffic during) showed why: 5 of 6 targets are
+    tight (max ~19-20/2s), but one (192.168.95.13) genuinely runs ~3x
+    higher (max ~60/2s) - a real, reproducible structural difference
+    between that target and the other five, not measurement noise (cause
+    not fully diagnosed - a single persistent connection, same as the
+    others, just a different read/write cadence).
+
+    Since same_field applies one threshold across every grouped value,
+    it has to clear the *worst* target's baseline, not the typical one:
+    set to 120 (2x 192.168.95.13's observed peak), confirmed via a clean
+    2-minute window with zero new matches at this threshold. Known
+    tradeoff: this sacrifices sensitivity for the 5 quieter targets, whose
+    own real baseline would tolerate a much lower threshold - a genuine
+    burst to one of those could reach 2-3x its own normal rate without
+    reaching 120. Validated against a real burst regardless: a synthetic
+    ~2,300 writes/sec burst (from a separate, genuinely mirrored container,
+    not an intra-container loopback - see the design doc for why that
+    distinction mattered) fired this rule correctly and immediately, with
+    the actual source IP attributed. Per-target thresholds (a separate
+    rule per target, more precise but more complex) are a possible
+    follow-up, not built this round.
+  -->
+  <rule id="100103" level="10" frequency="120" timeframe="2">
+    <if_matched_sid>100101</if_matched_sid>
+    <same_field>id.resp_h</same_field>
+    <description>Zeek: Modbus write-rate anomaly - more than 120 writes to $(id.resp_h) within 2 seconds</description>
+    <group>modbus,ics,ics_write,ics_write_burst,</group>
   </rule>
 
 </group>
