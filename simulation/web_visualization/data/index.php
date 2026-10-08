@@ -30,6 +30,14 @@ $quiet_buffer_max_seconds = 60;
 $quiet_buffer_fraction = 0.5; // of mean_interval_s
 $quiet_buffer_min_seconds = 5;
 
+// How long to hold a *genuinely newly-activated* fault before actually
+// forwarding it to the simulator, so its visible effect lands a beat after
+// the quiet window has already started (otherwise it starts at exactly the
+// same instant the window opens, as noticeable as the window itself - see
+// the design doc). Deliberately not applied to every request touching a
+// fault field - see detect_new_activation() below for why that matters.
+$fault_activation_delay_seconds = 3;
+
 // Maps a real-trigger field name to the tag name
 // simulation/noise_floor/scheduler.py picks ambient events from, so the
 // scheduler can avoid re-touching whatever the instructor just triggered.
@@ -56,6 +64,31 @@ function derive_affected_tags($inputs) {
         }
     }
     return array_values(array_unique($tags));
+}
+
+// True if $inputs contains a field genuinely transitioning from
+// inactive to active, compared against the simulator's *current* state
+// (not the noise-floor state file - the simulator itself is the source of
+// truth for "is this already active"). This is deliberately narrower than
+// derive_affected_tags() above: the dashboard resends every fault field's
+// current value on *every* interaction, including dragging a severity
+// slider or stroke-time slider for a fault that's already toggled on - if
+// those re-sends of an already-active value also counted as "just
+// triggered," every slider drag would eat the activation delay below,
+// which would feel laggy for no benefit (adjusting an active fault's
+// intensity isn't a new event the quiet buffer needs to protect).
+function detect_new_activation($inputs, $current_state) {
+    foreach ($inputs as $key => $value) {
+        if (preg_match('/^(.+)_stuck$/', $key)) {
+            $old = !empty($current_state[$key]);
+            if (!$old && $value) return true;
+        } elseif (preg_match('/^(.+)_fault_mode$/', $key)) {
+            $old = isset($current_state[$key]) ? (float)$current_state[$key] : 0.0;
+            $new = (float)$value;
+            if ($old != $new && $new != 0.0) return true;
+        }
+    }
+    return false;
 }
 
 // boolean fault/control fields the simulation will accept
@@ -146,9 +179,21 @@ if ($httpMethod === 'POST') {
     }
 
     if (!empty($inputs)) {
+        // Read current state first, to tell a genuine new activation (e.g.
+        // toggling a valve stuck) apart from re-sending an already-active
+        // fault's current value (e.g. dragging its severity slider) - see
+        // detect_new_activation()'s comment for why conflating the two
+        // would be a problem.
+        fwrite($fp, "{\"request\":\"read\"}\n");
+        $current = json_decode(fgets($fp, 4096), true);
+        $current_state = (is_array($current) && isset($current['state'])) ? $current['state'] : [];
+        $is_new_activation = detect_new_activation($inputs, $current_state);
+
         // A real fault was just triggered through this same endpoint -
         // suppress the ambient scheduler from reusing the same tag(s) briefly
-        // (see the quiet-buffer comments above).
+        // (see the quiet-buffer comments above). Set this *before* the delay
+        // below, so the quiet window's countdown starts immediately rather
+        // than only once the fault's effect actually lands.
         $nf_state = read_noise_floor_state($noise_floor_state_file, $noise_floor_default_state);
         $quiet_buffer_seconds = min(
             $quiet_buffer_max_seconds,
@@ -157,6 +202,10 @@ if ($httpMethod === 'POST') {
         $nf_state['suppress_until'] = microtime(true) + $quiet_buffer_seconds;
         $nf_state['suppressed_tags'] = derive_affected_tags($inputs);
         write_noise_floor_state($noise_floor_state_file, $nf_state);
+
+        if ($is_new_activation) {
+            sleep($fault_activation_delay_seconds);
+        }
 
         $request = json_encode(['request' => 'write', 'data' => ['inputs' => $inputs]]);
         fwrite($fp, $request);

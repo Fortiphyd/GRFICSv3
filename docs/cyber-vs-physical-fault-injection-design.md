@@ -429,6 +429,37 @@ not just by reading the code, including confirming the default-unchecked
 state and that enabling via the actual UI controls reaches the real
 scheduler process.
 
+**Real-fault activation delay**, closing the remaining asymmetry noted
+earlier: the quiet window still only starts *at* the trigger moment (true
+`±` symmetry isn't achievable reactively), but the real fault's *visible
+effect* now lands a few seconds into that window rather than at the same
+instant it opens - so the window has already been running for a beat
+before there's anything to notice, instead of starting and the real event
+appearing simultaneously. `index.php` now reads the simulator's current
+state before forwarding a write, and only delays
+(`$fault_activation_delay_seconds`, 3s) when a field is genuinely
+transitioning from inactive to active (`detect_new_activation()`) - not
+on every request touching a fault field, which matters because the
+dashboard resends the complete fault state on every interaction,
+including dragging a severity/stroke slider on a fault that's already
+active. Conflating the two would have made every slider drag feel laggy
+for no benefit; a slider adjustment isn't a new event the quiet window
+needs to protect.
+
+Validated live and via a real browser: a genuine new activation measured
+~3.0s (curl) and ~3.4s (Playwright, including normal browser/network
+overhead) before the real write reached the simulator; re-sending an
+already-active value, and adjusting an already-active sensor fault's
+severity, both measured ~10-15ms (no delay). Confirmed the quiet
+window's `suppress_until`/`suppressed_tags` are set *before* the delay,
+not after - checked mid-delay and found already populated, so the
+ambient scheduler starts avoiding the right tag(s) immediately rather
+than only once the fault's effect becomes visible. Confirmed the
+dashboard's own UI still updates optimistically/instantly on click (the
+instructor's screen doesn't feel laggy) - only the backend's actual
+propagation to the simulator, and thus what a participant would see, is
+delayed.
+
 ## 6. Session flow
 
 Target: ~45-60 minutes total per participant.
