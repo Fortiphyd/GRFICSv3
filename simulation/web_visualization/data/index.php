@@ -12,11 +12,51 @@ $noise_floor_default_state = [
     'seed' => 0,
     'mean_interval_s' => 30.0,
     'suppress_until' => 0.0,
+    'suppressed_tags' => [],
 ];
-// How long a real triggered fault (any field below) suppresses the ambient
-// scheduler for, so the seed can't occasionally land an ambient blip right
-// on top of the real event by chance (see design doc's "quiet buffer").
-$quiet_buffer_seconds = 60;
+// How long a real triggered fault suppresses the ambient scheduler for, and
+// which tags it suppresses - see design doc's "quiet buffer". Two changes
+// from the original fixed-60s/suppress-everything version, after live
+// testing showed a full-silence window is itself a tell ("it's quiet, too
+// quiet") once it's a large multiple of the configured event density:
+//   - Scaled to the configured mean_interval_s instead of fixed, capped at
+//     $quiet_buffer_max_seconds. A dense noise floor (short mean_interval_s)
+//     gets a short buffer; a sparse one keeps the full default.
+//   - Only the specific tag(s) the real trigger just touched are excluded
+//     (see derive_affected_tags() below) - the scheduler keeps generating
+//     ambient events on everything else during the window, so there's no
+//     silence to notice, just no direct same-tag collision.
+$quiet_buffer_max_seconds = 60;
+$quiet_buffer_fraction = 0.5; // of mean_interval_s
+$quiet_buffer_min_seconds = 5;
+
+// Maps a real-trigger field name to the tag name
+// simulation/noise_floor/scheduler.py picks ambient events from, so the
+// scheduler can avoid re-touching whatever the instructor just triggered.
+// Fields with no ambient equivalent (e_stop, valve_sp/slew_rate/cv_scale -
+// the scheduler doesn't generate sticky/fouled ambient events) map to
+// nothing and are ignored.
+//
+// Checks the field's *value*, not just whether the key is present - the
+// dashboard's existing faultInputsPayload() always POSTs every valve/sensor
+// field on every change (the full current state, not a diff), so most of
+// them are present but in their neutral/off value (stuck=0, fault_mode=0)
+// on any given request. Treating mere presence as "just triggered" (the
+// first version of this function did) flagged literally everything on
+// every request - functionally identical to the old suppress-everything
+// behavior this was meant to replace. Only a field whose value indicates
+// an actually active fault counts.
+function derive_affected_tags($inputs) {
+    $tags = [];
+    foreach ($inputs as $key => $value) {
+        if (preg_match('/^(.+)_stuck$/', $key, $m) && $value) {
+            $tags[] = $key; // scheduler's STUCK_TAGS are the literal field names
+        } elseif (preg_match('/^(.+)_fault_mode$/', $key, $m) && (float)$value != 0.0) {
+            $tags[] = $m[1]; // scheduler's SENSOR_TAGS are the bare sensor name
+        }
+    }
+    return array_values(array_unique($tags));
+}
 
 // boolean fault/control fields the simulation will accept
 $boolean_fields = [
@@ -107,10 +147,15 @@ if ($httpMethod === 'POST') {
 
     if (!empty($inputs)) {
         // A real fault was just triggered through this same endpoint -
-        // suppress the ambient scheduler briefly so it can't coincidentally
-        // overlap the real event (see $quiet_buffer_seconds above).
+        // suppress the ambient scheduler from reusing the same tag(s) briefly
+        // (see the quiet-buffer comments above).
         $nf_state = read_noise_floor_state($noise_floor_state_file, $noise_floor_default_state);
+        $quiet_buffer_seconds = min(
+            $quiet_buffer_max_seconds,
+            max($quiet_buffer_min_seconds, (float)$nf_state['mean_interval_s'] * $quiet_buffer_fraction)
+        );
         $nf_state['suppress_until'] = microtime(true) + $quiet_buffer_seconds;
+        $nf_state['suppressed_tags'] = derive_affected_tags($inputs);
         write_noise_floor_state($noise_floor_state_file, $nf_state);
 
         $request = json_encode(['request' => 'write', 'data' => ['inputs' => $inputs]]);

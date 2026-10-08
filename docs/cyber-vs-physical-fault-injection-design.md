@@ -378,11 +378,6 @@ Validated live, each independently:
 - **Ambient events genuinely affect the physics engine and self-revert**:
   watched real output fields (e.g. `product_flow` noise, `f1_stuck`)
   change during an event's hold window and cleanly return to normal after.
-- **Automatic quiet buffer**: POSTing any real fault field (e.g.
-  `f2_stuck`) through the same `index.php` endpoint was confirmed to set
-  `suppress_until` ~60s out without any separate dashboard action, and the
-  scheduler was confirmed to generate zero new events during that window,
-  then resume immediately after.
 - **Seed reproducibility**: two independent enable/disable cycles with
   the same seed produced byte-for-byte identical event sequences (same
   kind, tag, and duration, in the same order). An earlier comparison
@@ -390,6 +385,49 @@ Validated live, each independently:
   coincidence (small search space: 3 event kinds × ~7 sensor tags/4 valve
   tags × a narrow duration range) - caught by rerunning with a controlled,
   marked, same-seed comparison instead of trusting the first result.
+
+**Quiet buffer revised** after live use surfaced a real problem: the
+original version (fixed 60s, suppressing *every* ambient tag) was itself
+a tell - "it's quiet, too quiet" - since a dense noise floor's natural
+inter-event gap is much shorter than 60s, making the enforced silence
+stand out. Two changes, both validated live:
+
+- **Scaled to configured density** instead of fixed:
+  `min(60, max(5, mean_interval_s * 0.5))`, computed in `index.php` at
+  trigger time. Confirmed: a 10s mean interval produces a ~5s window, not
+  60s.
+- **Targets only the specific tag(s) just triggered**, not everything -
+  `index.php`'s `derive_affected_tags()` inspects the posted fields and
+  the scheduler's `suppressed_tags` list excludes just those from
+  candidate selection (`pick_event()` retries rather than reweighting, so
+  excluding one tag doesn't skew the others' relative odds). Confirmed
+  live with a 40s manually-extended window excluding two tags: four
+  ambient events fired on three *different*, unexcluded tags during the
+  window, and the excluded tags correctly resumed firing immediately
+  after it lapsed.
+
+Real bug caught building the second change, worth recording: the first
+version of `derive_affected_tags()` flagged a field as "affected" just by
+being *present* in the POST body - but the dashboard's existing
+`faultInputsPayload()` always sends the complete current state of every
+valve/sensor field on *every* change, not a diff, so nearly everything was
+flagged as "just triggered" on every single trigger - functionally
+identical to the original suppress-everything behavior, just reached a
+different way. Caught with a real end-to-end browser test (Playwright)
+clicking the dashboard's actual valve/sensor controls, which a
+hand-crafted minimal curl payload (`{"f1_stuck": true}`) had not exposed,
+since a minimal payload doesn't reproduce the real frontend's full-state
+POSTs. Fixed by checking the field's *value* (stuck=truthy,
+fault_mode≠0), not just its presence, confirmed correct for both the
+valve-stuck and sensor-fault-mode code paths independently.
+
+**Dashboard UI**: a "Noise Floor" section on the Fault Injection page
+(enabled checkbox, seed field with a randomize button, mean-interval
+slider, live status line showing the quiet-buffer countdown and which
+tag(s) it's currently avoiding) - validated with a real headless browser,
+not just by reading the code, including confirming the default-unchecked
+state and that enabling via the actual UI controls reaches the real
+scheduler process.
 
 ## 6. Session flow
 

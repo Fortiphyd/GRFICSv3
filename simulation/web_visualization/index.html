@@ -984,6 +984,7 @@ const SIM_POLL_MS = 3000;
       const nf = data.noise_floor;
       if (nf) {
         noiseFloorState.suppressUntil = Number(nf.suppress_until) || 0;
+        noiseFloorState.suppressedTags = Array.isArray(nf.suppressed_tags) ? nf.suppressed_tags : [];
         const el = document.getElementById('nf_live');
         if (el) el.textContent = noiseFloorStatusText();
       }
@@ -1025,6 +1026,7 @@ const SIM_POLL_MS = 3000;
           noiseFloorState.seed = Number(nf.seed) || 0;
           noiseFloorState.meanIntervalS = Number(nf.mean_interval_s) || 30;
           noiseFloorState.suppressUntil = Number(nf.suppress_until) || 0;
+          noiseFloorState.suppressedTags = Array.isArray(nf.suppressed_tags) ? nf.suppressed_tags : [];
         }
       }
     } catch { /* fall back to last-known UI state */ }
@@ -1048,7 +1050,7 @@ const SIM_POLL_MS = 3000;
   // docs/cyber-vs-physical-fault-injection-design.md §5. The scheduler
   // (simulation/noise_floor/scheduler.py) independently defaults to quiet
   // too, so this UI reflects that default rather than enforcing it.
-  const noiseFloorState = { enabled: false, seed: 0, meanIntervalS: 30, suppressUntil: 0 };
+  const noiseFloorState = { enabled: false, seed: 0, meanIntervalS: 30, suppressUntil: 0, suppressedTags: [] };
 
   function noiseFloorInputsPayload() {
     return {
@@ -1072,7 +1074,10 @@ const SIM_POLL_MS = 3000;
     const s = noiseFloorState;
     if (!s.enabled) return 'status: off';
     const remaining = s.suppressUntil - (Date.now() / 1000);
-    if (remaining > 0) return `status: on — quiet buffer active (${Math.ceil(remaining)}s, a real fault was just triggered)`;
+    if (remaining > 0) {
+      const tags = s.suppressedTags.length ? s.suppressedTags.join(', ') : 'the triggered field(s)';
+      return `status: on — avoiding ${tags} for ${Math.ceil(remaining)}s (a real fault was just triggered); ambient events continue elsewhere`;
+    }
     return 'status: on';
   }
 

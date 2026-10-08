@@ -54,7 +54,14 @@ DEFAULT_STATE = {
     "seed": 0,
     "mean_interval_s": 30.0,
     "suppress_until": 0.0,
+    "suppressed_tags": [],
 }
+
+# Max attempts to draw a tag outside the current exclusion set before giving
+# up on this cycle - only matters if every possible tag happens to be
+# excluded at once, which shouldn't normally happen (index.php only
+# excludes whatever the instructor's single trigger just touched).
+MAX_PICK_ATTEMPTS = 20
 
 
 def ensure_state_file():
@@ -97,10 +104,18 @@ def send_write(sock, fields):
     sock.recv(4096)  # drain the response; we don't need the echoed outputs
 
 
-def pick_event(rng):
-    kind = rng.choice(["noise", "dropout", "stuck"])
-    tag = rng.choice(STUCK_TAGS) if kind == "stuck" else rng.choice(SENSOR_TAGS)
-    return kind, tag
+def pick_event(rng, exclude_tags=()):
+    # Retry rather than filtering the candidate lists up front, so a tag
+    # being excluded doesn't skew the kind/tag probabilities for everything
+    # else (e.g. excluding one sensor tag shouldn't make "stuck" relatively
+    # more likely) - this is meant to be a surgical exclusion, not a
+    # reweighting.
+    for _ in range(MAX_PICK_ATTEMPTS):
+        kind = rng.choice(["noise", "dropout", "stuck"])
+        tag = rng.choice(STUCK_TAGS) if kind == "stuck" else rng.choice(SENSOR_TAGS)
+        if tag not in exclude_tags:
+            return kind, tag
+    return None, None
 
 
 def apply_event(sock, kind, tag):
@@ -160,10 +175,20 @@ def main():
             continue
 
         state = load_state()
+        # Quiet buffer: only exclude the specific tag(s) a real trigger just
+        # touched, not everything - a real attacker/instructor action
+        # shouldn't make the *entire* ambient floor go silent, since that
+        # silence would itself be a tell (confirmed as a real problem in
+        # testing: a blanket pause stood out clearly against the configured
+        # event density). Ambient events on every other tag continue
+        # uninterrupted during the window.
+        exclude_tags = ()
         if time.time() < float(state.get("suppress_until", 0.0)):
-            continue  # quiet buffer around a real triggered event
+            exclude_tags = set(state.get("suppressed_tags", []))
 
-        kind, tag = pick_event(rng)
+        kind, tag = pick_event(rng, exclude_tags)
+        if tag is None:
+            continue  # every candidate tag was excluded; try again next cycle
         hold = rng.uniform(*HOLD_SECONDS)
         try:
             print(f"[noise-floor] {kind} on {tag} for {hold:.1f}s", flush=True)
