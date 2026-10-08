@@ -386,6 +386,17 @@
         color: #e8eef6;
       }
 
+      .fault-toggle-line input[type="number"] {
+        flex: 1;
+        min-width: 0;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.14);
+        color: #e8eef6;
+        border-radius: 8px;
+        padding: 5px 8px;
+        font-size: 12px;
+      }
+
       .fault-toggle-line .fault-value {
         width: 54px;
         flex: 0 0 54px;
@@ -970,6 +981,12 @@ const SIM_POLL_MS = 3000;
         });
         el.textContent = parts.join('  ·  ');
       }
+      const nf = data.noise_floor;
+      if (nf) {
+        noiseFloorState.suppressUntil = Number(nf.suppress_until) || 0;
+        const el = document.getElementById('nf_live');
+        if (el) el.textContent = noiseFloorStatusText();
+      }
     } catch { /* ignore transient errors */ }
   }
 
@@ -1002,10 +1019,18 @@ const SIM_POLL_MS = 3000;
             else if (s.mode === SENSOR_FAULT_DROPOUT) s.dropoutPct = Math.round(severity * 100);
           }
         }
+        const nf = data.noise_floor;
+        if (nf) {
+          noiseFloorState.enabled = !!nf.enabled;
+          noiseFloorState.seed = Number(nf.seed) || 0;
+          noiseFloorState.meanIntervalS = Number(nf.mean_interval_s) || 30;
+          noiseFloorState.suppressUntil = Number(nf.suppress_until) || 0;
+        }
       }
     } catch { /* fall back to last-known UI state */ }
     renderFaultControls();
     renderSensorFaultControls();
+    renderNoiseFloorControls();
     if (faultLivePollTimer) clearInterval(faultLivePollTimer);
     faultLivePollTimer = setInterval(pollFaultLiveState, 1000);
     pollFaultLiveState();
@@ -1016,6 +1041,91 @@ const SIM_POLL_MS = 3000;
       clearInterval(faultLivePollTimer);
       faultLivePollTimer = null;
     }
+  }
+
+  // ---- Noise floor ----
+  // Ambient background distractor events - see
+  // docs/cyber-vs-physical-fault-injection-design.md §5. The scheduler
+  // (simulation/noise_floor/scheduler.py) independently defaults to quiet
+  // too, so this UI reflects that default rather than enforcing it.
+  const noiseFloorState = { enabled: false, seed: 0, meanIntervalS: 30, suppressUntil: 0 };
+
+  function noiseFloorInputsPayload() {
+    return {
+      noise_floor_enabled: noiseFloorState.enabled,
+      noise_floor_seed: noiseFloorState.seed,
+      noise_floor_mean_interval_s: noiseFloorState.meanIntervalS,
+    };
+  }
+
+  async function pushNoiseFloorState() {
+    try {
+      await fetch('/data/index.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(noiseFloorInputsPayload()),
+      });
+    } catch { /* best effort; UI still reflects intended state */ }
+  }
+
+  function noiseFloorStatusText() {
+    const s = noiseFloorState;
+    if (!s.enabled) return 'status: off';
+    const remaining = s.suppressUntil - (Date.now() / 1000);
+    if (remaining > 0) return `status: on — quiet buffer active (${Math.ceil(remaining)}s, a real fault was just triggered)`;
+    return 'status: on';
+  }
+
+  function renderNoiseFloorControls() {
+    const container = document.getElementById('noiseFloorControlsBody');
+    if (!container) return;
+    const s = noiseFloorState;
+    container.innerHTML = `<div class="fault-card">
+      <h3>Ambient background events</h3>
+      <div class="fault-toggle-line">
+        <input type="checkbox" id="nf_enabled_chk" ${s.enabled ? 'checked' : ''}
+               onchange="onNoiseFloorToggle(this.checked)">
+        <label class="fault-label" for="nf_enabled_chk">Enabled</label>
+        <span style="opacity:0.5;font-size:11px;">minor sensor noise/dropout and valve stickiness, at random</span>
+      </div>
+      <div class="fault-toggle-line">
+        <label class="fault-label" for="nf_seed_num">Seed</label>
+        <input type="number" id="nf_seed_num" value="${s.seed}" step="1"
+               oninput="onNoiseFloorSeed(this.value)">
+        <button class="small-btn" type="button" onclick="randomizeNoiseFloorSeed()" title="Randomize seed">🎲</button>
+      </div>
+      <div class="fault-toggle-line">
+        <label class="fault-label" for="nf_interval_sld">Mean interval</label>
+        <input type="range" min="5" max="300" step="5" value="${s.meanIntervalS}"
+               id="nf_interval_sld" oninput="onNoiseFloorInterval(this.value)">
+        <span class="fault-value" id="nf_interval_val">${s.meanIntervalS}s</span>
+      </div>
+      <div class="fault-live" id="nf_live">${noiseFloorStatusText()}</div>
+    </div>`;
+  }
+
+  function onNoiseFloorToggle(checked) {
+    noiseFloorState.enabled = checked;
+    renderNoiseFloorControls();
+    pushNoiseFloorState();
+  }
+
+  function onNoiseFloorSeed(value) {
+    noiseFloorState.seed = Number(value) || 0;
+    pushNoiseFloorState();
+  }
+
+  function randomizeNoiseFloorSeed() {
+    noiseFloorState.seed = Math.floor(Math.random() * 1000000);
+    renderNoiseFloorControls();
+    pushNoiseFloorState();
+  }
+
+  function onNoiseFloorInterval(value) {
+    noiseFloorState.meanIntervalS = Number(value);
+    const el = document.getElementById('nf_interval_val');
+    if (el) el.textContent = `${value}s`;
+    pushNoiseFloorState();
   }
 
   // ---- View switching (Process Simulation <-> Fault Injection) ----
@@ -1199,6 +1309,15 @@ const SIM_POLL_MS = 3000;
 
           <h2 class="fault-section-title">Sensors</h2>
           <div id="sensorFaultControlsBody" class="fault-grid"></div>
+
+          <h2 class="fault-section-title">Noise Floor</h2>
+          <p class="fault-intro">
+            Ambient background events (minor sensor noise/dropout, brief valve stickiness) at
+            random intervals, so a real triggered fault has to be found against realistic clutter
+            rather than a silent baseline. Off by default - this is a separate, session-level
+            setting independent of the faults above.
+          </p>
+          <div id="noiseFloorControlsBody" class="fault-grid"></div>
         </div>
       </main>
     </div>
