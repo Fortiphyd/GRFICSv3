@@ -495,11 +495,63 @@ more than statistical elegance when recruitment itself is the bottleneck.
   (HMI, always-on via `scadalts/supervisord.conf`) — the beacon/C2 delivery
   mechanism for the stuck-valve pairing's compromised-HMI model. Both baked
   into their respective Dockerfiles.
-- None of the above has runtime control yet — everything takes its
-  configuration via CLI args/hardcoded startup flags, restart/rerun to
-  change (the beacon/C2 pair's one exception: a command can be queued for
-  the implant without restarting anything, by writing to
-  `/tmp/c2_pending_command.json` on Kali - see the script's docstring).
+- ~~None of the above has runtime control yet~~ **done, validated**:
+  `attacker/cyber_injects/control_daemon.py`, an always-on supervisord
+  program on Kali (`[program:cyber-injects-control]`, same pattern as
+  `c2-listener`) exposing a JSON-line TCP control socket on
+  `0.0.0.0:5600` - the "new control surface on Kali" called for below.
+  `simulation/web_visualization/data/index.php` reaches it by container
+  name (`kali:5600`) over `a-grfics-admin`, the same out-of-band bridge
+  network every container is already on for health checks, never one of
+  the simulated ICS/DMZ networks - this control path is not, and could
+  never be, visible to Zeek/Suricata. Two requests:
+  - `configure_relay` starts/reconfigures/kills a `modbus_relay.py`
+    subprocess against the PLC's own `%IW` input registers (§4.1-4.3;
+    register map taken from `plc/st_files/326339.st` - e.g. tank_pressure
+    is `%IW108`). mode 0 kills the subprocess outright, so nothing is
+    listening until a real mode is requested, matching the noise floor's
+    "quiet by default" convention. A %FS severity (noise amplitude,
+    dropout duty) converts to the relay's raw 0-65535 register units
+    without needing a per-sensor full-scale lookup, since
+    `simulation/simulation/remote_io/modbus/*.py` already scales every
+    sensor's engineering value onto 0-65535 linearly - confirmed by
+    reading those five device scripts, not assumed.
+  - `set_stuck_valve` queues a two-step command list (write the chosen
+    valve's manual setpoint register, then set the `manual_mode` coil)
+    to the same `/tmp/c2_pending_command.json` file the beacon already
+    polls (§4.4) - `beacon_client.py`'s `execute()` was extended to run a
+    list of actions in order from one queued command (previously a single
+    action only), so both writes land in the same ~5s check-in instead of
+    racing a second queue against the beacon's next poll.
+  - Live-validated end-to-end against the real running stack, not just
+    exercised in isolation: `configure_relay` (frozen and noise modes on
+    `tank_pressure`) produced real `true=`/`reported=` log lines against
+    the actual PLC, frozen holding one value while true kept changing and
+    noise jittering within ±severity, confirmed via
+    `docker exec kali tail`. `set_stuck_valve` closed f1 (100% → 0%) and,
+    on disable, handed control back and watched it reopen to 100% under
+    normal closed-loop control - both read from the simulation
+    container's own control socket before/after, not inferred. The full
+    dashboard round trip (click in a real headless-Chromium browser →
+    `index.php` → `kali:5600` → either the relay subprocess or the C2
+    file → the beacon's next check-in) was also run live: the UI's status
+    line correctly showed "queued, awaiting beacon check-in" immediately
+    after enabling and flipped to "delivered" ~5s later once the beacon
+    actually executed it.
+  - Two real bugs found and fixed during this validation: (1) restarting
+    the control daemon (e.g. for a code reload, or supervisord's
+    `autorestart` after a crash) orphaned any relay subprocess it had
+    started, since `subprocess.Popen` children aren't tied to the
+    parent's lifetime - a second relay then started alongside the
+    orphaned first one, both bound to the same listen port, confirmed via
+    `ps aux` showing two `modbus_relay.py` processes with different
+    frozen values interleaved in the same log. Fixed with a `pkill -f`
+    sweep at daemon startup. (2) moving the relay's blocking
+    `subprocess.wait()` onto a thread-pool executor (so a slow shutdown
+    doesn't stall the whole control socket for other requests) reopened a
+    race between two near-simultaneous `configure_relay` calls that the
+    original single-threaded-event-loop version didn't have; serialized
+    with an `asyncio.Lock`.
 
 - ~~Noise-floor scheduler: seeded, needs a home~~ **done, validated**
   (§5): `simulation/noise_floor/scheduler.py`, an always-on supervisord
@@ -508,6 +560,17 @@ more than statistical elegance when recruitment itself is the bottleneck.
   physical fault control socket, so no new container/script needed for
   those three.
 
+- ~~Dashboard: new "Cyber Injects" and "Noise Floor" sections~~ **done,
+  validated** (Noise Floor already was; Cyber Injects added this round):
+  a "Cyber Injects" section on the Fault Injection page between Sensors
+  and Noise Floor, following the same fault-card pattern as the physical
+  controls - a sensor + fault-mode dropdown pair and a %FS/duty slider for
+  the relay, a valve + stuck-position slider and enable checkbox for the
+  compromised-HMI inject, each with a live status line polled once a
+  second while on that page. State re-syncs from Kali on page load/reload
+  the same way physical faults re-sync from the simulator, confirmed by
+  reloading mid-session in the same browser test above.
+
 Still not built:
 
 - EWS: small automation for periodic legitimate setpoint nudges (noise
@@ -515,16 +578,13 @@ Still not built:
   doesn't go through the simulation container's control socket at all.
 - Kali or router: small script for benign ARP churn (noise floor) - the
   5th ambient event type, same reasoning.
-- Dashboard: new "Cyber Injects" and "Noise Floor" sections on the existing
-  Fault Injection page, following the same pattern as the physical fault
-  controls (mode/severity where applicable, a seed input for the noise
-  floor).
-- Some new control surface on Kali the dashboard can reach to start/stop/
-  configure the relay/injection scripts and noise floor (mirrors how the
-  simulation container already exposes a control channel for physical
-  faults). For the beacon/C2 pair specifically, this could be as simple as
-  the dashboard writing to the same pending-command file/API a manual
-  `docker exec` currently would.
+- The ARP-spoof + iptables REDIRECT positioning itself is still manual
+  (deliberately - see §8's "ARP spoofing reliability" entry and the
+  compromised-HMI model's "assume the foothold already exists" framing).
+  The new control surface starts/stops/reconfigures the already-validated
+  attack mechanisms; it doesn't automate establishing the MITM position,
+  which remains a one-time instructor setup step before a relay-based
+  session.
 
 ## 8. Open risks / questions to resolve before or during implementation
 

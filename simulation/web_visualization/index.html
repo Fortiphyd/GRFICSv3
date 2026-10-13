@@ -955,7 +955,7 @@ const SIM_POLL_MS = 3000;
 
   async function pollFaultLiveState() {
     try {
-      const res = await fetch('/data/index.php', { cache: 'no-store' });
+      const res = await fetch('/data/index.php?cyber=1', { cache: 'no-store' });
       if (!res.ok) return;
       const data = await res.json();
       const st = data.state || {};
@@ -988,12 +988,20 @@ const SIM_POLL_MS = 3000;
         const el = document.getElementById('nf_live');
         if (el) el.textContent = noiseFloorStatusText();
       }
+      const ci = data.cyber_injects;
+      if (ci) {
+        cyberInjectsStatus = ci;
+        const relayEl = document.getElementById('cyberRelay_live');
+        if (relayEl) relayEl.textContent = cyberRelayStatusText();
+        const stuckEl = document.getElementById('cyberStuck_live');
+        if (stuckEl) stuckEl.textContent = cyberStuckStatusText();
+      }
     } catch { /* ignore transient errors */ }
   }
 
   async function enterFaultsView() {
     try {
-      const res = await fetch('/data/index.php', { cache: 'no-store' });
+      const res = await fetch('/data/index.php?cyber=1', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         const st = data.state || {};
@@ -1028,10 +1036,26 @@ const SIM_POLL_MS = 3000;
           noiseFloorState.suppressUntil = Number(nf.suppress_until) || 0;
           noiseFloorState.suppressedTags = Array.isArray(nf.suppressed_tags) ? nf.suppressed_tags : [];
         }
+        const ci = data.cyber_injects;
+        if (ci) {
+          cyberInjectsStatus = ci;
+          if (ci.relay && ci.relay.sensor) {
+            cyberRelayState.sensor = ci.relay.sensor;
+            cyberRelayState.mode = ci.relay.mode;
+            if (ci.relay.mode === SENSOR_FAULT_NOISE) cyberRelayState.noisePct = Math.round((ci.relay.severity / 65535) * 100);
+            if (ci.relay.mode === SENSOR_FAULT_DROPOUT) cyberRelayState.dropoutPct = Math.round(ci.relay.severity * 100);
+          }
+          if (ci.stuck_valve) {
+            cyberStuckValveState.enabled = !!ci.stuck_valve.enabled;
+            if (ci.stuck_valve.valve) cyberStuckValveState.valve = ci.stuck_valve.valve;
+            if (typeof ci.stuck_valve.percent === 'number') cyberStuckValveState.percent = ci.stuck_valve.percent;
+          }
+        }
       }
     } catch { /* fall back to last-known UI state */ }
     renderFaultControls();
     renderSensorFaultControls();
+    renderCyberInjectsControls();
     renderNoiseFloorControls();
     if (faultLivePollTimer) clearInterval(faultLivePollTimer);
     faultLivePollTimer = setInterval(pollFaultLiveState, 1000);
@@ -1043,6 +1067,180 @@ const SIM_POLL_MS = 3000;
       clearInterval(faultLivePollTimer);
       faultLivePollTimer = null;
     }
+  }
+
+  // ---- Cyber injects ----
+  // See docs/cyber-vs-physical-fault-injection-design.md §4 and §7. Talks
+  // to the same /data/index.php endpoint as the physical faults above;
+  // the PHP backend relays these fields on to Kali's control daemon
+  // (attacker/cyber_injects/control_daemon.py) over the admin network.
+
+  // Reuses FAULT_SENSORS (same 7 sensors share identical %IW input
+  // registers on the PLC - see control_daemon.py's SENSOR_REGISTERS) and
+  // FAULT_VALVES for the stuck-valve target list, so the dropdowns always
+  // match the physical fault lists above them.
+  const cyberRelayState = { sensor: FAULT_SENSORS[0].key, mode: SENSOR_FAULT_NONE, noisePct: 5, dropoutPct: 30 };
+  const cyberStuckValveState = { enabled: false, valve: FAULT_VALVES[0].key, percent: 0 };
+  let cyberInjectsStatus = { relay: null, stuck_valve: null };
+
+  function cyberRelaySeverityForPayload() {
+    // Every sensor's register already scales its engineering value
+    // linearly onto 0-65535 (confirmed against
+    // simulation/simulation/remote_io/modbus/*.py), so a %FS fraction is
+    // the same fraction of raw register range for any sensor - no
+    // per-sensor full-scale lookup needed here, unlike the physical fault
+    // severity conversion above.
+    switch (cyberRelayState.mode) {
+      case SENSOR_FAULT_NOISE:   return (cyberRelayState.noisePct / 100) * 65535;
+      case SENSOR_FAULT_DROPOUT: return cyberRelayState.dropoutPct / 100;
+      default:                   return 0;
+    }
+  }
+
+  async function pushCyberRelayState() {
+    try {
+      await fetch('/data/index.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cyber_relay_sensor: cyberRelayState.sensor,
+          cyber_relay_mode: cyberRelayState.mode,
+          cyber_relay_severity: cyberRelaySeverityForPayload(),
+        }),
+      });
+    } catch { /* best effort; UI still reflects intended state */ }
+  }
+
+  async function pushCyberStuckValve() {
+    try {
+      await fetch('/data/index.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cyber_stuck_valve_enabled: cyberStuckValveState.enabled,
+          cyber_stuck_valve: cyberStuckValveState.valve,
+          cyber_stuck_percent: cyberStuckValveState.percent,
+        }),
+      });
+    } catch { /* best effort; UI still reflects intended state */ }
+  }
+
+  function cyberRelayStatusText() {
+    const st = cyberInjectsStatus.relay;
+    if (!st || !st.sensor) return 'status: off';
+    const modeLabel = { [SENSOR_FAULT_FROZEN]: 'frozen', [SENSOR_FAULT_NOISE]: 'noise', [SENSOR_FAULT_DROPOUT]: 'dropout' }[st.mode] || 'unknown';
+    return `status: relaying ${st.sensor} (${modeLabel}) — requires Kali's ARP-spoof + REDIRECT to actually intercept HMI traffic`;
+  }
+
+  function cyberStuckStatusText() {
+    const st = cyberInjectsStatus.stuck_valve;
+    if (!st || !st.enabled) return 'status: off';
+    const delivery = st.pending ? 'queued, awaiting beacon check-in' : 'delivered';
+    return `status: ${st.valve} forced to ${st.percent}% via manual mode (${delivery})`;
+  }
+
+  function cyberRelaySliderRow(paramKey, label, value, min, max, step, unit) {
+    return `<div class="fault-toggle-line">
+      <label class="fault-label" for="cyberRelay_${paramKey}_sld">${label}</label>
+      <input type="range" min="${min}" max="${max}" step="${step}" value="${value}"
+             id="cyberRelay_${paramKey}_sld"
+             oninput="onCyberRelaySlider('${paramKey}', this.value)">
+      <span class="fault-value" id="cyberRelay_${paramKey}_val">${value}${unit}</span>
+    </div>`;
+  }
+
+  function renderCyberInjectsControls() {
+    const container = document.getElementById('cyberInjectsControlsBody');
+    if (!container) return;
+    const r = cyberRelayState;
+    let severityRow = '';
+    if (r.mode === SENSOR_FAULT_NOISE) {
+      severityRow = cyberRelaySliderRow('noisePct', 'Noise amplitude', r.noisePct, 1, 30, 1, '%FS');
+    } else if (r.mode === SENSOR_FAULT_DROPOUT) {
+      severityRow = cyberRelaySliderRow('dropoutPct', 'Time flatlined', r.dropoutPct, 5, 90, 5, '%');
+    }
+    const sensorOptions = FAULT_SENSORS.map(s =>
+      `<option value="${s.key}" ${r.sensor === s.key ? 'selected' : ''}>${s.label}</option>`
+    ).join('');
+
+    const sv = cyberStuckValveState;
+    const valveOptions = FAULT_VALVES.map(v =>
+      `<option value="${v.key}" ${sv.valve === v.key ? 'selected' : ''}>${v.label}</option>`
+    ).join('');
+
+    container.innerHTML = `<div class="fault-card">
+      <h3>Sensor relay (read-path MITM)</h3>
+      <div class="fault-toggle-line">
+        <label class="fault-label" for="cyberRelay_sensor_sel">Target sensor</label>
+        <select id="cyberRelay_sensor_sel" onchange="onCyberRelaySensorChange(this.value)">${sensorOptions}</select>
+      </div>
+      <div class="fault-toggle-line">
+        <label class="fault-label" for="cyberRelay_mode_sel">Fault mode</label>
+        <select id="cyberRelay_mode_sel" onchange="onCyberRelayModeChange(this.value)">
+          <option value="${SENSOR_FAULT_NONE}" ${r.mode === SENSOR_FAULT_NONE ? 'selected' : ''}>Off</option>
+          <option value="${SENSOR_FAULT_FROZEN}" ${r.mode === SENSOR_FAULT_FROZEN ? 'selected' : ''}>Frozen (replay last reading)</option>
+          <option value="${SENSOR_FAULT_NOISE}" ${r.mode === SENSOR_FAULT_NOISE ? 'selected' : ''}>Noise (random jitter)</option>
+          <option value="${SENSOR_FAULT_DROPOUT}" ${r.mode === SENSOR_FAULT_DROPOUT ? 'selected' : ''}>Dropout (flatlines to 0)</option>
+        </select>
+      </div>
+      ${severityRow}
+      <div class="fault-live" id="cyberRelay_live">${cyberRelayStatusText()}</div>
+    </div>
+    <div class="fault-card">
+      <h3>Stuck valve (compromised HMI)</h3>
+      <div class="fault-toggle-line">
+        <input type="checkbox" id="cyberStuck_enabled_chk" ${sv.enabled ? 'checked' : ''}
+               onchange="onCyberStuckToggle(this.checked)">
+        <label class="fault-label" for="cyberStuck_enabled_chk">Enabled</label>
+        <span style="opacity:0.5;font-size:11px;">beacon/C2 write of OpenPLC manual mode — delivered on the implant's next check-in (~5s)</span>
+      </div>
+      <div class="fault-toggle-line">
+        <label class="fault-label" for="cyberStuck_valve_sel">Valve</label>
+        <select id="cyberStuck_valve_sel" ${sv.enabled ? 'disabled' : ''} onchange="onCyberStuckValveChange(this.value)">${valveOptions}</select>
+      </div>
+      <div class="fault-toggle-line">
+        <label class="fault-label" for="cyberStuck_pct_sld">Stuck position</label>
+        <input type="range" min="0" max="100" step="5" value="${sv.percent}" id="cyberStuck_pct_sld"
+               ${sv.enabled ? 'disabled' : ''} oninput="onCyberStuckPercent(this.value)">
+        <span class="fault-value" id="cyberStuck_pct_val">${sv.percent}%</span>
+      </div>
+      <div class="fault-live" id="cyberStuck_live">${cyberStuckStatusText()}</div>
+    </div>`;
+  }
+
+  function onCyberRelaySensorChange(value) {
+    cyberRelayState.sensor = value;
+    pushCyberRelayState();
+  }
+
+  function onCyberRelayModeChange(value) {
+    cyberRelayState.mode = Number(value);
+    renderCyberInjectsControls();
+    pushCyberRelayState();
+  }
+
+  function onCyberRelaySlider(paramKey, value) {
+    cyberRelayState[paramKey] = Number(value);
+    const unit = paramKey === 'noisePct' ? '%FS' : '%';
+    const el = document.getElementById(`cyberRelay_${paramKey}_val`);
+    if (el) el.textContent = `${value}${unit}`;
+    pushCyberRelayState();
+  }
+
+  function onCyberStuckToggle(checked) {
+    cyberStuckValveState.enabled = checked;
+    renderCyberInjectsControls();
+    pushCyberStuckValve();
+  }
+
+  function onCyberStuckValveChange(value) {
+    cyberStuckValveState.valve = value;
+  }
+
+  function onCyberStuckPercent(value) {
+    cyberStuckValveState.percent = Number(value);
+    const el = document.getElementById('cyberStuck_pct_val');
+    if (el) el.textContent = `${value}%`;
   }
 
   // ---- Noise floor ----
@@ -1314,6 +1512,19 @@ const SIM_POLL_MS = 3000;
 
           <h2 class="fault-section-title">Sensors</h2>
           <div id="sensorFaultControlsBody" class="fault-grid"></div>
+
+          <h2 class="fault-section-title">Cyber Injects</h2>
+          <p class="fault-intro">
+            Symptom-alike cyber attacks paired with the physical faults above (see
+            docs/cyber-vs-physical-fault-injection-design.md §4) - same visible effect at the
+            HMI, different root cause. The sensor relay intercepts the PLC→HMI read path from
+            Kali and needs the ARP-spoof + iptables REDIRECT positioning already set up there
+            first (this control only starts/stops/reconfigures the relay script itself, not
+            that positioning). The stuck valve inject instead uses the always-running
+            compromised-HMI beacon, so it needs no extra positioning - just a short delay for
+            the implant's next check-in.
+          </p>
+          <div id="cyberInjectsControlsBody" class="fault-grid"></div>
 
           <h2 class="fault-section-title">Noise Floor</h2>
           <p class="fault-intro">

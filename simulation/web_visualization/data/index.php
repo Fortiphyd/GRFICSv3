@@ -154,6 +154,35 @@ function write_noise_floor_state($path, $state) {
     file_put_contents($path, json_encode($state));
 }
 
+// Cyber injects control (Kali) - see
+// docs/cyber-vs-physical-fault-injection-design.md §7. A small control
+// daemon on Kali (attacker/cyber_injects/control_daemon.py) manages the
+// read-path relay (freeze/noise/dropout, §4.1-4.3) and queues the
+// compromised-HMI beacon/C2 command for the stuck-valve inject (§4.4).
+// Reached over a-grfics-admin, the same out-of-band bridge network every
+// container is already on for health checks - not one of the simulated
+// ICS/DMZ networks, so this control path never crosses (and is never
+// visible on) the network Zeek/Suricata actually monitor.
+$kali_control_host = 'kali';
+$kali_control_port = 5600;
+$kali_control_timeout = 2;
+
+function call_kali_control($host, $port, $timeout, $request) {
+    $sock = @fsockopen($host, $port, $errno, $errstr, $timeout);
+    if (!$sock) {
+        return null;
+    }
+    stream_set_timeout($sock, $timeout);
+    fwrite($sock, json_encode($request) . "\n");
+    $line = fgets($sock, 4096);
+    fclose($sock);
+    if ($line === false) {
+        return null;
+    }
+    $decoded = json_decode($line, true);
+    return is_array($decoded) ? $decoded : null;
+}
+
 $httpMethod = $_SERVER['REQUEST_METHOD'];
 $fp = pfsockopen($address, $port, $errno, $errstr);
 echo $errstr;
@@ -231,6 +260,24 @@ if ($httpMethod === 'POST') {
                 echo json_encode(['noise_floor' => $nf_state]);
             }
         }
+
+        if (array_key_exists('cyber_relay_sensor', $cmd) || array_key_exists('cyber_relay_mode', $cmd)) {
+            call_kali_control($kali_control_host, $kali_control_port, $kali_control_timeout, [
+                'request' => 'configure_relay',
+                'sensor' => isset($cmd['cyber_relay_sensor']) ? $cmd['cyber_relay_sensor'] : null,
+                'mode' => isset($cmd['cyber_relay_mode']) ? (int)$cmd['cyber_relay_mode'] : 0,
+                'severity' => isset($cmd['cyber_relay_severity']) ? (float)$cmd['cyber_relay_severity'] : 0.0,
+            ]);
+        }
+
+        if (array_key_exists('cyber_stuck_valve_enabled', $cmd)) {
+            call_kali_control($kali_control_host, $kali_control_port, $kali_control_timeout, [
+                'request' => 'set_stuck_valve',
+                'enabled' => (bool)$cmd['cyber_stuck_valve_enabled'],
+                'valve' => isset($cmd['cyber_stuck_valve']) ? $cmd['cyber_stuck_valve'] : null,
+                'percent' => isset($cmd['cyber_stuck_percent']) ? (float)$cmd['cyber_stuck_percent'] : 0.0,
+            ]);
+        }
     }
 } else {
     fwrite($fp, '{"request":"read"}\n');
@@ -238,6 +285,15 @@ if ($httpMethod === 'POST') {
     $decoded = json_decode($response, true);
     if (is_array($decoded)) {
         $decoded['noise_floor'] = read_noise_floor_state($noise_floor_state_file, $noise_floor_default_state);
+        // Only queried when the Faults page asks for it (?cyber=1) - unlike
+        // noise_floor (a local file read), this is a real network round
+        // trip to Kali, and the main Process Simulation view polls this
+        // same endpoint every 3s just to animate the plant and shouldn't
+        // pick up a dependency on Kali being reachable to do that.
+        if (isset($_GET['cyber'])) {
+            $decoded['cyber_injects'] = call_kali_control($kali_control_host, $kali_control_port, $kali_control_timeout, ['request' => 'read'])
+                ?: ['relay' => null, 'stuck_valve' => null];
+        }
         echo json_encode($decoded);
     } else {
         echo $response;
