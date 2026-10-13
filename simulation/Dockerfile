@@ -59,6 +59,14 @@ COPY --from=build /build/simulation/simulation ./simulation/simulation
 # Copy the Modbus scripts
 COPY ./simulation/remote_io/modbus ./modbus
 
+# Ambient noise-floor scheduler (see noise_floor/scheduler.py). The
+# scheduler itself runs as root (supervisord), but its shared state file
+# also needs to be writable by php-fpm's www-data worker processes
+# (index.php writes noise_floor_* fields there) - world-writable on this
+# one small directory is simplest and fine for a lab environment.
+COPY ./noise_floor /app/noise_floor
+RUN chmod 777 /app/noise_floor
+
 # Copy your custom interfaces file and entrypoint script
 COPY interfaces /etc/network/interfaces
 COPY entrypoint.sh /entrypoint.sh

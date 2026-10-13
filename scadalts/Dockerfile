@@ -73,6 +73,9 @@ RUN sed -i '/<\/Context>/i \
 COPY 1.png /usr/local/tomcat/static/uploads/1.png
 COPY seed_project_data.sql /seed_project_data.sql
 
+# Cyber fault-injection tooling (see docs/cyber-vs-physical-fault-injection-design.md)
+COPY cyber_injects /opt/cyber_injects
+
 # Install Wazuh agent
 RUN curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH \
     | gpg --no-default-keyring \

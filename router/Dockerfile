@@ -71,6 +71,7 @@ COPY usr/lib/grfics/suricata-start.sh /usr/lib/grfics/suricata-start.sh
 RUN chmod +x /usr/lib/grfics/suricata-start.sh
 
 COPY quickdraw.rules /etc/suricata/rules/quickdraw.rules
+COPY grfics_cyber_injects.rules /etc/suricata/rules/grfics_cyber_injects.rules
 COPY ulogd.conf /etc/ulogd.conf
 
 
