@@ -42,6 +42,7 @@ cp -r "$REPO_ROOT/router/static/"* "$STAGING/opt/fwui/static/"
 # defaults there.
 mkdir -p "$STAGING/etc/suricata/rules" "$STAGING/usr/lib/grfics/config"
 cp "$REPO_ROOT/router/quickdraw.rules" "$STAGING/etc/suricata/rules/quickdraw.rules"
+cp "$REPO_ROOT/router/grfics_modbus.rules" "$STAGING/etc/suricata/rules/grfics_modbus.rules"
 cp "$REPO_ROOT/router/suricata.yaml" "$STAGING/usr/lib/grfics/config/suricata.yaml"
 cp "$REPO_ROOT/router/dnsmasq.conf" "$STAGING/usr/lib/grfics/config/dnsmasq.conf"
 cp "$REPO_ROOT/router/ulogd.conf" "$STAGING/usr/lib/grfics/config/ulogd.conf"

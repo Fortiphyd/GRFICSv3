@@ -1,0 +1,28 @@
+# Replacement for Suricata's bundled "SURICATA Modbus Data mismatch" rule
+# (sid 2250008 in modbus-events.rules), which the router image comments out.
+#
+# Suricata 7.0.10's Modbus parser (sawp-modbus) checks every plain read
+# response's length with the coil formula (ceil(quantity / 8) bytes), so a
+# correct register read response (2 bytes per register) is always flagged
+# as a value mismatch. Here that was ~1 false alert per second from the
+# HMI's normal FC3/FC4 polling, ~97% of all IDS alerts. Reproduced offline
+# with spec-exact traffic (no OpenPLC involved).
+#
+# These rules keep the mismatch check for the function types the parser
+# gets right - writes (whose response must echo the request), coil reads
+# and discrete-input reads - and skip register reads. Validated offline
+# against crafted traffic: no alerts on correct FC1/FC3/FC4/FC6 exchanges;
+# alerts on a wrong FC6 echo, a wrong FC16 quantity echo and a short FC1
+# response.
+#
+# The `modbus:` keyword only inspects requests, so these rules can't carry
+# flow:to_client (Suricata rejects the mix); the mismatch event is still
+# raised by the response, and the alert is logged on the next client packet.
+#
+# Once Suricata ships a parser that sizes register reads correctly, delete
+# this file and re-enable sid 2250008 (router/Dockerfile and the router
+# .deb postinst) - otherwise real register-read mismatches stay invisible.
+
+alert modbus any any -> any any (msg:"GRFICS: Modbus response does not match write request"; app-layer-event:modbus.value_mismatch; modbus: access write; classtype:protocol-command-decode; sid:9000002; rev:1;)
+alert modbus any any -> any any (msg:"GRFICS: Modbus coil read response does not match request"; app-layer-event:modbus.value_mismatch; modbus: access read coils; classtype:protocol-command-decode; sid:9000003; rev:1;)
+alert modbus any any -> any any (msg:"GRFICS: Modbus discrete input read response does not match request"; app-layer-event:modbus.value_mismatch; modbus: access read discretes; classtype:protocol-command-decode; sid:9000004; rev:1;)

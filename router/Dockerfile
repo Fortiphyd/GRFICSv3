@@ -72,6 +72,12 @@ RUN chmod +x /usr/lib/grfics/suricata-start.sh
 
 COPY quickdraw.rules /etc/suricata/rules/quickdraw.rules
 COPY grfics_cyber_injects.rules /etc/suricata/rules/grfics_cyber_injects.rules
+COPY grfics_modbus.rules /etc/suricata/rules/grfics_modbus.rules
+# Bundled "SURICATA Modbus Data mismatch" (sid 2250008) false-alarms on
+# every correct register read - replaced by grfics_modbus.rules, see there.
+RUN sed -i '/sid:2250008;/s/^alert/# Disabled by GRFICS, see grfics_modbus.rules: alert/' \
+        /etc/suricata/rules/modbus-events.rules \
+    && ! grep -q '^alert.*sid:2250008;' /etc/suricata/rules/modbus-events.rules
 COPY ulogd.conf /etc/ulogd.conf
 
 

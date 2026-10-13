@@ -23,6 +23,11 @@ cp -f /usr/lib/grfics/config/suricata.yaml /etc/suricata/suricata.yaml
 cp -f /usr/lib/grfics/config/dnsmasq.conf /etc/dnsmasq.conf
 cp -f /usr/lib/grfics/config/ulogd.conf /etc/ulogd.conf
 
+# Bundled "SURICATA Modbus Data mismatch" (sid 2250008) false-alarms on
+# every correct register read - replaced by grfics_modbus.rules, see there.
+sed -i '/sid:2250008;/s/^alert/# Disabled by GRFICS, see grfics_modbus.rules: alert/' \
+    /etc/suricata/rules/modbus-events.rules 2>/dev/null || true
+
 # Prevent the suricata package's own service from conflicting with ours
 systemctl stop suricata.service 2>/dev/null || true
 systemctl mask suricata.service 2>/dev/null || true
