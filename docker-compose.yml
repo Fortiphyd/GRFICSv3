@@ -260,6 +260,15 @@ services:
         BUILD_VERSION: ${BUILD_VERSION:-unknown}
         BUILD_CREATED: ${BUILD_CREATED:-unknown}
     restart: unless-stopped
+    # Without this, libpcap can't put mirror0 into promiscuous mode (it
+    # needs CAP_NET_ADMIN in this netns, not just the CAP_NET_RAW Docker
+    # grants by default) - the mirrored frames keep their original
+    # source/dest MACs, which never match mirror0's own, so a
+    # non-promiscuous capture silently receives nothing. Found live: the
+    # interface's own kernel rx counters showed real traffic arriving
+    # while zeek's stats.log reported pkts_proc=0 the entire time.
+    cap_add:
+      - NET_ADMIN
     dns:
       - 192.168.90.200
     networks:

@@ -576,6 +576,26 @@ more than statistical elegance when recruitment itself is the bottleneck.
   the same way physical faults re-sync from the simulator, confirmed by
   reloading mid-session in the same browser test above.
 
+- **Detection pipeline now validated together with the cyber-injects
+  mechanisms for the first time.** `feature/zeek-network-mirroring` (the
+  Zeek→Wazuh Modbus detection work, see
+  `docs/zeek-network-mirroring-design.md`) and this branch had been
+  sibling branches off the same `feature/cyber-injects` commit, never
+  merged or run as one stack - meaning the symptom-generating half and the
+  detection half had never actually been exercised together. Merged
+  cleanly as `feature/cyber-injects-integration` (no conflicts, not even
+  in `index.php`/`index.html`, since the two branches touched disjoint
+  regions of both). Found and fixed one real bug uncovered specifically
+  *by* running them together: the `zeek` container was missing
+  `cap_add: NET_ADMIN`, which silently prevented it from ever actually
+  capturing any mirrored traffic at all (see
+  `docs/zeek-network-mirroring-design.md` §5.16 for the full diagnosis).
+  With that fixed, triggering the stuck-valve cyber inject from this
+  session's new dashboard control produced two real Wazuh alerts on rule
+  100102 within seconds - the dashboard-to-SIEM path this whole exercise
+  depends on is now proven live, not just plausible from each half's
+  separate validation.
+
 Still not built:
 
 - EWS: small automation for periodic legitimate setpoint nudges (noise

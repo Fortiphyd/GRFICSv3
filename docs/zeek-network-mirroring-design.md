@@ -690,6 +690,48 @@ own secondary IPs never leaves that container's network stack - it's
 genuine intra-host loopback, and (correctly) never reaches the mirror at
 all. Burst tests need to originate from a genuinely separate container.
 
+### 5.16 `zeek` was missing `cap_add: NET_ADMIN` - mirrored packets arrived at the interface but libpcap silently never saw them
+
+Found while running the first live integration test of this branch
+together with `feature/noise-floor`'s cyber-injects dashboard controls
+(merged as `feature/cyber-injects-integration`) - the two had never been
+run as one stack before. After re-enabling the mirror post-merge,
+`mirror0`'s own kernel rx counters
+(`/sys/class/net/mirror0/statistics/rx_packets`) showed real traffic
+steadily arriving (tens of thousands of packets), and the host-side `tc
+-s filter show` counters confirmed the mirror itself was actively
+matching and forwarding packets - but Zeek's own `stats.log` reported
+`pkts_proc: 0` / `pkts_link: 0` the entire time, and `conn.log`/
+`modbus.log` hadn't been written to in 6 days (their timestamps dated
+back to whenever the container's host last had the mirror enabled, not
+the restart just performed).
+
+Root cause: libpcap needs to put the capture interface into promiscuous
+mode to see frames whose original source/dest MACs don't match the
+interface's own (exactly what every mirrored packet looks like - it kept
+the real hosts' MACs, not `mirror0`'s). Setting `IFF_PROMISC` requires
+`CAP_NET_ADMIN` in that network namespace; Docker only grants
+`CAP_NET_RAW` by default. `zeek`'s service definition in
+`docker-compose.yml` had no `cap_add` at all (every other service that
+touches raw networking - `router`, `plc`, `simulation`, `ews`, `hmi`,
+`kali` - already has one), confirmed via
+`docker exec zeek cat /proc/1/status | grep Cap` showing `cap_net_raw`
+present and `cap_net_admin` absent. The capture silently "succeeded"
+(zeek logged `listening on mirror0`, no error) while structurally never
+receiving a single externally-addressed frame - the kind of failure that
+looks like "no traffic right now" rather than "broken," which is exactly
+why it had apparently gone unnoticed since whenever the mirror was last
+torn down and re-enabled.
+
+Fixed by adding `cap_add: [NET_ADMIN]` to the `zeek` service and
+recreating the container (requires re-running `disable-mirror.sh` then
+`enable-mirror.sh`, same as any container recreate - see §5.9). Confirmed
+fixed, not just plausible: with the fix in place, triggering the
+cyber-injects dashboard's stuck-valve inject (a real beacon/C2 write to
+the PLC) produced two real alerts on rule 100102 within seconds, the
+first time this detection pipeline and the cyber-inject mechanisms it's
+meant to catch had ever actually run together end-to-end.
+
 ## 6. Open risks / questions
 
 - ~~A real Modbus-content Wazuh rule~~ — **resolved** (§5.13): both a
