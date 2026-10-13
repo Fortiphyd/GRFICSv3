@@ -34,18 +34,26 @@ if ip link show "$HOST_IF" >/dev/null 2>&1; then
     exit 0
 fi
 
-PARENT_IF=$(docker network inspect grficsv3_c-dmz-net -f '{{index .Options "parent"}}')
+# Each zone is a macvlan on its own 802.1Q sub-interface (eth0.90 / eth0.95,
+# see docker-compose.yml), so there's one parent per zone to mirror from.
+DMZ_PARENT=$(docker network inspect grficsv3_c-dmz-net -f '{{index .Options "parent"}}')
+ICS_PARENT=$(docker network inspect grficsv3_b-ics-net -f '{{index .Options "parent"}}')
 DMZ_SUBNET=$(docker network inspect grficsv3_c-dmz-net -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}')
 ICS_SUBNET=$(docker network inspect grficsv3_b-ics-net -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}')
 
-if [ -z "$PARENT_IF" ] || [ -z "$DMZ_SUBNET" ] || [ -z "$ICS_SUBNET" ]; then
-    echo "Couldn't read parent interface/subnets from the grficsv3_b-ics-net" >&2
+if [ -z "$DMZ_PARENT" ] || [ -z "$ICS_PARENT" ] || [ -z "$DMZ_SUBNET" ] || [ -z "$ICS_SUBNET" ]; then
+    echo "Couldn't read parent interfaces/subnets from the grficsv3_b-ics-net" >&2
     echo "and grficsv3_c-dmz-net Docker networks - has 'docker compose up'" >&2
     echo "been run at least once?" >&2
     exit 1
 fi
 
-echo "Mirroring $PARENT_IF ($DMZ_SUBNET, $ICS_SUBNET) into the zeek container..."
+# Older layouts put both zones on the bare NIC; a qdisc left there by a
+# previous enable-mirror.sh run is cleared below along with the current ones.
+BASE_IF=${DMZ_PARENT%%.*}
+PARENT_IFS=$(printf '%s\n' "$DMZ_PARENT" "$ICS_PARENT" | sort -u)
+
+echo "Mirroring" $PARENT_IFS "($DMZ_SUBNET, $ICS_SUBNET) into the zeek container..."
 
 # Recreating the zeek container (e.g. a rebuild) destroys its netns, which
 # silently deletes mirror0/mirror0-host - removing one end of a veth pair
@@ -56,7 +64,9 @@ echo "Mirroring $PARENT_IF ($DMZ_SUBNET, $ICS_SUBNET) into the zeek container...
 # live - this exact sequence happened during testing. Clear it
 # unconditionally before setting up fresh state, since we're about to
 # create authoritative state anyway.
-tc qdisc del dev "$PARENT_IF" clsact 2>/dev/null || true
+for dev in "$BASE_IF" $PARENT_IFS; do
+    tc qdisc del dev "$dev" clsact 2>/dev/null || true
+done
 
 ip link add "$HOST_IF" type veth peer name "$MIRROR_IF"
 ip link set "$MIRROR_IF" netns "$ZEEK_PID"
@@ -68,12 +78,14 @@ nsenter -t "$ZEEK_PID" -n ip link set "$MIRROR_IF" up
 # exchanges - validated live: a full request/reply exchange between two
 # macvlan siblings showed up complete and duplicate-free with exactly this
 # filter set.
-tc qdisc add dev "$PARENT_IF" clsact
-for subnet in "$DMZ_SUBNET" "$ICS_SUBNET"; do
-    tc filter add dev "$PARENT_IF" ingress protocol ip flower dst_ip "$subnet" \
-        action mirred egress mirror dev "$HOST_IF"
-    tc filter add dev "$PARENT_IF" egress protocol ip flower dst_ip "$subnet" \
-        action mirred egress mirror dev "$HOST_IF"
+for dev in $PARENT_IFS; do
+    tc qdisc add dev "$dev" clsact
+    for subnet in "$DMZ_SUBNET" "$ICS_SUBNET"; do
+        tc filter add dev "$dev" ingress protocol ip flower dst_ip "$subnet" \
+            action mirred egress mirror dev "$HOST_IF"
+        tc filter add dev "$dev" egress protocol ip flower dst_ip "$subnet" \
+            action mirred egress mirror dev "$HOST_IF"
+    done
 done
 
 echo "Mirroring enabled. Disable with: sudo ./disable-mirror.sh"

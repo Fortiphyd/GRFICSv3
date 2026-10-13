@@ -91,6 +91,15 @@ with open(conf, 'w') as f:
 PYEOF
 
 echo "[wazuh] Starting wazuh-manager..."
+# /var/ossec is a persisted volume, so PID files from the previous container
+# survive a `docker compose down`/`up`. Nothing from the old container can
+# still be running in this fresh one, but wazuh-control only checks whether
+# each recorded PID is alive - and PIDs restart low in a new container, so a
+# stale file can match an unrelated new process. Seen live: a leftover
+# wazuh-db-552.pid matched the new wazuh-apid (also PID 552), so wazuh-db was
+# reported "running" and never started, every daemon failed on queue/db/wdb,
+# all agents showed Unknown, and no alerts were processed.
+rm -f /var/ossec/var/run/*.pid
 /var/ossec/bin/wazuh-control start
 
 echo "[wazuh] Starting alerts indexer..."
