@@ -137,6 +137,50 @@
 </group>
 
 <!--
+  Zeek http.log - PLC programming over the OpenPLC web UI (192.168.95.2:8080).
+  A program change from the EWS never crosses the router, so Suricata can't
+  see it; only the Zeek mirror can. OpenPLC's flow is POST /upload-program
+  (the .st file) -> /upload-program-action (register it) -> GET
+  /compile-program?file=... (stops the runtime, compiles, loads it). Pairs
+  with the EWS file-integrity rules (100230-100232): the file changed there,
+  and here is where it went.
+-->
+<group name="zeek,http,ics,plc_programming,">
+
+  <rule id="100110" level="0">
+    <decoded_as>json</decoded_as>
+    <location>/usr/local/zeek/logs/http.log</location>
+    <description>Zeek: HTTP request (categorization only)</description>
+  </rule>
+
+  <rule id="100111" level="12">
+    <if_sid>100110</if_sid>
+    <field name="id.resp_h">^192\.168\.95\.2$</field>
+    <field name="method">^POST$</field>
+    <field name="uri">^/upload-program$</field>
+    <description>Zeek: PLC program uploaded to $(id.resp_h) from $(id.orig_h)</description>
+    <group>plc_program_upload,</group>
+  </rule>
+
+  <rule id="100112" level="12">
+    <if_sid>100110</if_sid>
+    <field name="id.resp_h">^192\.168\.95\.2$</field>
+    <field name="uri">^/compile-program</field>
+    <description>Zeek: PLC program compiled and loaded on $(id.resp_h) from $(id.orig_h) - $(uri)</description>
+    <group>plc_program_load,</group>
+  </rule>
+
+  <rule id="100113" level="10">
+    <if_sid>100110</if_sid>
+    <field name="id.resp_h">^192\.168\.95\.2$</field>
+    <field name="uri">^/start_plc|^/stop_plc</field>
+    <description>Zeek: PLC runtime $(uri) on $(id.resp_h) from $(id.orig_h)</description>
+    <group>plc_runtime_change,</group>
+  </rule>
+
+</group>
+
+<!--
   Router DNS log (dnsmasq query lines, decoded by wazuh/local_decoder.xml).
 
   Every query is alerted at level 3 - the manager's log_alert_level floor -

@@ -48,10 +48,14 @@ RUN curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH \
 # rules that actually turn these into visible alerts - collection alone
 # isn't enough (see docs/zeek-network-mirroring-design.md, "Shipping logs
 # to Wazuh only gets them collected, not alerted on").
+# http.log too: it's the only network record of a PLC program upload from
+# the EWS (EWS -> PLC web UI on :8080 stays inside the control network, so
+# the router and Suricata never see it). Zeek finds HTTP on the
+# non-standard port itself (dynamic protocol detection).
 # Agent-package ossec.conf has more than one </ossec_config> block (one per
 # top-level config section) - "0,/re/{s/re/.../}" limits the substitution
 # to just the first, avoiding a duplicated <localfile> entry.
-RUN sed -i '0,/<\/ossec_config>/{s|</ossec_config>|<localfile>\n    <log_format>json</log_format>\n    <location>/usr/local/zeek/logs/notice.log</location>\n  </localfile>\n  <localfile>\n    <log_format>json</log_format>\n    <location>/usr/local/zeek/logs/modbus_detailed.log</location>\n  </localfile>\n</ossec_config>|}' \
+RUN sed -i '0,/<\/ossec_config>/{s|</ossec_config>|<localfile>\n    <log_format>json</log_format>\n    <location>/usr/local/zeek/logs/notice.log</location>\n  </localfile>\n  <localfile>\n    <log_format>json</log_format>\n    <location>/usr/local/zeek/logs/modbus_detailed.log</location>\n  </localfile>\n  <localfile>\n    <log_format>json</log_format>\n    <location>/usr/local/zeek/logs/http.log</location>\n  </localfile>\n</ossec_config>|}' \
     /var/ossec/etc/ossec.conf
 
 # rootcheck's "trojaned binary" signature check (check_trojans) is a
