@@ -1,6 +1,14 @@
 #!/bin/bash
 set -e
 
+# Pre-create the logs the Wazuh agent ships (zeek/Dockerfile). The agent
+# misses the lines that create a file it's watching - the first PLC program
+# upload after a Zeek start never reached Wazuh - but follows an existing
+# file from its first line, and Zeek writes into an existing file in place.
+# Before the mirror wait, so the files exist as early as possible.
+touch /usr/local/zeek/logs/notice.log /usr/local/zeek/logs/http.log \
+      /usr/local/zeek/logs/modbus_detailed.log
+
 # Mirroring is opt-in (see enable-mirror.sh) - the "mirror0" interface only
 # exists once an instructor has run that script on the host. Wait for it
 # rather than erroring out, and go back to waiting if it disappears

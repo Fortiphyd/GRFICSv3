@@ -75,10 +75,15 @@ RUN sed -i 's|</auth>|<force>\n      <enabled>yes</enabled>\n      <key_mismatch
     && sed -i 's|<agents_disconnection_time>15m</agents_disconnection_time>|<agents_disconnection_time>30s</agents_disconnection_time>|' \
     /var/ossec/etc/ossec.conf
 
-# Rules to turn collected Zeek/Modbus events into visible alerts - without
-# these, notice.log/modbus_detailed.log get received and silently dropped
-# (see docs/zeek-network-mirroring-design.md).
-COPY local_rules.xml /var/ossec/etc/rules/local_rules.xml
+# Rules/decoders that turn collected Zeek/Modbus, router DNS and ARP events
+# into visible alerts - without these, the events get received and silently
+# dropped (see docs/zeek-network-mirroring-design.md). Staged outside
+# /var/ossec on purpose: /var/ossec is the persisted wazuh_manager_data
+# volume, and Docker only seeds a named volume from the image when the
+# volume is first created - files copied straight there would never reach
+# an existing install after a rebuild. entrypoint.sh installs them on every
+# start instead.
+COPY local_rules.xml local_decoder.xml /opt/grfics/wazuh/
 
 COPY entrypoint.sh /entrypoint.sh
 COPY alerts-indexer.py /usr/local/bin/alerts-indexer.py

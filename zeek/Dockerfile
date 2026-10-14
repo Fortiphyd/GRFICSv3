@@ -48,10 +48,14 @@ RUN curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH \
 # rules that actually turn these into visible alerts - collection alone
 # isn't enough (see docs/zeek-network-mirroring-design.md, "Shipping logs
 # to Wazuh only gets them collected, not alerted on").
+# http.log too: it's the only network record of a PLC program upload from
+# the EWS (EWS -> PLC web UI on :8080 stays inside the control network, so
+# the router and Suricata never see it). Zeek finds HTTP on the
+# non-standard port itself (dynamic protocol detection).
 # Agent-package ossec.conf has more than one </ossec_config> block (one per
 # top-level config section) - "0,/re/{s/re/.../}" limits the substitution
 # to just the first, avoiding a duplicated <localfile> entry.
-RUN sed -i '0,/<\/ossec_config>/{s|</ossec_config>|<localfile>\n    <log_format>json</log_format>\n    <location>/usr/local/zeek/logs/notice.log</location>\n  </localfile>\n  <localfile>\n    <log_format>json</log_format>\n    <location>/usr/local/zeek/logs/modbus_detailed.log</location>\n  </localfile>\n</ossec_config>|}' \
+RUN sed -i '0,/<\/ossec_config>/{s|</ossec_config>|<localfile>\n    <log_format>json</log_format>\n    <location>/usr/local/zeek/logs/notice.log</location>\n  </localfile>\n  <localfile>\n    <log_format>json</log_format>\n    <location>/usr/local/zeek/logs/modbus_detailed.log</location>\n  </localfile>\n  <localfile>\n    <log_format>json</log_format>\n    <location>/usr/local/zeek/logs/http.log</location>\n  </localfile>\n</ossec_config>|}' \
     /var/ossec/etc/ossec.conf
 
 # rootcheck's "trojaned binary" signature check (check_trojans) is a
@@ -64,9 +68,19 @@ RUN sed -i '0,/<\/ossec_config>/{s|</ossec_config>|<localfile>\n    <log_format>
 RUN sed -i 's|<check_trojans>yes</check_trojans>|<check_trojans>no</check_trojans>|' \
     /var/ossec/etc/ossec.conf
 
+# Agent log-collector tuning for the Zeek logs:
+# - queue_size: the 1024-line default overflowed ("message queue is full
+#   ... Log lines may be lost") whenever the manager was briefly
+#   unreachable; 16384 covers ~5 min of the (filtered) Modbus write rate.
+# - vcheck_files: re-check watched files every 5s instead of 64s, so a log
+#   Zeek rotates or recreates is picked up before anything is written to it.
+RUN printf 'logcollector.queue_size=16384\nlogcollector.vcheck_files=5\n' \
+    >> /var/ossec/etc/local_internal_options.conf
+
 COPY local.zeek /usr/local/zeek/share/zeek/site/local.zeek
 COPY zeek-start.sh /usr/lib/grfics/zeek-start.sh
-RUN chmod +x /usr/lib/grfics/zeek-start.sh
+COPY zeek-prune-logs.sh /usr/lib/grfics/zeek-prune-logs.sh
+RUN chmod +x /usr/lib/grfics/zeek-start.sh /usr/lib/grfics/zeek-prune-logs.sh
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 ARG BUILD_VERSION=unknown

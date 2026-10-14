@@ -1,0 +1,27 @@
+<!--
+  GRFICS local decoders. Installed into /var/ossec/etc/decoders/ by
+  entrypoint.sh on every start (see the Dockerfile for why).
+
+  dnsmasq query log from the router (router/dnsmasq.conf: log-queries,
+  collected by the router agent as log_format syslog). Lines look like:
+
+    Oct 13 23:49:05 dnsmasq[463]: query[A] cti.wazuh.com from 192.168.90.20
+
+  dnsmasq's own log file has no hostname field, so Wazuh's syslog
+  pre-decoder takes "dnsmasq[463]:" as the hostname and leaves no program
+  name to match on - hence matching the message text itself. Not anchored
+  at the start: the text left after pre-decoding doesn't begin exactly at
+  "query[" (an anchored ^query prematch never matched in wazuh-logtest).
+  Only query lines decode; reply/cached/forwarded lines match nothing and
+  are dropped.
+
+  Note: containers resolve through Docker's embedded DNS (127.0.0.11),
+  which answers names/PTRs of containers on networks the asker shares and
+  forwards only the rest here - so same-zone container lookups never
+  appear in this log. Cross-zone and internet lookups do.
+-->
+<decoder name="dnsmasq-query">
+  <prematch type="pcre2">query\[\w+\] \S+ from \S+$</prematch>
+  <regex type="pcre2">query\[(\w+)\] (\S+) from (\S+)$</regex>
+  <order>qtype, query, srcip</order>
+</decoder>

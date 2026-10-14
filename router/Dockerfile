@@ -40,8 +40,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends gnupg \
     && WAZUH_MANAGER=192.168.90.20 WAZUH_AGENT_NAME=router apt-get install -y wazuh-agent \
     && rm -rf /var/lib/apt/lists/*
 
-# Tell the agent to monitor Suricata alerts-only EVE log
-RUN sed -i 's|</ossec_config>|<localfile>\n    <log_format>json</log_format>\n    <location>/var/log/suricata/alerts.json</location>\n  </localfile>\n</ossec_config>|' \
+# Ship the router's security logs to Wazuh: Suricata's alerts-only EVE log,
+# arpmon's ARP events (JSON) and dnsmasq's query log (syslog-style lines).
+# Decoders/rules that turn these into alerts live in wazuh/local_decoder.xml
+# and wazuh/local_rules.xml. The agent-package ossec.conf has more than one
+# </ossec_config> block - "0,/re/{s/re/.../}" limits the substitution to the
+# first, otherwise every <localfile> is added twice.
+RUN sed -i '0,/<\/ossec_config>/{s|</ossec_config>|<localfile>\n    <log_format>json</log_format>\n    <location>/var/log/suricata/alerts.json</location>\n  </localfile>\n  <localfile>\n    <log_format>json</log_format>\n    <location>/var/log/arpmon/events.json</location>\n  </localfile>\n  <localfile>\n    <log_format>syslog</log_format>\n    <location>/var/log/dnsmasq/dnsmasq.log</location>\n  </localfile>\n</ossec_config>|}' \
     /var/ossec/etc/ossec.conf
 
 COPY entrypoint.sh /entrypoint.sh
@@ -72,6 +77,12 @@ RUN chmod +x /usr/lib/grfics/suricata-start.sh
 
 COPY quickdraw.rules /etc/suricata/rules/quickdraw.rules
 COPY grfics_cyber_injects.rules /etc/suricata/rules/grfics_cyber_injects.rules
+COPY grfics_modbus.rules /etc/suricata/rules/grfics_modbus.rules
+# Bundled "SURICATA Modbus Data mismatch" (sid 2250008) false-alarms on
+# every correct register read - replaced by grfics_modbus.rules, see there.
+RUN sed -i '/sid:2250008;/s/^alert/# Disabled by GRFICS, see grfics_modbus.rules: alert/' \
+        /etc/suricata/rules/modbus-events.rules \
+    && ! grep -q '^alert.*sid:2250008;' /etc/suricata/rules/modbus-events.rules
 COPY ulogd.conf /etc/ulogd.conf
 
 

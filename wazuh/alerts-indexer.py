@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tails /var/ossec/logs/alerts/alerts.json and bulk-indexes into OpenSearch."""
 import json
+import os
 import ssl
 import time
 import urllib.request
@@ -33,16 +34,25 @@ def post(path, body):
         return None
 
 
-def get_offset():
+def get_state():
+    """Return (inode, offset) saved by the last run, or (None, 0).
+
+    Older versions saved a bare offset with no inode; that reads as
+    (None, offset) and is trusted only if it still fits in the file.
+    """
     try:
-        return int(open(STATE_FILE).read().strip())
+        txt = open(STATE_FILE).read().strip()
+        if ":" in txt:
+            ino, off = txt.split(":", 1)
+            return int(ino), int(off)
+        return None, int(txt)
     except Exception:
-        return 0
+        return None, 0
 
 
-def save_offset(offset):
+def save_state(inode, offset):
     with open(STATE_FILE, "w") as f:
-        f.write(str(offset))
+        f.write(f"{inode}:{offset}")
 
 
 def sanitize_keys(obj):
@@ -75,12 +85,19 @@ def sanitize_keys(obj):
     return obj
 
 
+def index_for(alert):
+    # Daily index named after the alert's own date, so a backlog indexed
+    # after midnight still lands in the right day.
+    ts = alert.get("timestamp", "")
+    if len(ts) >= 10 and ts[4] == "-" and ts[7] == "-":
+        return f"wazuh-alerts-4.x-{ts[:4]}.{ts[5:7]}.{ts[8:10]}"
+    return "wazuh-alerts-4.x-" + datetime.now(timezone.utc).strftime("%Y.%m.%d")
+
+
 def index_batch(alerts):
-    today = datetime.now(timezone.utc).strftime("%Y.%m.%d")
-    index = f"wazuh-alerts-4.x-{today}"
     bulk = ""
     for a in alerts:
-        bulk += json.dumps({"index": {"_index": index}}) + "\n"
+        bulk += json.dumps({"index": {"_index": index_for(a)}}) + "\n"
         bulk += json.dumps(sanitize_keys(a)) + "\n"
     data = bulk.encode()
     req = urllib.request.Request(
@@ -120,38 +137,82 @@ def wait_for_opensearch():
             time.sleep(5)
 
 
+def drain(f, inode):
+    """Index every complete line from f's current position. Returns False
+    if OpenSearch rejected a batch (f is left at the last indexed line)."""
+    batch, pos = [], f.tell()
+    while True:
+        line = f.readline()
+        if not line:
+            break
+        if not line.endswith(b"\n"):
+            # Partial line still being written - step back and re-read it
+            # whole on the next pass.
+            f.seek(-len(line), os.SEEK_CUR)
+            break
+        try:
+            batch.append(json.loads(line))
+        except json.JSONDecodeError:
+            pass
+        if len(batch) >= BATCH:
+            if not index_batch(batch):
+                f.seek(pos)
+                return False
+            pos = f.tell()
+            save_state(inode, pos)
+            batch = []
+    if batch:
+        if not index_batch(batch):
+            f.seek(pos)
+            return False
+        pos = f.tell()
+        save_state(inode, pos)
+    # Past any undecodable lines too, so they aren't re-read every pass.
+    if f.tell() != pos:
+        save_state(inode, f.tell())
+    return True
+
+
 wait_for_opensearch()
-offset = get_offset()
-print(f"[alerts-indexer] Starting at offset {offset}", flush=True)
+
+# wazuh-monitord rotates alerts.json at midnight (UTC in this image): it
+# links the day's file into logs/alerts/YYYY/Mon/ and starts a new, empty
+# alerts.json with a new inode. The original version of this script kept
+# only a byte offset, so after the first midnight it sat past the end of
+# the new, smaller file and never indexed another alert - seen live: the
+# dashboard showed nothing after 23:59 UTC while the manager kept alerting.
+# Track the inode with the offset: when the path points at a new file (or
+# the file shrank), finish the old one, then start the new one at 0.
+saved_inode, offset = get_state()
+f = None
+while f is None:
+    try:
+        f = open(ALERTS_FILE, "rb")
+    except FileNotFoundError:
+        time.sleep(5)
+inode = os.fstat(f.fileno()).st_ino
+size = os.fstat(f.fileno()).st_size
+if (saved_inode not in (None, inode)) or offset > size:
+    offset = 0
+f.seek(offset)
+print(f"[alerts-indexer] Starting at inode {inode} offset {offset}", flush=True)
 
 while True:
     try:
-        with open(ALERTS_FILE) as f:
-            f.seek(offset)
-            batch = []
-            while True:
-                line = f.readline()
-                if not line:
-                    break
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    alert = json.loads(line)
-                    batch.append(alert)
-                    if len(batch) >= BATCH:
-                        if index_batch(batch):
-                            offset = f.tell()
-                            save_offset(offset)
-                        batch = []
-                except json.JSONDecodeError:
-                    pass
-            if batch:
-                if index_batch(batch):
-                    offset = f.tell()
-                    save_offset(offset)
-    except FileNotFoundError:
-        pass
+        ok = drain(f, inode)
+        try:
+            st = os.stat(ALERTS_FILE)
+        except FileNotFoundError:
+            st = None
+        if ok and st is not None and (st.st_ino != inode or st.st_size < f.tell()):
+            # Rotated or truncated. The old handle was drained above, so
+            # nothing written before the switch is lost.
+            f.close()
+            f = open(ALERTS_FILE, "rb")
+            inode = os.fstat(f.fileno()).st_ino
+            save_state(inode, 0)
+            print(f"[alerts-indexer] {ALERTS_FILE} rotated, following inode {inode}", flush=True)
+            continue
     except Exception as e:
         print(f"[alerts-indexer] error: {e}", flush=True)
     time.sleep(5)

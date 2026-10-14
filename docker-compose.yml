@@ -287,10 +287,18 @@ services:
     # to.
 
 networks:
+  # Each zone gets its own 802.1Q sub-interface of the host NIC as its
+  # macvlan parent (Docker creates eth0.95/eth0.90 itself). With both
+  # zones on plain "eth0", every macvlan endpoint shared one L2 broadcast
+  # domain: Kali (DMZ) got direct ARP replies from the PLC and EWS, and
+  # could add a 192.168.95.x alias and reach the PLC without ever touching
+  # the router - firewall, Suricata and arpmon all saw nothing. Macvlans
+  # on different parents can't reach each other directly on the host, so
+  # cross-zone traffic has to be routed through the router again.
   b-ics-net:
     driver: macvlan
     driver_opts:
-      parent: eth0  # Replace with your actual host NIC
+      parent: eth0.95  # Replace "eth0" with your actual host NIC, keep ".95"
     ipam:
       config:
         - subnet: 192.168.95.0/24
@@ -299,7 +307,7 @@ networks:
   c-dmz-net:
     driver: macvlan
     driver_opts:
-      parent: eth0  # Replace with your actual host NIC
+      parent: eth0.90  # Replace "eth0" with your actual host NIC, keep ".90"
     ipam:
       config:
         - subnet: 192.168.90.0/24

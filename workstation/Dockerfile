@@ -106,6 +106,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl gnupg \
     && WAZUH_MANAGER=192.168.90.20 WAZUH_AGENT_NAME=EWS apt-get install -y wazuh-agent \
     && rm -rf /var/lib/apt/lists/*
 
+# File integrity monitoring for the PLC project: the default syscheck only
+# covers system directories on a 12h schedule, so a malicious logic change
+# (e.g. editing pressure_sp in plc.xml and rebuilding) went unnoticed.
+# Realtime with report_changes gives an alert plus a before/after diff as
+# soon as the editor saves or builds; restrict to the project's text files
+# (plc.xml, build/*.st, chemical.st) so compiled build output doesn't add
+# noise. Wazuh rules 100230-100232 (wazuh/local_rules.xml) raise these to
+# PLC-project alerts. Only the first <syscheck> block exists, but "0,/re/"
+# keeps the insert to one place regardless.
+RUN sed -i '0,/<syscheck>/s|<syscheck>|<syscheck>\n    <directories realtime="yes" report_changes="yes" restrict=".st$\|.xml$">/home/engineer/Desktop</directories>|' \
+        /var/ossec/etc/ossec.conf \
+    && grep -qF 'report_changes="yes" restrict=".st$|.xml$">/home/engineer/Desktop<' /var/ossec/etc/ossec.conf
+
 
 COPY index.html /opt/noVNC/index.html
 
