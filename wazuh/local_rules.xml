@@ -232,3 +232,37 @@
   </rule>
 
 </group>
+
+<!--
+  PLC project file integrity on the EWS (workstation/Dockerfile adds a
+  realtime, report_changes syscheck entry for /home/engineer/Desktop,
+  restricted to .st/.xml). The stock rules alert on these at level 5-7
+  like any file change; a change to the PLC program is what precedes a
+  malicious logic download (course Chapter 7), so raise it. Legitimate
+  engineering changes fire too - that's the point: every logic change
+  should line up with an approved change ticket.
+-->
+<group name="syscheck,plc_project,grfics,">
+
+  <rule id="100230" level="12">
+    <if_sid>550</if_sid>
+    <field name="file">^/home/engineer/Desktop/</field>
+    <description>PLC project file modified on the EWS: $(file)</description>
+    <group>plc_logic_change,</group>
+  </rule>
+
+  <rule id="100231" level="10">
+    <if_sid>554</if_sid>
+    <field name="file">^/home/engineer/Desktop/</field>
+    <description>PLC project file added on the EWS: $(file)</description>
+    <group>plc_logic_change,</group>
+  </rule>
+
+  <rule id="100232" level="10">
+    <if_sid>553</if_sid>
+    <field name="file">^/home/engineer/Desktop/</field>
+    <description>PLC project file deleted on the EWS: $(file)</description>
+    <group>plc_logic_change,</group>
+  </rule>
+
+</group>
