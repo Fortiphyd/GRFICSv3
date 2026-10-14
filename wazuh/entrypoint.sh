@@ -109,6 +109,44 @@ install -o wazuh -g wazuh -m 660 /opt/grfics/wazuh/local_decoder.xml /var/ossec/
 echo "[wazuh] Starting alerts indexer..."
 python3 /usr/local/bin/alerts-indexer.py >> /var/log/alerts-indexer.log 2>&1 &
 
+echo "[wazuh] Checking for stale dashboard saved-objects indices..."
+# Seen live: a dashboard start interrupted mid-migration (container stopped)
+# left an empty .kibana_1 with no .kibana alias, and every later start logged
+# "Another OpenSearch Dashboards instance appears to be migrating the index"
+# and waited forever - "Wazuh dashboard server is not ready yet" for hours.
+# The indexer data lives in a persisted volume, so this survives restarts.
+# Remove migration leftovers before the dashboard starts:
+#   - an unaliased .kibana_N with no documents (nothing to lose), or
+#   - an unaliased .kibana_N while another index holds the .kibana alias
+#     (an abandoned migration target; the aliased source is intact).
+# An unaliased index with documents and no alias anywhere is left alone -
+# it may be the only copy of the saved objects - and only reported.
+# OSD_INDEX overrides the base name so this logic can be tested safely.
+OSD_INDEX="${OSD_INDEX:-.kibana}" python3 - <<'PYEOF' || echo "[wazuh] stale-index check failed, continuing"
+import base64, json, os, re, ssl, urllib.request
+base = os.environ["OSD_INDEX"]
+ctx = ssl._create_unverified_context()
+auth = "Basic " + base64.b64encode(b"admin:admin").decode()
+def call(method, path):
+    req = urllib.request.Request("https://localhost:9200" + path, method=method,
+                                 headers={"Authorization": auth})
+    with urllib.request.urlopen(req, context=ctx, timeout=30) as r:
+        return json.load(r)
+indices = [i for i in call("GET", f"/_cat/indices/{base}_*?format=json&h=index,docs.count")
+           if re.fullmatch(re.escape(base) + r"_\d+", i["index"])]
+aliased = {a["index"] for a in call("GET", "/_cat/aliases?format=json") if a["alias"] == base}
+for i in indices:
+    name, docs = i["index"], int(i["docs.count"] or 0)
+    if name in aliased:
+        continue
+    if docs == 0 or aliased:
+        call("DELETE", "/" + name)
+        print(f"[wazuh] deleted stale {name} ({docs} docs, {base} alias -> {sorted(aliased) or 'none'})")
+    else:
+        print(f"[wazuh] WARNING: {name} has {docs} docs and no {base} alias exists - "
+              f"left in place; if the dashboard hangs, inspect it manually")
+PYEOF
+
 echo "[wazuh] Starting wazuh-dashboard..."
 su -s /bin/bash wazuh-dashboard \
     -c "OSD_PATH_CONF=/etc/wazuh-dashboard /usr/share/wazuh-dashboard/bin/opensearch-dashboards" &
