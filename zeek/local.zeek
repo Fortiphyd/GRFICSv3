@@ -14,6 +14,14 @@ redef Site::local_nets += { 192.168.90.0/24, 192.168.95.0/24 };
 # (router/Dockerfile's alerts.json -> wazuh-agent localfile pattern).
 redef LogAscii::use_json = T;
 
+# Rotate hourly and keep ~2 hours (zeek-prune-logs.sh). Standalone Zeek
+# doesn't rotate at all by default: modbus.log + modbus_detailed.log grew
+# ~300 MB/hour from the PLC's normal polling of the remote I/O. Rotated
+# files are named <name>.<open time>.log; the live <name>.log keeps the
+# current hour, which is all the course's Zeek exercises read.
+redef Log::default_rotation_interval = 1 hr;
+redef Log::default_rotation_postprocessor_cmd = "/usr/lib/grfics/zeek-prune-logs.sh";
+
 # This script logs which scripts were loaded during each run.
 @load misc/loaded-scripts
 
@@ -63,3 +71,29 @@ redef LogAscii::use_json = T;
 # Modbus traffic (the lab's primary protocol) shows up as plain TCP
 # connections in conn.log with no function codes, addresses, or values.
 @load packages
+
+# modbus_detailed.log is shipped to Wazuh (zeek/Dockerfile), and about half
+# of it was the PLC's routine polling reads - none of which any Wazuh rule
+# uses (100100-100103 key on writes). At ~125 lines/s the agent's queue
+# overflowed ("message queue is full ... Log lines may be lost"), and a PLC
+# program-upload alert from http.log was lost with it. Keep everything
+# except plain polling reads that completed without an exception: writes,
+# exceptions, diagnostics, device identification (FC43 recon) all stay.
+# modbus.log (Zeek's own, not shipped) still has every request, for the
+# course's baselining exercise.
+const routine_poll_reads: set[string] = {
+    "READ_COILS", "READ_DISCRETE_INPUTS",
+    "READ_HOLDING_REGISTERS", "READ_INPUT_REGISTERS",
+};
+
+# Zeek 9 dropped Log::Filter's $pred; a stream policy hook that "break"s
+# vetoes the write instead.
+hook Log::log_stream_policy(rec: any, id: Log::ID)
+    {
+    if ( id != Modbus_Extended::LOG_DETAILED )
+        return;
+
+    local r = rec as Modbus_Extended::Modbus_Detailed;
+    if ( r?$func && r$func in routine_poll_reads && ! r?$exception_code )
+        break;
+    }
