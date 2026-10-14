@@ -135,3 +135,100 @@
   </rule>
 
 </group>
+
+<!--
+  Router DNS log (dnsmasq query lines, decoded by wazuh/local_decoder.xml).
+
+  Every query is alerted at level 3 - the manager's log_alert_level floor -
+  so all lookups are searchable in Wazuh (the router UI only shows the last
+  50). DNS on an OT network is small and predictable, so anything outside
+  the expected list below stands out at level 8:
+    cti.wazuh.com    - the Wazuh manager's own threat-intel feed
+    javamelody.org   - ScadaLTS's bundled monitoring library on the HMI
+    wazuh[.*]        - agents resolving "wazuh"; the laptop's DNS search
+                       domain gets appended, so the suffix varies per student
+    *.in-addr.arpa   - reverse lookups, handled by the burst rule instead
+  A burst of reverse lookups from one host is what nmap does after a sweep
+  (it resolves every live host it finds) - the Chapter 3 scan.
+-->
+<group name="dns,dnsmasq,grfics,">
+
+  <rule id="100210" level="3">
+    <decoded_as>dnsmasq-query</decoded_as>
+    <description>DNS query: $(query) ($(qtype)) from $(srcip)</description>
+    <group>dns_query,</group>
+  </rule>
+
+  <rule id="100211" level="8">
+    <if_sid>100210</if_sid>
+    <field name="query" type="pcre2" negate="yes">^(cti\.wazuh\.com|javamelody\.org|wazuh(\..+)?|.+\.in-addr\.arpa)$</field>
+    <description>DNS query for an unexpected name: $(query) from $(srcip)</description>
+    <group>dns_query,dns_unexpected,</group>
+  </rule>
+
+  <rule id="100212" level="3">
+    <if_sid>100210</if_sid>
+    <field name="qtype">^PTR$</field>
+    <description>DNS reverse lookup: $(query) from $(srcip)</description>
+    <group>dns_query,dns_ptr,</group>
+  </rule>
+
+  <!-- ignore: one sweep is hundreds of lookups; without it this re-fires
+       every 6 (42 alerts for one /24 sweep in testing). -->
+  <rule id="100213" level="10" frequency="6" timeframe="10" ignore="120">
+    <if_matched_sid>100212</if_matched_sid>
+    <same_srcip />
+    <description>DNS reverse-lookup burst from $(srcip) - likely a network scan resolving the hosts it found</description>
+    <group>dns_query,dns_ptr_burst,recon,</group>
+  </rule>
+
+</group>
+
+<!--
+  Router ARP monitor (router/arpmon.py, JSON events). arpmon only sees the
+  router's own ARP table, so it catches spoofing that targets the router -
+  e.g. the HMI <-> gateway MitM, which has to poison the router to see both
+  directions.
+
+  changed_mac alone also fires when a container is recreated (new MAC), so
+  it stays at 10. When the new MAC already answers for a different IP
+  (mac_also_claimed_by, set by arpmon) it's the classic spoofing signature -
+  the attacker's own MAC claiming the victim's IP - so that's 12.
+-->
+<group name="arp,arpmon,grfics,">
+
+  <rule id="100220" level="0">
+    <decoded_as>json</decoded_as>
+    <location>/var/log/arpmon/events.json</location>
+    <description>arpmon event (categorization only)</description>
+  </rule>
+
+  <rule id="100221" level="5">
+    <if_sid>100220</if_sid>
+    <field name="event">^new_station$</field>
+    <description>ARP: new device $(ip) ($(mac)) seen on $(iface)</description>
+    <group>arp_new_station,</group>
+  </rule>
+
+  <rule id="100222" level="10">
+    <if_sid>100220</if_sid>
+    <field name="event">^changed_mac$</field>
+    <description>ARP: $(ip) moved from MAC $(old_mac) to $(mac) on $(iface) - possible ARP spoofing, or a replaced/recreated device</description>
+    <group>arp_changed_mac,</group>
+  </rule>
+
+  <rule id="100223" level="12">
+    <if_sid>100222</if_sid>
+    <field name="mac_also_claimed_by">\.+</field>
+    <description>ARP spoofing: $(ip) now maps to MAC $(mac), which also answers for $(mac_also_claimed_by)</description>
+    <group>arp_changed_mac,arp_spoofing,</group>
+  </rule>
+
+  <rule id="100224" level="12">
+    <if_sid>100221</if_sid>
+    <field name="mac_also_claimed_by">\.+</field>
+    <description>ARP: new address $(ip) uses MAC $(mac), which already answers for $(mac_also_claimed_by) - possible spoofing</description>
+    <group>arp_new_station,arp_spoofing,</group>
+  </rule>
+
+</group>

@@ -100,6 +100,10 @@ echo "[wazuh] Starting wazuh-manager..."
 # reported "running" and never started, every daemon failed on queue/db/wdb,
 # all agents showed Unknown, and no alerts were processed.
 rm -f /var/ossec/var/run/*.pid
+# GRFICS rules/decoders ship outside the persisted volume (see Dockerfile) -
+# install the image's current versions every start so rebuilds take effect.
+install -o wazuh -g wazuh -m 660 /opt/grfics/wazuh/local_rules.xml /var/ossec/etc/rules/local_rules.xml
+install -o wazuh -g wazuh -m 660 /opt/grfics/wazuh/local_decoder.xml /var/ossec/etc/decoders/local_decoder.xml
 /var/ossec/bin/wazuh-control start
 
 echo "[wazuh] Starting alerts indexer..."

@@ -57,6 +57,18 @@ def now_iso():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def other_ips_with_mac(state, ip, mac):
+    """Other known IPs whose last-seen MAC is `mac`, as "a, b" ("" if none).
+
+    An IP moving to a MAC that already answers for a different IP is the
+    classic ARP-spoofing signature (the attacker's own MAC claiming the
+    victim's IP) - unlike a recreated container, which gets a brand-new MAC
+    nobody else has. Comma-joined so Wazuh's JSON decoder sees a plain string.
+    """
+    return ", ".join(sorted(
+        other for other, rec in state.items() if other != ip and rec["mac"] == mac))
+
+
 def poll(state):
     now = now_iso()
     current = read_arp_table()
@@ -65,24 +77,33 @@ def poll(state):
         mac   = info["mac"]
         iface = info["iface"]
         if ip not in state:
+            event = {
+                "timestamp": now, "event": "new_station",
+                "ip": ip, "mac": mac, "iface": iface,
+            }
+            claimed = other_ips_with_mac(state, ip, mac)
+            if claimed:
+                event["mac_also_claimed_by"] = claimed
             state[ip] = {
                 "mac": mac, "iface": iface,
                 "first_seen": now, "last_seen": now,
             }
-            append_event({
-                "timestamp": now, "event": "new_station",
-                "ip": ip, "mac": mac, "iface": iface,
-            })
+            append_event(event)
             print(f"[arpmon] new_station  {ip}  {mac}  ({iface})", flush=True)
         elif state[ip]["mac"] != mac:
             old_mac = state[ip]["mac"]
-            state[ip]["mac"]       = mac
-            state[ip]["last_seen"] = now
-            append_event({
+            event = {
                 "timestamp": now, "event": "changed_mac",
                 "ip": ip, "mac": mac, "old_mac": old_mac, "iface": iface,
-            })
-            print(f"[arpmon] changed_mac  {ip}  {old_mac} -> {mac}  ({iface})", flush=True)
+            }
+            claimed = other_ips_with_mac(state, ip, mac)
+            if claimed:
+                event["mac_also_claimed_by"] = claimed
+            state[ip]["mac"]       = mac
+            state[ip]["last_seen"] = now
+            append_event(event)
+            print(f"[arpmon] changed_mac  {ip}  {old_mac} -> {mac}  ({iface})"
+                  + (f"  [MAC also used by {claimed}]" if claimed else ""), flush=True)
         else:
             state[ip]["last_seen"] = now
 

@@ -40,8 +40,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends gnupg \
     && WAZUH_MANAGER=192.168.90.20 WAZUH_AGENT_NAME=router apt-get install -y wazuh-agent \
     && rm -rf /var/lib/apt/lists/*
 
-# Tell the agent to monitor Suricata alerts-only EVE log
-RUN sed -i 's|</ossec_config>|<localfile>\n    <log_format>json</log_format>\n    <location>/var/log/suricata/alerts.json</location>\n  </localfile>\n</ossec_config>|' \
+# Ship the router's security logs to Wazuh: Suricata's alerts-only EVE log,
+# arpmon's ARP events (JSON) and dnsmasq's query log (syslog-style lines).
+# Decoders/rules that turn these into alerts live in wazuh/local_decoder.xml
+# and wazuh/local_rules.xml. The agent-package ossec.conf has more than one
+# </ossec_config> block - "0,/re/{s/re/.../}" limits the substitution to the
+# first, otherwise every <localfile> is added twice.
+RUN sed -i '0,/<\/ossec_config>/{s|</ossec_config>|<localfile>\n    <log_format>json</log_format>\n    <location>/var/log/suricata/alerts.json</location>\n  </localfile>\n  <localfile>\n    <log_format>json</log_format>\n    <location>/var/log/arpmon/events.json</location>\n  </localfile>\n  <localfile>\n    <log_format>syslog</log_format>\n    <location>/var/log/dnsmasq/dnsmasq.log</location>\n  </localfile>\n</ossec_config>|}' \
     /var/ossec/etc/ossec.conf
 
 COPY entrypoint.sh /entrypoint.sh
