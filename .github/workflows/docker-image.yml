@@ -62,6 +62,7 @@ jobs:
             ["attacker"]="attacker/"
             ["caldera"]="caldera/"
             ["wazuh"]="wazuh/"
+            ["zeek"]="zeek/"
           )
 
           # rebuild everything on release
@@ -91,9 +92,10 @@ jobs:
           # catch a wiring regression between them. So: if anything in the
           # OT-networked core changed, bring up the whole core group
           # together; a genuinely standalone service can be smoke-tested on
-          # its own (plus the router, for basic reachability). wazuh is
-          # deliberately excluded - optional siem profile, heavy ELK stack,
-          # not part of the default `docker compose up`.
+          # its own (plus the router, for basic reachability). wazuh and
+          # zeek are deliberately excluded from the smoke test - optional
+          # siem profile, heavy / host-mirror-dependent, not part of the
+          # default `docker compose up`. They are still built and pushed.
           declare -A COMPOSE_SERVICE=(
             ["plc"]="plc"
             ["router"]="router"
