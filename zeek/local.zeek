@@ -97,3 +97,38 @@ hook Log::log_stream_policy(rec: any, id: Log::ID)
     if ( r?$func && r$func in routine_poll_reads && ! r?$exception_code )
         break;
     }
+
+# --- GRFICS defensive notices ---------------------------------------------
+# Surface an attack in Wazuh (via notice.log, which the agent ships) that
+# otherwise lived only in conn.log on the sensor: a host inside the plant
+# beaconing out to a command-and-control port. The course's HMI implant
+# checks in to Kali on 4444/tcp; because both ends are in the DMZ, the
+# traffic never crosses the router, so neither the firewall nor Suricata
+# ever see it - the mirror is the only sensor that can.
+module GRFICS;
+
+export {
+    redef enum Notice::Type += {
+        ## A host inside the plant opened a connection out to a port
+        ## commonly used for command-and-control or reverse shells.
+        Suspicious_Outbound_Connection,
+    };
+
+    ## Destination ports nothing inside the plant should ever contact -
+    ## common C2 / reverse-shell defaults (4444 is the course beacon).
+    const c2_ports: set[port] = { 4444/tcp, 1337/tcp, 9001/tcp, 31337/tcp } &redef;
+}
+
+# new_connection (not connection_established) so the beacon is caught even
+# when its C2 listener is down and the handshake never completes - the
+# repeated check-in attempts are the signal.
+event new_connection(c: connection)
+    {
+    if ( c$id$resp_p in GRFICS::c2_ports && Site::is_local_addr(c$id$orig_h) )
+        NOTICE([$note=GRFICS::Suspicious_Outbound_Connection,
+                $conn=c,
+                $msg=fmt("Plant host %s connected out to %s on suspicious port %s - possible C2/reverse-shell beacon",
+                         c$id$orig_h, c$id$resp_h, c$id$resp_p),
+                $identifier=fmt("%s->%s:%s", c$id$orig_h, c$id$resp_h, c$id$resp_p),
+                $suppress_for=1 min]);
+    }

@@ -181,6 +181,30 @@
 </group>
 
 <!--
+  Zeek notice.log (the notice framework's own output, shipped by the agent).
+  GRFICS::Suspicious_Outbound_Connection is raised by zeek/local.zeek when a
+  plant host connects out to a C2 / reverse-shell port (4444 etc.). The HMI
+  implant's check-ins are DMZ-internal, so this is the only place in Wazuh
+  the beacon shows up - the firewall and Suricata never see that traffic.
+-->
+<group name="zeek,notice,ics,">
+
+  <rule id="100120" level="0">
+    <decoded_as>json</decoded_as>
+    <location>/usr/local/zeek/logs/notice.log</location>
+    <description>Zeek notice (categorization only)</description>
+  </rule>
+
+  <rule id="100121" level="10">
+    <if_sid>100120</if_sid>
+    <field name="note">GRFICS::Suspicious_Outbound_Connection</field>
+    <description>Zeek: plant host $(id.orig_h) beaconing out to $(id.resp_h) on suspicious port $(id.resp_p) - possible C2 on a compromised host</description>
+    <group>ics,c2,ics_c2_beacon,</group>
+  </rule>
+
+</group>
+
+<!--
   Router DNS log (dnsmasq query lines, decoded by wazuh/local_decoder.xml).
 
   Every query is alerted at level 3 - the manager's log_alert_level floor -
