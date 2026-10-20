@@ -95,6 +95,11 @@ RUN chmod +x /usr/local/bin/xfce-no-lock.sh
 # Cyber fault-injection tooling (see docs/cyber-vs-physical-fault-injection-design.md)
 COPY cyber_injects /opt/cyber_injects
 
+# Short `mystery-attack` command for the OT Defense capstone (Chapter 9).
+RUN printf '#!/bin/sh\nexec python3 /opt/cyber_injects/mystery_attack.py "$@"\n' \
+      > /usr/local/bin/mystery-attack \
+    && chmod +x /usr/local/bin/mystery-attack
+
 
 EXPOSE ${NOVNC_PORT} ${VNC_PORT}
 
