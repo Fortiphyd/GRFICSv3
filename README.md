@@ -135,6 +135,14 @@ The fastest way to get started — no building required!
 # Download the latest docker-compose.yml
 curl -O https://raw.githubusercontent.com/Fortiphyd/GRFICSv3/main/docker-compose.yml
 
+# Download the Zeek network-mirror scripts. These run on the host (not inside a
+# container), so they aren't shipped in the images. They're only needed for the
+# optional Zeek sensor under the 'siem' profile; harmless to grab regardless.
+mkdir -p zeek
+curl -o zeek/enable-mirror.sh  https://raw.githubusercontent.com/Fortiphyd/GRFICSv3/main/zeek/enable-mirror.sh
+curl -o zeek/disable-mirror.sh https://raw.githubusercontent.com/Fortiphyd/GRFICSv3/main/zeek/disable-mirror.sh
+chmod +x zeek/*.sh
+
 # Start GRFICS using prebuilt images from Docker Hub
 docker compose pull
 docker compose up -d
@@ -233,6 +241,22 @@ docker compose --profile siem down
 
 Once running, the Wazuh dashboard is available at [http://localhost:5601](http://localhost:5601) (`admin` / `admin`).
 Agents installed on the router and ScadaLTS containers will automatically connect and begin forwarding logs.
+
+### Optional: Zeek network sensor
+
+Under the same `siem` profile, GRFICSv3 includes a **Zeek** passive network sensor. Zeek sees a mirrored copy of the traffic in both the process and enterprise zones — including conversations that never cross the router — and forwards selected events (such as Modbus write commands) to Wazuh, where they show up as `rule.groups:zeek` alerts.
+
+The traffic mirror is created on the **host** (not inside a container), so it isn't part of the images and must be turned on after the lab starts. If you installed with the prebuilt images, download the scripts first (see [Option A](#-option-a-pull-prebuilt-images-recommended) above).
+
+```bash
+# from the folder that holds your docker-compose.yml
+sudo ./zeek/enable-mirror.sh
+
+# confirm it's running — a mirror0 interface should exist in the zeek container
+docker exec zeek ip link show mirror0
+```
+
+The mirror runs in the host's network namespace, so it needs a real Linux kernel — native Linux or Docker Engine inside WSL2, **not** Docker Desktop's VM. It also does **not** survive a restart: re-run `enable-mirror.sh` after every `stop`/`start`, `down`/`up`, or reboot. Turn it off with `sudo ./zeek/disable-mirror.sh`.
 
 ---
 
