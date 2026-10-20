@@ -1,2 +1,4 @@
 packaging/dist/
 router/__pycache__/
+*.sqlite-shm
+*.sqlite-wal
