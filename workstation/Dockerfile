@@ -63,6 +63,9 @@ RUN apt-get update && apt-get install -y software-properties-common && \
 # Supervisor config (xvfb, x11vnc, websockify)
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
+# Noise-floor tooling (see docs/cyber-vs-physical-fault-injection-design.md §5)
+COPY noise_floor /opt/noise_floor
+
 # Entrypoint script
 COPY start.sh /usr/local/bin/start.sh
 RUN chmod +x /usr/local/bin/start.sh
