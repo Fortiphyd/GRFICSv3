@@ -31,11 +31,30 @@ RUN git clone https://github.com/novnc/noVNC.git /opt/noVNC && \
     git clone https://github.com/novnc/websockify /opt/noVNC/utils/websockify || true && \
     chmod -R a+rx /opt/noVNC
 
+COPY retry.sh /usr/local/bin/retry
+RUN chmod +x /usr/local/bin/retry
+
+# Add the deadsnakes PPA (Python 3.9 for the OpenPLC Editor) ourselves, with
+# retries, instead of letting install.sh do it: add-apt-repository fetches
+# the signing key from Launchpad's API, which intermittently 500s, and
+# install.sh has no error handling - a failure there silently produced an
+# editor with no venv and no iec2c, and only surfaced at the next apt-get.
+RUN apt-get update && apt-get install -y software-properties-common \
+ && retry 5 add-apt-repository -y ppa:deadsnakes/ppa \
+ && rm -rf /var/lib/apt/lists/*
+
 RUN git clone https://github.com/thiagoralves/OpenPLC_Editor.git /opt/OpenPLC_Editor \
  && cd /opt/OpenPLC_Editor \
  # Patch install.sh so wxPython installs from prebuilt wheel if possible
  && sed -i 's#-m pip install wxPython==4.2.0#-m pip install wxPython==4.2.0 --find-links https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-22.04/ --only-binary wxPython#g' install.sh \
- && ./install.sh
+ && grep -qF -- '--only-binary wxPython' install.sh \
+ # PPA already added above, with retries
+ && sed -i '/add-apt-repository ppa:deadsnakes/d' install.sh \
+ && ! grep -q 'add-apt-repository' install.sh \
+ && ./install.sh \
+ # install.sh never fails on its own; check its outputs exist
+ && test -x .venv/bin/python \
+ && test -x editor/arduino/bin/iec2c
 
 RUN chown -R ${USERNAME}:${USERNAME} /opt/OpenPLC_Editor
 
@@ -54,7 +73,7 @@ RUN apt-get update && apt-get install -y \
 
 
 RUN apt-get update && apt-get install -y software-properties-common && \
-    add-apt-repository -y ppa:mozillateam/ppa && \
+    retry 5 add-apt-repository -y ppa:mozillateam/ppa && \
     echo 'Package: *\nPin: release o=LP-PPA-mozillateam\nPin-Priority: 1001' > /etc/apt/preferences.d/mozilla-firefox && \
     apt-get update && apt-get install -y firefox && \
     rm -rf /var/lib/apt/lists/*
