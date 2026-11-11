@@ -732,6 +732,26 @@ the PLC) produced two real alerts on rule 100102 within seconds, the
 first time this detection pipeline and the cyber-inject mechanisms it's
 meant to catch had ever actually run together end-to-end.
 
+### 5.17 100102 now scopes to the actual manual-mode addresses, via a dedicated `grfics_modbus_write.log` stream
+
+EWS's noise-floor setpoint nudges (holding registers 1026/1028) were
+matching 100102's old "any write to the PLC" condition, breaking its
+near-zero baseline. Fixed by sourcing 100102/100103 from a new Zeek log
+built directly from Modbus write-*response* events
+(`zeek/local.zeek`, `write_address` field) instead of
+`modbus_detailed.log`, scoped to coil 0 / holding registers 10-13. See
+commit `8be6893` for the three Wazuh/Zeek quirks hit getting there
+(worth a read before touching `<field>` regexes in this ruleset again).
+
+### 5.18 Pin `wazuh-indexer`/`wazuh-manager`/`wazuh-dashboard` versions
+
+Unpinned packages let a later image rebuild resolve an older OpenSearch
+than whatever already stamped the `wazuh_indexer_data` volume, which
+OpenSearch then refuses to start against - not specific to this dev
+environment, this hits any rebuild or re-pull against an existing
+deployment. Fixed with an exact version pin + `apt-mark hold`
+(`wazuh/Dockerfile`). See commit `8be6893`.
+
 ## 6. Open risks / questions
 
 - ~~A real Modbus-content Wazuh rule~~ — **resolved** (§5.13): both a

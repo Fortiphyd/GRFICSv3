@@ -353,13 +353,52 @@ automation.
   accuracy/speed against it — a stronger, more quantifiable result for the
   talk than a flat two-condition comparison.
 
-**Implemented and validated** (the 3 reuse-based event types only — EWS
-setpoint nudges and ARP churn are still not built, see §7):
-`simulation/noise_floor/scheduler.py`, a new always-on supervisord program
-in the `simulation` container, talking to the same TE_process control
-socket (`127.0.0.1:55555`, same JSON protocol) already used by `index.php`
-and the Modbus remote-IO devices. Defaults to fully quiet — confirmed live,
-a fresh container generates zero ambient events until explicitly enabled.
+**Implemented and validated** (all 5 event types now, see §7 for the EWS
+setpoint nudges and benign ARP churn mechanisms specifically):
+`simulation/noise_floor/scheduler.py`, a new
+always-on supervisord program in the `simulation` container, talking to
+the same TE_process control socket (`127.0.0.1:55555`, same JSON
+protocol) already used by `index.php` and the Modbus remote-IO devices.
+Defaults to fully quiet — confirmed live, a fresh container generates
+zero ambient events until explicitly enabled.
+
+EWS setpoint nudges: `workstation/noise_floor/ews_nudge.py`, an always-on
+supervisord program on EWS (192.168.95.5, same ICS segment as the PLC).
+Needed a real correction mid-design: the original plan assumed the valve
+position registers (`%QW100`-`103`) were the externally-adjustable
+setpoints, but they're actually ladder-logic-*computed outputs*
+(`plc/st_files/326339.st`'s `control()` calls overwrite them every scan
+cycle when not in manual mode) - writing there would be silently
+clobbered with no lasting effect. The real externally-settable targets
+are the *process* setpoints those loops read from: `pressure_sp` (%MW2)
+and `level_sp` (%MW4), which OpenPLC exposes as Modbus holding registers
+1026 and 1028 (OpenPLC maps %MW to holding registers starting at 1024,
+confirmed in `plc/webserver/core/modbus.cpp`). A third setpoint
+(`a_setpoint`, driving feed-2's composition control) was left out
+deliberately - its register appears to use a different raw-value
+convention than its own measurement, unconfirmed live, so it wasn't
+built this round. Feed-1's setpoint isn't adjustable this way at all -
+it's cascaded from a computed `product_flow_setpoint`, not a simple held
+register - so this covers only 3 of the 4 valves' upstream setpoints, not
+all 4.
+
+No new dashboard/backend surface needed: the script polls the existing
+`/data/index.php` GET response (already returns
+`noise_floor.enabled`/`seed`/`mean_interval_s`/`suppress_until`/
+`suppressed_tags` on every request) over `a-grfics-admin`, re-seeding on
+enable/seed-change and reusing the same `mean_interval_s` the sensor/
+valve scheduler already exposes - the single dashboard toggle remains the
+one on/off switch for all four built event types. Validated live against
+the real running PLC: nudges land on holding registers 1026/1028 relative
+to whatever's currently there (confirmed via direct Modbus reads before/
+after), and triggering a real fault on a tag mid-session correctly shows
+that tag in `suppressed_tags` with a live `suppress_until` - the same
+quiet-buffer data the main scheduler already produces, just read by a
+second, independent consumer in a different container.
+
+These same ambient writes also broke Wazuh rule 100102's near-zero
+baseline (the §4.4 stuck-valve tell) - fixed, see
+`docs/zeek-network-mirroring-design.md` §5.17.
 
 Control plane: `web_visualization/data/index.php` gained three new POST
 fields (`noise_floor_enabled`, `noise_floor_seed`,
@@ -596,13 +635,33 @@ more than statistical elegance when recruitment itself is the bottleneck.
   depends on is now proven live, not just plausible from each half's
   separate validation.
 
+All five noise-floor ambient event types are now built. The last one,
+benign ARP churn, ended up living in `simulation` too (not Kali or the
+router as originally sketched), since `simulation` already has the Docker
+socket mounted (for the dashboard's "About" version info) and that turned
+out to be the natural way to generate it: `simulation/noise_floor/
+arp_churn.py` creates and destroys short-lived containers on the DMZ
+network (`fortiphyd/grfics-arp-churn-device`, a new minimal Alpine image,
+built locally like every other image here rather than pulled at runtime)
+on a fixed, otherwise-unused IP (192.168.90.50), each one pinging the
+router to force a real ARP exchange, then tearing down after a dwell
+period. A fresh container gets a fresh MAC from Docker every time, so
+reusing the same IP naturally reproduces the exact "changed_mac" signature
+(`router/arpmon.py`, Wazuh rule 100222 - "possible ARP spoofing, or a
+replaced/recreated device") a real device swap would, without ever
+colliding with another IP's MAC (confirmed live: no run ever had
+`mac_also_claimed_by` set, so rule 100223's definite-spoofing escalation
+never fired) - the same ambiguous signal a benign reconnect leaves, by
+construction. Deliberately has no quiet-buffer suppression, unlike the
+other four event types - the point is this keeps recurring regardless of
+when the real attack's own ARP spoofing happens, not avoiding it.
+Validated live: first appearance correctly logged as `new_station`, every
+subsequent reconnect as `changed_mac` with no collision flag, and
+disabling noise floor mid-connection tears the active device down within
+seconds rather than leaving it until its planned dwell timer expires.
+
 Still not built:
 
-- EWS: small automation for periodic legitimate setpoint nudges (noise
-  floor) - the 4th ambient event type, needs its own script since it
-  doesn't go through the simulation container's control socket at all.
-- Kali or router: small script for benign ARP churn (noise floor) - the
-  5th ambient event type, same reasoning.
 - The ARP-spoof + iptables REDIRECT positioning itself is still manual
   (deliberately - see §8's "ARP spoofing reliability" entry and the
   compromised-HMI model's "assume the foothold already exists" framing).

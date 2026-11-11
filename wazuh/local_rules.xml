@@ -70,6 +70,52 @@
   </rule>
 
   <!--
+    100102/100103 (the original write-to-PLC and write-rate-anomaly
+    rules) are retired and replaced by 100104-100106 below, which key on
+    a new dedicated Zeek log (zeek/local.zeek's grfics_modbus_write.log)
+    instead of modbus_detailed.log directly. Found live while validating
+    the noise floor's EWS setpoint nudges against the full stack for the
+    first time - two distinct, real Wazuh rule-engine quirks, not one:
+
+    1. The literal field names "address" and "addr" are rejected by
+       Wazuh's rule-file parser outright - `<field name="address">`
+       fails to even load ("Syntax error on tag 'address'"), confirmed in
+       complete isolation, independent of any real data or any other
+       field name (e.g. "my_address_field" or "test_address" load fine -
+       it's the bare word, not a substring match). Renamed to
+       write_address in the new stream to avoid this.
+    2. A *second* `<field>` tag in the same rule cannot contain
+       parentheses in its regex - confirmed in isolation, independent of
+       field name or which field is first: `<field name="x">A</field>
+       <field name="y">^(0|1)$</field>` fails to load, while the same
+       value written as top-level alternation with no grouping,
+       `^0$|^1$`, loads and matches fine. Not field-name-specific (also
+       reproduced with "reg_num", "is_plc_write", and other definitely-
+       unreserved names) - rewritten in 100105 below accordingly.
+
+    Separately, the *reason* the original fix was needed at all: once
+    workstation/noise_floor/ews_nudge.py started legitimately writing
+    pressure_sp/level_sp (holding registers 1026/1028) as part of the
+    noise floor, those ambient writes matched the old, unscoped "any
+    write to the PLC" condition too (confirmed live: 4 EWS nudges
+    produced 4 alerts), destroying the near-zero baseline that rule
+    depended on as a usable tell - hence scoping to specific addresses
+    at all, which is what first ran into both quirks above.
+
+    grfics_modbus_write.log is built from Zeek's own write-response
+    events directly and only ever contains confirmed completed writes
+    (no separate matched-field filtering needed either - see local.zeek's
+    comment). modbus_detailed.log / 100100-101 are unchanged and keep
+    shipping for their own value as raw, manually-searchable evidence.
+  -->
+
+  <rule id="100104" level="1">
+    <location>/usr/local/zeek/logs/grfics_modbus_write.log</location>
+    <description>Zeek: confirmed Modbus write (categorization only, not alerted)</description>
+    <group>modbus,ics,ics_write,</group>
+  </rule>
+
+  <!--
     Writes targeting the PLC itself (192.168.95.2) - its manual-mode
     registers (coil 0, holding registers 10-13; see
     docs/cyber-vs-physical-fault-injection-design.md §4.4's stuck-valve
@@ -81,18 +127,32 @@
     against the real attack: attacker/cyber_injects/setpoint_inject.py
     run from Kali against the real PLC fired this rule immediately and
     correctly for both the register write and the manual-mode coil write,
-    with the true source (192.168.90.6) correctly attributed.
+    with the true source (192.168.90.6) correctly attributed. Re-validated
+    after the grfics_modbus_write.log migration: EWS's ambient nudges
+    (holding registers 1026/1028) no longer match, and a real stuck-valve
+    trigger (holding register 10 + coil 0) still does.
   -->
-  <rule id="100102" level="12">
-    <if_sid>100101</if_sid>
+  <rule id="100105" level="12">
+    <if_sid>100104</if_sid>
     <field name="id.resp_h">^192\.168\.95\.2$</field>
-    <description>Zeek: Unauthorized Modbus write to PLC $(id.resp_h), address $(address) - PLC manual-mode registers are never written during normal automatic operation</description>
+    <!-- type="pcre2" is required for bracket classes/alternation to
+         actually work as regex at all - without it, a <field> is
+         evaluated in Wazuh's basic (non-PCRE2) mode, which silently
+         never matches a bracket-class pattern rather than erroring.
+         Found live: ^1[0-3]$ alone, with no type attribute, matched
+         nothing at all (confirmed via wazuh-logtest, not just in this
+         combined rule) - address 10/11/12/13 writes went undetected
+         while address 0 (anchors + literal digit only, no bracket)
+         happened to still work, which is what made this look at first
+         like an address-0-only bug rather than what it actually was. -->
+    <field name="write_address" type="pcre2">^(0|1[0-3])$</field>
+    <description>Zeek: Unauthorized Modbus write to PLC $(id.resp_h), address $(write_address) - PLC manual-mode registers are never written during normal automatic operation</description>
     <group>modbus,ics,ics_write,ics_unauthorized_write,</group>
   </rule>
 
   <!--
     Write-rate anomaly on the PLC<->remote-IO polling channel (separate
-    from 100102 - this is the PLC's own normal control-loop traffic, not
+    from 100105 - this is the PLC's own normal control-loop traffic, not
     writes targeting the PLC). No existing cyber inject attacks this
     specific channel, so there's no real attack to validate this against
     yet - included as a template for future scenarios there.
@@ -125,10 +185,12 @@
     distinction mattered) fired this rule correctly and immediately, with
     the actual source IP attributed. Per-target thresholds (a separate
     rule per target, more precise but more complex) are a possible
-    follow-up, not built this round.
+    follow-up, not built this round. (This threshold was calibrated
+    against modbus_detailed.log; re-confirm it still holds against
+    grfics_modbus_write.log's write-only volume before trusting it again.)
   -->
-  <rule id="100103" level="10" frequency="120" timeframe="2">
-    <if_matched_sid>100101</if_matched_sid>
+  <rule id="100106" level="10" frequency="120" timeframe="2">
+    <if_matched_sid>100104</if_matched_sid>
     <same_field>id.resp_h</same_field>
     <description>Zeek: Modbus write-rate anomaly - more than 120 writes to $(id.resp_h) within 2 seconds</description>
     <group>modbus,ics,ics_write,ics_write_burst,</group>

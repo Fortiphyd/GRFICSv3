@@ -286,6 +286,23 @@ services:
     # profile as wazuh, since it's useless without a manager to ship logs
     # to.
 
+  arp-churn-device:
+    # Never started directly - this entry exists only so `docker compose
+    # build` produces the image locally. simulation/noise_floor/
+    # arp_churn.py creates/destroys short-lived containers from this
+    # image via the Docker API for the noise floor's benign ARP churn
+    # event (docs/cyber-vs-physical-fault-injection-design.md §5). The
+    # "never" profile is never passed to `--profile`, so a plain
+    # `docker compose up` (with or without `--profile siem`) never starts
+    # it even by accident.
+    profiles: [never]
+    image: fortiphyd/grfics-arp-churn-device
+    build:
+      context: ./arp-churn-device
+      args:
+        BUILD_VERSION: ${BUILD_VERSION:-unknown}
+        BUILD_CREATED: ${BUILD_CREATED:-unknown}
+
 networks:
   # Each zone gets its own 802.1Q sub-interface of the host NIC as its
   # macvlan parent (Docker creates eth0.95/eth0.90 itself). With both

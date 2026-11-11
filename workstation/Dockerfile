@@ -63,6 +63,9 @@ RUN apt-get update && apt-get install -y software-properties-common && \
 # Supervisor config (xvfb, x11vnc, websockify)
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
+# Noise-floor tooling (see docs/cyber-vs-physical-fault-injection-design.md §5)
+COPY noise_floor /opt/noise_floor
+
 # Entrypoint script
 COPY start.sh /usr/local/bin/start.sh
 RUN chmod +x /usr/local/bin/start.sh
@@ -91,7 +94,8 @@ COPY places.sqlite /home/engineer/.mozilla/firefox/ztc0wi0n.default-release/plac
 RUN chown engineer /home/engineer/.mozilla/firefox/ztc0wi0n.default-release/places.sqlite
 RUN chown -R engineer:engineer /home/engineer
 
-# Install Wazuh agent
+# Install Wazuh agent, pinned to match wazuh/Dockerfile's manager pin -
+# see router/Dockerfile's comment for why.
 RUN printf '#!/bin/bash\necho "[fake-systemctl] $@"\nexit 0\n' \
     > /usr/local/bin/systemctl && chmod +x /usr/local/bin/systemctl
 RUN apt-get update && apt-get install -y --no-install-recommends curl gnupg \
@@ -103,7 +107,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl gnupg \
        https://packages.wazuh.com/4.x/apt/ stable main" \
        > /etc/apt/sources.list.d/wazuh.list \
     && apt-get update \
-    && WAZUH_MANAGER=192.168.90.20 WAZUH_AGENT_NAME=EWS apt-get install -y wazuh-agent \
+    && WAZUH_MANAGER=192.168.90.20 WAZUH_AGENT_NAME=EWS apt-get install -y wazuh-agent=4.14.4-1 \
+    && apt-mark hold wazuh-agent \
     && rm -rf /var/lib/apt/lists/*
 
 # File integrity monitoring for the PLC project: the default syscheck only

@@ -18,8 +18,22 @@ RUN curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH \
        https://packages.wazuh.com/4.x/apt/ stable main" \
     > /etc/apt/sources.list.d/wazuh.list
 
+# Pinned, not just "whatever's latest in 4.x" - OpenSearch (bundled inside
+# wazuh-indexer) stamps its on-disk data directory with the version that
+# created it, and refuses to start against a newer-stamped directory from
+# an older binary ("cannot downgrade a node from version X to Y"). An
+# unpinned install means a rebuild of this image at a later date (CI, a
+# fresh `docker compose build`, a newer pulled fortiphyd/grfics-wazuh tag)
+# can resolve an OpenSearch version older than whatever already
+# initialized a pre-existing wazuh_indexer_data volume, with no warning
+# until the container actually fails to start - confirmed live during
+# this project's own development (apt resolved 4.14.4-1 against a volume
+# a previous build had already stamped with a newer bundled OpenSearch).
+# Bump this pin deliberately (and wipe or migrate wazuh_indexer_data)
+# rather than letting it drift silently between rebuilds.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    wazuh-indexer wazuh-manager wazuh-dashboard \
+    wazuh-indexer=4.14.4-1 wazuh-manager=4.14.4-1 wazuh-dashboard=4.14.4-1 \
+    && apt-mark hold wazuh-indexer wazuh-manager wazuh-dashboard \
     && rm -rf /var/lib/apt/lists/*
 
 # Generate SSL certs using wazuh-certs-tool — pure openssl, no running services needed
