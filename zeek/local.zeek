@@ -98,6 +98,72 @@ hook Log::log_stream_policy(rec: any, id: Log::ID)
         break;
     }
 
+# --- GRFICS Wazuh write-detection stream -----------------------------------
+# A dedicated log, built directly from Zeek's own base Modbus write
+# *response* events, for the Wazuh rules that key on writes
+# (wazuh/local_rules.xml, 100100-100103) - replacing a direct dependency
+# on modbus_detailed.log's own schema. Two reasons:
+#   1. Only a genuinely completed response reaches this stream, so there's
+#      no separate "matched" field to filter on the way the old rules
+#      needed - a half-open/unmatched request (see §5.10/§5.14's
+#      modbus_pending findings) never gets here at all.
+#   2. The register address needs a field name Wazuh will actually accept.
+#      Zeek's own field is literally named "address" - but that word is
+#      reserved in Wazuh's rule schema and fails rule-file validation
+#      ("Syntax error on tag 'address'") even in complete isolation, even
+#      renamed to "addr" - not a data collision, a parser-level
+#      reservation. Found live: once workstation/noise_floor/
+#      ews_nudge.py started legitimately writing to the PLC as part of
+#      the noise floor, the fix attempted first (scoping the *old* rule
+#      to specific addresses) couldn't even load. Named write_address
+#      here instead, so it never collides.
+module GRFICS;
+
+export {
+    redef enum Log::ID += { MODBUS_WRITE_LOG };
+
+    type Modbus_Write: record {
+        ts: time &log;
+        uid: string &log;
+        id: conn_id &log;
+        func: string &log;
+        write_address: count &log;
+    };
+}
+
+event zeek_init() &priority=5
+    {
+    Log::create_stream(GRFICS::MODBUS_WRITE_LOG,
+                        [$columns=Modbus_Write, $path="grfics_modbus_write"]);
+    }
+
+function grfics_log_write(c: connection, op: string, reg: count)
+    {
+    # Both "func" and "addr" are reserved type keywords in Zeek's own
+    # grammar ("a function/event/hook value" and "an IP address",
+    # respectively) - neither can be a parameter name here, even though
+    # "func" is fine as the $func *record field* name below, and "address"
+    # (a different token entirely) is fine as the event parameter names
+    # a few lines down, already used successfully by the vendored ICSNPP
+    # package itself.
+    Log::write(GRFICS::MODBUS_WRITE_LOG, [
+        $ts=network_time(), $uid=c$uid, $id=c$id,
+        $func=op, $write_address=reg
+    ]);
+    }
+
+event modbus_write_single_coil_response(c: connection, headers: ModbusHeaders, address: count, value: bool)
+    { grfics_log_write(c, "WRITE_SINGLE_COIL", address); }
+
+event modbus_write_single_register_response(c: connection, headers: ModbusHeaders, address: count, value: count)
+    { grfics_log_write(c, "WRITE_SINGLE_REGISTER", address); }
+
+event modbus_write_multiple_coils_response(c: connection, headers: ModbusHeaders, start_address: count, quantity: count)
+    { grfics_log_write(c, "WRITE_MULTIPLE_COILS", start_address); }
+
+event modbus_write_multiple_registers_response(c: connection, headers: ModbusHeaders, start_address: count, quantity: count)
+    { grfics_log_write(c, "WRITE_MULTIPLE_REGISTERS", start_address); }
+
 # --- GRFICS defensive notices ---------------------------------------------
 # Surface an attack in Wazuh (via notice.log, which the agent ships) that
 # otherwise lived only in conn.log on the sensor: a host inside the plant

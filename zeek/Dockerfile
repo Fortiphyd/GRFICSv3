@@ -52,10 +52,18 @@ RUN curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH \
 # the EWS (EWS -> PLC web UI on :8080 stays inside the control network, so
 # the router and Suricata never see it). Zeek finds HTTP on the
 # non-standard port itself (dynamic protocol detection).
+# grfics_modbus_write.log (local.zeek) too: a dedicated write-only stream
+# the write-detection rules (100104-100106) key on instead of
+# modbus_detailed.log directly - see local.zeek's own comment for why
+# (Wazuh rejects "address" as a field name outright, and this stream only
+# ever contains confirmed completed writes, with nothing else to filter).
+# modbus_detailed.log keeps shipping too, for its own value as raw,
+# manually-searchable evidence - it's just no longer what the automated
+# rules match against.
 # Agent-package ossec.conf has more than one </ossec_config> block (one per
 # top-level config section) - "0,/re/{s/re/.../}" limits the substitution
 # to just the first, avoiding a duplicated <localfile> entry.
-RUN sed -i '0,/<\/ossec_config>/{s|</ossec_config>|<localfile>\n    <log_format>json</log_format>\n    <location>/usr/local/zeek/logs/notice.log</location>\n  </localfile>\n  <localfile>\n    <log_format>json</log_format>\n    <location>/usr/local/zeek/logs/modbus_detailed.log</location>\n  </localfile>\n  <localfile>\n    <log_format>json</log_format>\n    <location>/usr/local/zeek/logs/http.log</location>\n  </localfile>\n</ossec_config>|}' \
+RUN sed -i '0,/<\/ossec_config>/{s|</ossec_config>|<localfile>\n    <log_format>json</log_format>\n    <location>/usr/local/zeek/logs/notice.log</location>\n  </localfile>\n  <localfile>\n    <log_format>json</log_format>\n    <location>/usr/local/zeek/logs/modbus_detailed.log</location>\n  </localfile>\n  <localfile>\n    <log_format>json</log_format>\n    <location>/usr/local/zeek/logs/http.log</location>\n  </localfile>\n  <localfile>\n    <log_format>json</log_format>\n    <location>/usr/local/zeek/logs/grfics_modbus_write.log</location>\n  </localfile>\n</ossec_config>|}' \
     /var/ossec/etc/ossec.conf
 
 # rootcheck's "trojaned binary" signature check (check_trojans) is a
