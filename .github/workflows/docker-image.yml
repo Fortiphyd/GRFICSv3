@@ -192,15 +192,35 @@ jobs:
             # a recurring pattern, not a one-off), and per-service exceptions
             # are a losing game as base images keep growing.
             # https://github.com/moby/buildkit/issues/2773
-            docker buildx build \
-              --platform linux/amd64 \
-              --tag "${IMAGE}:${DOCKER_TAG}-amd64" \
-              --push \
-              --cache-from type=gha \
-              --cache-to type=gha,mode=max \
-              --build-arg "BUILD_VERSION=${{ steps.meta.outputs.version }}" \
-              --build-arg "BUILD_CREATED=${{ steps.meta.outputs.created }}" \
-              "./${SERVICE}"
+            # Cache scope is per service+arch: with the default shared scope
+            # each service's cache export overwrote the previous one's, so
+            # in practice only the last-built service ever had a warm cache.
+            #
+            # Retried because upstream package hosts (Launchpad, mirrors,
+            # PyPI) fail transiently often enough to matter, and failing the
+            # whole job means rebuilding every service. Layers that already
+            # succeeded stay in this runner's builder cache, so a retry
+            # resumes at the step that failed.
+            ATTEMPTS=3
+            for ATTEMPT in $(seq 1 "$ATTEMPTS"); do
+              if docker buildx build \
+                --platform linux/amd64 \
+                --tag "${IMAGE}:${DOCKER_TAG}-amd64" \
+                --push \
+                --cache-from "type=gha,scope=${SERVICE}-amd64" \
+                --cache-to "type=gha,mode=max,scope=${SERVICE}-amd64" \
+                --build-arg "BUILD_VERSION=${{ steps.meta.outputs.version }}" \
+                --build-arg "BUILD_CREATED=${{ steps.meta.outputs.created }}" \
+                "./${SERVICE}"; then
+                break
+              fi
+              if [ "$ATTEMPT" -eq "$ATTEMPTS" ]; then
+                echo "::error::${SERVICE} (amd64) failed after $ATTEMPTS attempts"
+                exit 1
+              fi
+              echo "::warning::${SERVICE} (amd64) build attempt $ATTEMPT failed; retrying in 60s"
+              sleep 60
+            done
           done
           echo "🧹 Cleaning local build cache to free space..."
           docker builder prune -af || true
@@ -249,15 +269,35 @@ jobs:
             # a recurring pattern, not a one-off), and per-service exceptions
             # are a losing game as base images keep growing.
             # https://github.com/moby/buildkit/issues/2773
-            docker buildx build \
-              --platform linux/arm64 \
-              --tag "${IMAGE}:${DOCKER_TAG}-arm64" \
-              --push \
-              --cache-from type=gha \
-              --cache-to type=gha,mode=max \
-              --build-arg "BUILD_VERSION=${{ steps.meta.outputs.version }}" \
-              --build-arg "BUILD_CREATED=${{ steps.meta.outputs.created }}" \
-              "./${SERVICE}"
+            # Cache scope is per service+arch: with the default shared scope
+            # each service's cache export overwrote the previous one's, so
+            # in practice only the last-built service ever had a warm cache.
+            #
+            # Retried because upstream package hosts (Launchpad, mirrors,
+            # PyPI) fail transiently often enough to matter, and failing the
+            # whole job means rebuilding every service. Layers that already
+            # succeeded stay in this runner's builder cache, so a retry
+            # resumes at the step that failed.
+            ATTEMPTS=3
+            for ATTEMPT in $(seq 1 "$ATTEMPTS"); do
+              if docker buildx build \
+                --platform linux/arm64 \
+                --tag "${IMAGE}:${DOCKER_TAG}-arm64" \
+                --push \
+                --cache-from "type=gha,scope=${SERVICE}-arm64" \
+                --cache-to "type=gha,mode=max,scope=${SERVICE}-arm64" \
+                --build-arg "BUILD_VERSION=${{ steps.meta.outputs.version }}" \
+                --build-arg "BUILD_CREATED=${{ steps.meta.outputs.created }}" \
+                "./${SERVICE}"; then
+                break
+              fi
+              if [ "$ATTEMPT" -eq "$ATTEMPTS" ]; then
+                echo "::error::${SERVICE} (arm64) failed after $ATTEMPTS attempts"
+                exit 1
+              fi
+              echo "::warning::${SERVICE} (arm64) build attempt $ATTEMPT failed; retrying in 60s"
+              sleep 60
+            done
           done
           echo "🧹 Cleaning local build cache to free space..."
           docker builder prune -af || true
