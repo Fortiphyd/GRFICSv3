@@ -396,16 +396,9 @@ that tag in `suppressed_tags` with a live `suppress_until` - the same
 quiet-buffer data the main scheduler already produces, just read by a
 second, independent consumer in a different container.
 
-**Found and fixed a real cross-cutting bug this validation surfaced**:
-these same ambient writes also matched Wazuh rule 100102 - the §4.4
-stuck-valve pairing's "any write to the PLC" detection rule, whose
-near-zero baseline this directly broke. See
-`docs/zeek-network-mirroring-design.md` §5.17 for the fix (a dedicated
-Zeek log stream scoped to the actual manual-mode registers, plus three
-real Wazuh rule-engine quirks found getting there) - re-confirmed live
-afterward that EWS's nudges (registers 1026/1028) no longer alert while
-a real stuck-valve trigger (register 10-13 / coil 0) still does, for
-every manual-mode address.
+These same ambient writes also broke Wazuh rule 100102's near-zero
+baseline (the §4.4 stuck-valve tell) - fixed, see
+`docs/zeek-network-mirroring-design.md` §5.17.
 
 Control plane: `web_visualization/data/index.php` gained three new POST
 fields (`noise_floor_enabled`, `noise_floor_seed`,

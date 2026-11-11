@@ -732,90 +732,25 @@ the PLC) produced two real alerts on rule 100102 within seconds, the
 first time this detection pipeline and the cyber-inject mechanisms it's
 meant to catch had ever actually run together end-to-end.
 
-### 5.17 Scoping 100102 to specific addresses (so EWS's noise-floor nudges stop polluting it) ran into three separate, real Wazuh rule-engine quirks before it worked
+### 5.17 100102 now scopes to the actual manual-mode addresses, via a dedicated `grfics_modbus_write.log` stream
 
-The need: once `workstation/noise_floor/ews_nudge.py` started legitimately
-writing `pressure_sp`/`level_sp` (holding registers 1026/1028) as part of
-the noise floor, those ambient writes also matched 100102's old "any
-write to the PLC" condition (confirmed live: 4 EWS nudges produced 4
-alerts), destroying the near-zero baseline that rule depended on as a
-usable tell for the stuck-valve pairing. The fix - scope the rule to the
-actual manual-mode addresses (coil 0, holding registers 10-13) - took
-three rounds to actually deploy, each one a genuine Wazuh behavior, not a
-guess:
+EWS's noise-floor setpoint nudges (holding registers 1026/1028) were
+matching 100102's old "any write to the PLC" condition, breaking its
+near-zero baseline. Fixed by sourcing 100102/100103 from a new Zeek log
+built directly from Modbus write-*response* events
+(`zeek/local.zeek`, `write_address` field) instead of
+`modbus_detailed.log`, scoped to coil 0 / holding registers 10-13. See
+commit `8be6893` for the three Wazuh/Zeek quirks hit getting there
+(worth a read before touching `<field>` regexes in this ruleset again).
 
-1. **`<field name="address">` is rejected outright.** Fails rule-file
-   validation ("Syntax error on tag 'address'") in complete isolation,
-   independent of any real data - confirmed it's the bare word, not a
-   substring match (`my_address_field`, `test_address` both load fine).
-   `addr` alone is rejected the same way. Not documented anywhere
-   obvious; found by elimination.
-2. **A dedicated data stream was the real fix, not a workaround for
-   quirk 1.** Rather than hunt for a field name that merely avoids the
-   reserved word, `modbus_detailed.log`'s own schema was replaced for
-   this purpose: `zeek/local.zeek` now builds a dedicated
-   `grfics_modbus_write.log` stream directly from Zeek's own base Modbus
-   write-*response* events (`modbus_write_single_coil_response` etc.),
-   with the register field named `write_address`. Bonus: only confirmed
-   completed writes ever reach this stream, so the old rule's
-   `matched=true` field requirement (§5.14) isn't needed here either.
-   Writing this script hit its own, unrelated Zeek-language gotcha:
-   `func` and `addr` are both reserved *type* keywords in Zeek's own
-   grammar (a generic function/event/hook value, and an IP address,
-   respectively) and can't be used as function parameter names, even
-   though `address`/`start_address` (different tokens entirely) are
-   already used as parameter names successfully by the vendored ICSNPP
-   package itself.
-3. **A second `<field>` tag's regex can't use parentheses or bracket
-   classes without `type="pcre2"` - and without it, this fails *silently*,
-   not with a load error.** `<field name="write_address">^(0|1[0-3])$</field>`
-   loaded fine but matched nothing (confirmed via `wazuh-logtest -l
-   <path>`, which needs an explicit `-l` location to get real rule-engine
-   output at all - piping a bare line to `wazuh-logtest` only shows
-   decoding, never which rules matched). Address 0 (anchors plus a
-   literal digit only) happened to still match, which is what made this
-   look at first like a 0-only bug rather than what it actually was:
-   without `type="pcre2"`, a `<field>` is evaluated in Wazuh's basic,
-   non-PCRE2 mode, where bracket classes and alternation are inert rather
-   than special. Adding `type="pcre2"` to the field fixed it immediately,
-   confirmed against every real manual-mode address (0, 10, 11, 12, 13)
-   and the two EWS addresses (1026, 1028) via `wazuh-logtest`, then
-   re-confirmed live against a real beacon/C2-delivered attack.
+### 5.18 Pin `wazuh-indexer`/`wazuh-manager`/`wazuh-dashboard` versions
 
-### 5.18 `wazuh-indexer`/`wazuh-manager`/`wazuh-dashboard` were installed unpinned - a routine image rebuild can silently resolve an older OpenSearch than a persistent volume already has
-
-Found while rebuilding `wazuh/Dockerfile` for §5.17's fix and recreating
-the container against the pre-existing `wazuh_indexer_data` volume: the
-indexer refused to start, `java.lang.IllegalStateException: cannot
-downgrade a node from version [2.19.6] to version [2.19.4]`. OpenSearch
-(bundled inside `wazuh-indexer`) stamps its on-disk data directory with
-the version that created it, and refuses outright to start against a
-newer-stamped directory from an older binary - a real safety behavior,
-not a bug in OpenSearch. The actual bug was upstream of that: `wazuh/
-Dockerfile`'s `apt-get install wazuh-indexer wazuh-manager wazuh-dashboard`
-had no version pin at all, so it always resolves whatever Wazuh's `4.x`
-apt channel currently serves. Nothing stops that from resolving an
-*older* patch than a previous build did (a repo's latest build available
-for a given OS/arch isn't monotonic with wall-clock time, and even when
-it is, any `fortiphyd/grfics-wazuh` image built or pulled at a different
-time than when a deployment's volume was first initialized is exposed to
-this regardless of direction). This isn't specific to this project's own
-long-running dev environment - it would hit **any** user who rebuilds or
-re-pulls the image without also recreating `wazuh_indexer_data`, which is
-a completely ordinary thing to do (a routine `docker compose build`
-re-run, or `docker compose pull && up -d` to pick up updates).
-
-Fixed by pinning exact versions (`wazuh-indexer=4.14.4-1` etc., plus
-`apt-mark hold` so a later unrelated `apt-get upgrade` in the same image
-can't silently move them either) and confirming a clean rebuild starts
-correctly against the existing volume. Recovering from the already-broken
-state required deleting the `wazuh_indexer_data` volume (destructive -
-it holds the dashboard's historical searchable alert index; the
-manager's own `/var/ossec/logs/alerts/alerts.json`, which is what every
-rule-validation test in this document actually reads, lives in a
-separate volume and was never at risk). Bumping the pin in the future
-should be a deliberate choice that also plans for `wazuh_indexer_data`,
-not something that happens by default on the next rebuild.
+Unpinned packages let a later image rebuild resolve an older OpenSearch
+than whatever already stamped the `wazuh_indexer_data` volume, which
+OpenSearch then refuses to start against - not specific to this dev
+environment, this hits any rebuild or re-pull against an existing
+deployment. Fixed with an exact version pin + `apt-mark hold`
+(`wazuh/Dockerfile`). See commit `8be6893`.
 
 ## 6. Open risks / questions
 
