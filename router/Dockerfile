@@ -27,7 +27,10 @@ RUN echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
 RUN printf '#!/bin/bash\necho "[fake-systemctl] $@"\nexit 0\n' \
     > /usr/local/bin/systemctl && chmod +x /usr/local/bin/systemctl
 
-# Install Wazuh agent
+# Install Wazuh agent - pinned to match wazuh/Dockerfile's manager pin
+# (4.14.4-1). Found live: with both unpinned, the fleet had drifted to four
+# different agent versions (4.14.7/9/10) against one manager version
+# (4.14.4) - Wazuh expects agent/manager versions to stay in sync.
 RUN apt-get update && apt-get install -y --no-install-recommends gnupg \
     && curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH \
        | gpg --no-default-keyring \
@@ -37,7 +40,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends gnupg \
        https://packages.wazuh.com/4.x/apt/ stable main" \
        > /etc/apt/sources.list.d/wazuh.list \
     && apt-get update \
-    && WAZUH_MANAGER=192.168.90.20 WAZUH_AGENT_NAME=router apt-get install -y wazuh-agent \
+    && WAZUH_MANAGER=192.168.90.20 WAZUH_AGENT_NAME=router apt-get install -y wazuh-agent=4.14.4-1 \
+    && apt-mark hold wazuh-agent \
     && rm -rf /var/lib/apt/lists/*
 
 # Ship the router's security logs to Wazuh: Suricata's alerts-only EVE log,

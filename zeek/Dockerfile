@@ -22,14 +22,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # does. --force skips zkg's interactive confirmation prompt (fine here,
 # same trust model as any other apt/pip package this project already
 # installs unattended at build time).
-RUN zkg install --force zeek/cisagov/icsnpp-modbus
+#
+# Pinned to the exact commit already validated against this project's own
+# Wazuh rules (100100-106, grfics_modbus_write.log) - this package's field
+# names/event signatures are what those rules and zeek/local.zeek's own
+# write-detection hooks depend on. An unpinned install picking up a future
+# breaking schema change here would silently blind the detection pipeline
+# again, the same "no error, just stops matching" way this project's own
+# bugs have repeatedly shown up.
+RUN zkg install --force --version 16428919f5efb034eda625bf989c68543e2a5e76 zeek/cisagov/icsnpp-modbus
 
 # Fake systemctl so wazuh-agent postinstall doesn't fail (matches the same
 # trick in router/Dockerfile and scadalts/Dockerfile).
 RUN printf '#!/bin/bash\necho "[fake-systemctl] $@"\nexit 0\n' \
     > /usr/local/bin/systemctl && chmod +x /usr/local/bin/systemctl
 
-# Install Wazuh agent (matches router/Dockerfile's pattern).
+# Install Wazuh agent (matches router/Dockerfile's pattern), pinned to
+# match wazuh/Dockerfile's manager pin - see router/Dockerfile's comment
+# for why (found live: four different agent versions already drifted
+# against one manager version, before this fix).
 RUN curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH \
     | gpg --no-default-keyring \
       --keyring gnupg-ring:/usr/share/keyrings/wazuh.gpg --import \
@@ -38,7 +49,8 @@ RUN curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH \
        https://packages.wazuh.com/4.x/apt/ stable main" \
        > /etc/apt/sources.list.d/wazuh.list \
     && apt-get update \
-    && WAZUH_MANAGER=192.168.90.20 WAZUH_AGENT_NAME=zeek apt-get install -y wazuh-agent \
+    && WAZUH_MANAGER=192.168.90.20 WAZUH_AGENT_NAME=zeek apt-get install -y wazuh-agent=4.14.4-1 \
+    && apt-mark hold wazuh-agent \
     && rm -rf /var/lib/apt/lists/*
 
 # Ship Zeek's notice.log (the closest equivalent to Suricata's alerts.json)

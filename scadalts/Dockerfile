@@ -9,10 +9,15 @@ ENV SCADA_LTS_VERSION=2.7.8.1 \
     TOMCAT_USER=tcuser \
     TOMCAT_PASSWORD=tcuser
 
-# Install dependencies
+# Install dependencies. mariadb-server is pinned - it writes to the
+# persistent scadalts_db volume, and (like wazuh-indexer, see
+# wazuh/Dockerfile) a later rebuild resolving a different MariaDB version
+# against that existing data directory risks the same "won't start"/
+# data-format-mismatch class of bug.
 RUN apt-get update && \
-    apt-get install -y wget unzip supervisor mariadb-server libjaxb-api-java libjaxb-java libactivation-java \
-    gnupg curl && \
+    apt-get install -y wget unzip supervisor mariadb-server=1:10.6.23-0ubuntu0.22.04.1 \
+    libjaxb-api-java libjaxb-java libactivation-java gnupg curl && \
+    apt-mark hold mariadb-server && \
     rm -rf /var/lib/apt/lists/*
 
 # Fake systemctl so wazuh-agent postinstall doesn't fail
@@ -76,7 +81,8 @@ COPY seed_project_data.sql /seed_project_data.sql
 # Cyber fault-injection tooling (see docs/cyber-vs-physical-fault-injection-design.md)
 COPY cyber_injects /opt/cyber_injects
 
-# Install Wazuh agent
+# Install Wazuh agent, pinned to match wazuh/Dockerfile's manager pin -
+# see router/Dockerfile's comment for why.
 RUN curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH \
     | gpg --no-default-keyring \
       --keyring gnupg-ring:/usr/share/keyrings/wazuh.gpg --import \
@@ -85,7 +91,8 @@ RUN curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH \
        https://packages.wazuh.com/4.x/apt/ stable main" \
        > /etc/apt/sources.list.d/wazuh.list \
     && apt-get update \
-    && WAZUH_MANAGER=192.168.90.20 WAZUH_AGENT_NAME=scadalts apt-get install -y wazuh-agent \
+    && WAZUH_MANAGER=192.168.90.20 WAZUH_AGENT_NAME=scadalts apt-get install -y wazuh-agent=4.14.4-1 \
+    && apt-mark hold wazuh-agent \
     && rm -rf /var/lib/apt/lists/*
 
 # Monitor Tomcat catalina log, access logs, and MariaDB error log
