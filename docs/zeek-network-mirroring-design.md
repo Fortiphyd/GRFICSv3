@@ -253,484 +253,145 @@ Modbus content, not connection-frequency anomalies on the DMZ side.
 
 ## 5. Gotchas found along the way (worth recording so they don't get rediscovered)
 
-### 5.1 Debian bookworm's apt `tcpdump`/`libpcap` silently captures nothing
+### 5.1 Debian bookworm's packaged tcpdump/libpcap silently captures nothing
 
-`apt-get install tcpdump` on `debian:bookworm-slim` (tcpdump 4.99.3,
-libpcap 1.10.3) produced a tcpdump that ran without error, set up
-capture cleanly, but delivered **zero packets** for anything — not just
-OVS-mirrored or veth traffic, but even a trivial same-container loopback
-ping (`tcpdump -i lo` while pinging `127.0.0.1`). This looked at first like
-a fundamental WSL2/kernel packet-capture limitation and nearly derailed the
-whole OVS evaluation (§2.2) before `nicolaka/netshoot`'s tcpdump (libpcap
-1.10.6) was tried side-by-side on the identical loopback test and worked
-immediately. Root cause not fully isolated (a libpcap build/version issue,
-not a kernel or permissions one — confirmed AppArmor isn't even loaded on
-this kernel, and confirmed `--privileged` genuinely disables seccomp, so
-neither confinement layer was the culprit). Practical fix: don't trust
-Debian bookworm's packaged tcpdump/libpcap in this project; Alpine's build
-(same family as netshoot's) is confirmed working. Any future container
-that needs to actually observe its own captured traffic (not just process
-it, the way `modbus_relay.py`'s pymodbus-based capture never had this
-problem) should be built accordingly, or at minimum sanity-checked with a
-trivial loopback capture test before trusting it.
+Produced no error but delivered zero packets for anything, even loopback.
+Alpine's build (confirmed via `nicolaka/netshoot`) works correctly. Use
+an Alpine-based tcpdump in any container that needs to self-observe
+captured traffic; sanity-check with a trivial loopback capture first.
 
-### 5.2 OVS "system"/kernel-datapath ports are invisible to tcpdump even when working correctly
+### 5.2 OVS kernel-datapath ports are invisible to tcpdump, even when traffic is really flowing
 
-Separately from §5.1: even with a working tcpdump build, a port that's a
-live member of an OVS kernel datapath (`ovs-system`) shows nothing to
-`tcpdump` run directly on it, for *any* traffic, mirrored or not — this is
-a known, documented OVS behavior (hence the existence of the `ovs-tcpdump`
-wrapper script upstream), not a bug. Confirmed via interface RX counters
-incrementing correctly while `tcpdump` on the same interface showed
-nothing. Not relevant to the chosen design (§3 uses a plain veth, not an
-OVS port), but worth remembering if OVS is revisited later — don't debug
-"no packets" on an OVS port by reaching for `tcpdump` on that port
-directly.
+Known, documented OVS behavior, not a bug - confirmed via interface RX
+counters incrementing while tcpdump showed nothing. Not relevant to the
+chosen veth design (§3), but don't debug "no packets" on an OVS port
+with tcpdump directly if OVS is revisited later.
 
 ### 5.3 Two copy-paste bugs from following router/scadalts too literally
 
-Both found live, testing against the real `[siem]` profile stack:
+`zeek/Dockerfile`'s wazuh-agent used `WAZUH_MANAGER=192.168.90.20` and
+`dns: [192.168.90.200]`, both copied from DMZ-attached services - `zeek`
+is deliberately admin-network-only (§4.1), so both were unreachable.
+Fixed: `WAZUH_MANAGER=wazuh` (hostname), and the unneeded `dns` override
+removed.
 
-- `zeek/Dockerfile` installed the wazuh-agent with the same
-  `WAZUH_MANAGER=192.168.90.20` used by `router`/`scadalts`. Those two are
-  on `c-dmz-net`, where that static DMZ IP is directly reachable; `zeek`
-  deliberately isn't (§4.1) - only `a-grfics-admin`, so that address is
-  simply unreachable from it. Confirmed directly (`wazuh` the DNS hostname
-  connects, the hardcoded IP times out) and fixed: `WAZUH_MANAGER=wazuh`,
-  matching the network zeek is actually on.
-- `docker-compose.yml`'s `zeek` service also copied `dns: [192.168.90.200]`
-  from the DMZ-attached services (`caldera`, `wazuh`) - same problem,
-  unreachable from `a-grfics-admin`, serving no purpose. Removed; Docker's
-  own embedded resolver (the default when no override is set) already
-  handles `a-grfics-admin` name resolution correctly.
+### 5.4 The ossec.conf injection `sed` duplicates its block when there's more than one `</ossec_config>` in the file
 
-### 5.4 `sed 's|</ossec_config>|...|'` duplicates the injected block when there's more than one `</ossec_config>` in the file
+The agent package's `ossec.conf` has two top-level blocks, so a
+non-anchored `sed` substitution matches, and duplicates the injected
+`<localfile>`, at both. Harmless (Wazuh tolerates double-monitoring a
+file) and pre-existing in `router`/`scadalts` too, left alone there; the
+new injection in `zeek/Dockerfile` range-addresses the substitution to
+avoid carrying the same bug forward.
 
-The agent-package `ossec.conf` has more than one top-level
-`<ossec_config>...</ossec_config>` block, so a plain (non-anchored) `sed`
-substitution matches - and duplicates the injected `<localfile>` - at
-*every* occurrence, not just the first. Found live: wazuh-logcollector
-logged `WARNING: (1958): Log file '.../notice.log' is duplicated`, and
-`grep -c "</ossec_config>"` confirmed 2 occurrences in `zeek`'s
-`ossec.conf`. **This is a pre-existing pattern, not something this branch
-introduced** - `router/Dockerfile`'s identical `sed` has the exact same
-duplicate (confirmed: 2 occurrences there too). Harmless in practice
-(Wazuh tolerates monitoring the same file twice, just wastes a little and
-logs a warning), so left alone in `router`/`scadalts` as out of scope for
-this work, but fixed in `zeek/Dockerfile`'s own new injection using
-`sed -i '0,/<\/ossec_config>/{s|...|...|}'` (range-address the
-substitution to only the first occurrence) since it's new code with no
-reason to carry the same bug forward.
+### 5.5 Agent containers have no persistent state, but the manager's registration database does
 
-### 5.5 Agent containers have no persistent state, but the manager's registration database does - a structural collision, not specific to Zeek
+Every agent container recreate loses its enrollment key, but the
+manager's own persistent volume remembers the old registration and
+rejects re-enrollment as a duplicate - this is why `router`/`EWS`/
+`scadalts` all showed "Disconnected" despite being registered. Fixed in
+`wazuh/Dockerfile`'s manager config: `<auth><force>` to allow replacing a
+same-named agent, plus a much shorter `agents_disconnection_time` (30s
+vs. the 15m package default) so that's actually usable during normal
+development.
 
-The real "0 agents reporting" symptom that prompted this whole
-investigation. `router`/`EWS`/`scadalts` (and now `zeek`) have no
-declared volume for `/var/ossec` - every `docker compose up`/recreate
-loses each agent's own enrollment key, forcing a fresh enrollment attempt
-on every start. But `wazuh_manager_data` *is* a persistent named volume
-(mounted at `/var/ossec` on the manager - the entire agent database lives
-there), so the manager still remembers the old registration under the
-same name and rejects the new enrollment as a duplicate by default
-(`wazuh-authd: WARNING: Duplicate name 'X', rejecting enrollment` /
-agent-side `ERROR: Duplicate agent name: X`). This is exactly the
-"Wazuh manager stale, 4+ months, config-only verified" situation flagged
-in the fault-injection doc - now actually exercised live, and it's why
-`router`/`EWS`/`scadalts` all showed "Disconnected" despite being
-registered.
+### 5.6 Shipping a log to Wazuh only gets it *collected*, not *alerted on*
 
-Two changes to the manager's `ossec.conf`, both required together, both
-now baked into `wazuh/Dockerfile` (confirmed they survive a full
-`--force-recreate` of both the `wazuh` and an agent container, and that
-agents then auto-reconnect on their own with zero manual steps):
+`logall_json` is off by default, and there's no built-in decoder/rule for
+Zeek's JSON structure - collection and alerting are separate pipeline
+stages, and getting one working doesn't imply the other. A real rule set
+was still needed (§5.12-5.13).
 
-- authd's `<auth><force>` block, which allows replacing a same-named
-  agent instead of rejecting it - but only once the manager considers the
-  *previous* registration disconnected, which by itself didn't fix
-  anything (confirmed: still rejected immediately after adding just this).
-- `<global><agents_disconnection_time>`, which controls how long that
-  takes - the package default (15m) is reasonable for a real always-on
-  deployment, but far slower than how often containers get recreated
-  during normal development in this lab. Lowered to 30s.
-  `agents_disconnection_alert_time` is already `0` (disabled) in the
-  package default, so this doesn't add alert noise, just updates status
-  bookkeeping faster.
+### 5.7 The mirror veth needs `-C` (ignore checksums), or every content-level analyzer is silently blind
 
-Immediate unblock for *this* running lab (its `wazuh_manager_data` volume
-already existed before these Dockerfile changes, so it needed a live fix
-too, not just a rebuild): manually removed the three stale registrations
-(`manage_agents -r`) and applied the same two `ossec.conf` changes
-directly to the running manager before baking them into the image.
+veth devices commonly have checksum offloading enabled, which Zeek's
+default validation reads as corruption, discarding the packet before any
+deeper parsing - `conn.log` still looks completely normal throughout
+(basic connection tracking only needs headers), which is what made this
+easy to miss. Fixed by adding `-C` to `zeek-start.sh`; inherent to any
+veth-based mirror, not specific to Modbus.
 
-### 5.6 Shipping logs to Wazuh only gets them *collected*, not *alerted on*, without a matching decoder/rule
+### 5.8 Wazuh rootcheck's generic "trojaned binary" heuristic false-positives on Zeek's base image
 
-Once `notice.log` genuinely existed and the agent picked it up
-(confirmed: logcollector's "Could not open file" error went away, and a
-synthetic test line was written and detected), it still never appeared
-anywhere in `/var/ossec/logs/alerts/` on the manager. Root cause: Wazuh's
-own `<global><logall_json>` (whether to store *every* collected event,
-not just ones that match a rule) is `no` by default, and there's no
-built-in Wazuh decoder/rule that recognizes Zeek's JSON log structure the
-way there is for Suricata's `eve.json` alerts. Collection (agent → manager
-transport) and alerting (manager → visible in the dashboard/API) are two
-separate pipeline stages, and this build only confirmed the first one
-works. A real Zeek decoder + rule set (or at minimum a rule for
-`notice.log`'s structure) is genuinely new work, not a config tweak - see
-§6.
-
-### 5.7 The mirror veth needs `-C` (ignore checksums) - without it, every protocol-level analyzer is silently blind, even though `conn.log` looks fine
-
-Found while validating the ICSNPP Modbus parser (§4.1): `zeek -i mirror0`
-logged a `Reporter::WARNING` about "likely receiving invalid TCP and UDP
-checksums, most likely from NIC checksum offloading" and, without `-C`,
-produced **zero** protocol-level output against real, live PLC Modbus
-traffic - no `modbus.log`, no `modbus_detailed.log`, nothing. `mirror0` is
-a veth (a virtual device, like loopback), and veth devices commonly have
-checksum offloading enabled by the kernel the same way loopback does -
-Zeek's default checksum validation reads the result as corruption and
-discards the packet before any application-layer analysis runs.
-
-The genuinely important part: **`conn.log` looked completely normal the
-whole time** (this is how the earlier beacon-channel and PLC-polling
-captures in §3/§4.1 looked convincing before this was caught) - because
-basic connection tracking only needs packet *headers*, which checksum
-validation doesn't gate. Only deeper content parsing does. That means
-every content-level script already loaded in `local.zeek` before this fix
-- SQL-injection detection, software-version tracking, file hashing, all
-of it, not just the new Modbus parser - was silently non-functional the
-entire time, with no error visible anywhere except that one easy-to-miss
-reporter warning. Fixed by adding `-C` to `zeek-start.sh`'s invocation
-(inherent to any veth-based mirror, not a one-off workaround for this
-specific test) and confirmed live: real function codes, register
-addresses, and values immediately appeared in `modbus_detailed.log`
-against genuine PLC↔remote-IO traffic.
-
-### 5.8 rootcheck's generic "trojaned binary" signature check false-positives on Zeek's base image specifically
-
-Wazuh's `rootcheck` module includes a decades-old, generic string-matching
-heuristic (`check_trojans`, signature `'bash|file\.h|proc\.h|/dev/ttyo|
-/dev/[A-Z]|/dev/[a-s,uvxz]'`) meant to catch classic rootkit-modified
-system binaries. It fired on `/bin/passwd`, `/bin/chsh`, `/bin/chfn`, and
-others in the Zeek image - all false positives (a fresh official image,
-zero chance of real compromise). Confirmed this is specific to Zeek's
-base, not a lab-wide issue: `router`/`EWS`/`scadalts`, on older bases,
-don't trip it at all, while Zeek's is the only container on Debian
-**trixie** - a newer coreutils/glibc build evidently contains incidental
-substring matches the legacy signature wasn't designed to distinguish
-from a real trojan. Fixed by disabling just that one rootcheck sub-check
-(`check_trojans: no`) - files/dev/sys/pids/ports/interfaces checks all
-stay on. Worth remembering if a future agent container lands on an even
-newer base and starts showing the same "Trojaned version of file"
-alerts - it's very likely this same false positive, not a real finding.
+A decades-old substring-matching signature (`check_trojans`) fired on
+`/bin/passwd` and others - specific to Zeek's newer Debian trixie base,
+not a lab-wide issue (other containers on older bases don't trip it).
+Disabled just that one rootcheck sub-check.
 
 ### 5.9 `enable-mirror.sh` didn't survive a container recreate without `disable-mirror.sh` run first
 
-Recreating the `zeek` container (e.g. after an image rebuild) destroys its
-network namespace, which silently deletes `mirror0`/`mirror0-host` -
-removing one end of a veth pair removes both. But it does *not* clean up
-the `clsact` qdisc left on the host's parent interface, since qdiscs
-aren't tied to the veth's lifecycle. The result: `enable-mirror.sh`'s
-idempotency check (`ip link show mirror0-host`) correctly sees nothing and
-proceeds, but `tc qdisc add ... clsact` then fails with `Error: Exclusivity
-flag on, cannot modify` against the orphaned qdisc - a real failure hit
-live while rebuilding zeek for §4.3's changes, not a hypothetical.
+Recreating `zeek` destroys the `mirror0` veth but leaves a stale `clsact`
+qdisc on the host's parent interface, which then blocks re-adding it.
 Fixed by having `enable-mirror.sh` unconditionally clear any existing
-`clsact` qdisc on the parent before setting up fresh state (harmless if
-there wasn't one - the `|| true` no-ops cleanly). Confirmed live: recreated
-`zeek` without running `disable-mirror.sh` first, then ran `enable-mirror.sh`
-directly, and it self-healed with no manual cleanup needed.
+qdisc before setting up fresh state.
 
-### 5.10 A suspected ICSNPP memory leak - investigated, evidence didn't hold up, worth recording so it isn't re-suspected without cause
+### 5.10 A suspected ICSNPP memory leak didn't hold up under a longer, clean test
 
-While validating §4.1/§5.7, Zeek's packet processing stalled completely
-after roughly 10-15 minutes of live mirroring (`stats.log`'s `pkts_proc`
-dropped from ~18,000/5min to exactly 0, while the interface itself kept
-receiving traffic at the kernel level) - a real, observed failure, not
-imagined. Code inspection of `icsnpp-modbus/main.zeek` found a real,
-verifiable design gap: its `modbus_pending: table[string] of
-table[count] of Modbus_Detailed` correlation table has no expiration
-attributes at all, and only removes entries on a successful request/
-response match - unmatched entries (confirmed present: `"matched":false`
-was directly observed in real output) are never cleaned up. For this lab's
-long-lived, continuously-polling PLC↔remote-IO connections, that's a
-plausible unbounded-growth mechanism, and it was reported to the user as
-the likely cause with that reasoning.
+Packet processing stalled after ~10-15 minutes under turbulent test
+conditions (concurrent rebuilds, mirror churn); a subsequent clean
+3-hour run showed flat memory and steady throughput throughout. Not
+filed upstream - the evidence points at test conditions, not a real leak,
+though ICSNPP's `modbus_pending` table genuinely has no expiration
+attributes (see §5.14 for its real, smaller effect).
 
-It didn't hold up under a longer test. A subsequent 3-hour continuous run
-(no mirror churn, no concurrent rebuilds - the conditions the earlier stall
-happened under) showed **flat memory (273MB, unchanged) and steady
-throughput (~100k packets/5min) the entire time**, with no sign of the
-stall recurring. A genuine unconditional table leak should have shown
-*some* growth trend over 3 hours; it showed none. The evidence points
-instead at the turbulent conditions during the original test - repeated
-`enable-mirror.sh`/`disable-mirror.sh` cycles tearing the capture interface
-out from under a running Zeek process, concurrent image rebuilds, and
-several other test containers competing for host resources, all within a
-few minutes - rather than a standing bug in the package.
+### 5.11 Zeek's `id` field collides with Wazuh's own index schema - alerts generated correctly but never indexed
 
-Left as: not filed upstream (would be reporting a bug no longer believed
-to be real), and the `modbus_pending` expiration gap itself is still worth
-being aware of as a real, if apparently not load-bearing, design gap in a
-third-party package - just not confirmed to cause a practical problem
-under normal (non-churning) operation.
+Wazuh's JSON decoder reconstructs Zeek's dotted `id.orig_h` etc. into a
+real nested `data.id` object, but Wazuh's own index template already
+maps `data.id` as a plain string - so OpenSearch rejected every such
+document with `mapper_parsing_exception`, silently. Affects any Zeek log
+with a `conn_id`-shaped `id` field. Fixed by renaming the colliding key
+to `data.conn_id` before indexing, and by checking per-item bulk-API
+results instead of trusting the overall HTTP status (which reports
+"processed," not "succeeded").
 
-### 5.11 Zeek's `id` field collides with Wazuh's own schema - alerts were generated correctly but silently never indexed, for a long time
+### 5.12 With indexing finally working, alert volume itself became the problem - "any write" isn't a usable signal here
 
-After §4.3/§5.6 appeared to be fully working (real alerts confirmed in
-`alerts.log`), the user still reported seeing nothing in the actual Wazuh
-dashboard. The full pipeline turned out to have a third, independent
-failure stage beyond collection and alerting: **indexing**.
-`/usr/local/bin/alerts-indexer.py` (this project's own lightweight
-Filebeat replacement - see its own docstring) tails `alerts.json` and
-bulk-indexes into OpenSearch, but only checked the *overall* HTTP status
-of each bulk request (200/201), never each item's individual result -
-which is exactly how this went unnoticed. OpenSearch's bulk API returns
-200 for a request that was *processed*, independent of whether individual
-documents inside it succeeded.
+Real alerts flowed at ~1000/sec once indexing worked: rule 100100
+matched every Modbus event unconditionally, and "alert on writes" fares
+no better, since this lab's remote-IO polling issues a write on every
+normal cycle - contradicting the near-zero-write assumption the original
+Suricata-based tell design (§4.4 of the fault-injection doc) was built
+on. Both rules set to level 0 until a real content/rate-based rule
+existed (§5.13).
 
-Root cause, confirmed by inspecting the raw `alerts.json` structure
-directly: Wazuh's own JSON decoder reconstructs Zeek's dotted
-`"id.orig_h"`/`"id.orig_p"`/etc. keys into a real nested object -
-`"data": {"id": {"orig_h": ..., "orig_p": ..., ...}}` - before the alert
-is ever written to `alerts.json`. But Wazuh's pre-baked
-`wazuh-template.json` already maps `data.id` as a plain `keyword` string
-(several built-in decoders use a simple string "id" field that way), so
-OpenSearch's dynamic mapper rejects every document where that same path
-is an object instead, with `mapper_parsing_exception`. This affects *any*
-Zeek log with a `conn_id`-shaped `id` field (which is nearly all of
-them - `conn.log`, `notice.log`, `modbus_detailed.log`), not just Modbus.
+### 5.13 Built both a content-based and a rate-based write rule - plus an undocumented Wazuh correlation mechanic
 
-Confirmed as the real cause by testing both wrong and right hypotheses
-directly against the live index rather than guessing:
-- First attempt: assumed the literal dots in Zeek's *raw* key names were
-  the problem and tried replacing `.` with `_` in a general JSON-key
-  sanitizer. Redeployed, same error - because by the time this script
-  sees the alert, there are no dots left; Wazuh already expanded them
-  into a real nested object.
-- Second attempt, verified against the actual raw JSON: renaming the
-  specific colliding field - `data.id` (when it's an object, not the
-  unrelated top-level alert `id` or `agent.id`, both plain strings) to
-  `data.conn_id` - tested directly via a manual `_bulk` call first
-  (`"errors":false`), *then* deployed. Confirmed live: `wazuh-alerts-*`
-  document count went from 2,157 (stuck, despite 111,000+ matching lines
-  already in `alerts.log`) to growing continuously within seconds of the
-  fix landing, with zero new mapping errors.
+100102 (any write targeting the PLC itself, zero real baseline) and
+100103 (>120 writes/2s to the same destination) both validated against
+real traffic/attacks. Getting 100103 working surfaced two non-obvious
+Wazuh behaviors: level-0 rules are excluded from `frequency`/
+`if_matched_sid` correlation entirely, not just from alert output; and
+`<options>no_log</options>` does not suppress alert output despite its
+name. The manager's `log_alert_level` floor (default 3) is what actually
+gates output, independent of correlation.
 
-Also fixed alongside, since it's what let this go unnoticed for as long
-as it did: `index_batch()` now parses the bulk response body and logs
-each item's individual error (previously: completely silent, and the
-read offset still advanced past the failed documents regardless, so they
-were gone for good, not just delayed).
+### 5.14 The §5.10 modbus_pending gap does have a real effect after all, just not a stall
 
-### 5.12 With indexing finally working, the alert *volume* itself became the problem - "any write" isn't a usable signal against real traffic
+Unmatched entries eventually flush out individually, long after the
+fact, with stale original timestamps - harmless for a content rule like
+100102, but a real false-positive source for a timing-sensitive one like
+100103. Fixed with a `matched=true` requirement on the base write rule.
 
-Within minutes of §5.11 landing, real alerts were flowing at roughly
-1000/sec, on track to overwhelm the indexer and OpenSearch (not yet
-critical when checked - 605GB free, 15% memory used, cluster status
-"yellow" only from normal single-node unassigned-replica behavior - but
-clearly unsustainable on that trajectory, and the user was right to flag
-it immediately rather than wait and see). Root cause: rule `100100`
-matched *every* `modbus_detailed.log` line unconditionally, and this
-lab's PLC polls continuously - that alone is enough volume to be a
-problem regardless of what the rule alerts on.
+### 5.15 Measuring a write-rate baseline needs more care than a single sample
 
-The planned fallback - alert on writes only (`100101`) - turns out not to
-work either, for a reason only visible once real content-level data was
-flowing: **this lab's remote-IO simulation issues a
-`WRITE_MULTIPLE_REGISTERS` on every single normal poll cycle**, not just
-during an attack. "A write happened" carries zero information here - it's
-indistinguishable from constant, expected operation. This directly
-contradicts the assumption baked into the original write-frequency tell
-designed in `docs/cyber-vs-physical-fault-injection-design.md` §4.4
-("baseline is near-zero... a burst of writes produces a sharp spike") -
-but that tell was built against *Suricata's* network-level view, where
-writes really were rare because Suricata could only ever see the ones
-that happened to be malicious ARP-spoofed/beacon-triggered traffic, not
-the PLC's own normal control-loop writes to its remote I/O (different
-traffic entirely, on the ICS-LAN side, that Suricata was never watching).
-Zeek's much richer content-level visibility exposes a different, truer
-baseline: writes are the *normal* state of this process, not the
-exception. A tell built assuming otherwise would be constantly false.
-
-Immediate fix: both rules set to level `0` (Wazuh's "categorize but don't
-alert" level) - confirmed live, alert count stopped changing entirely
-within 15 seconds of the change. This isn't a placeholder pending a
-"real" fix later - it's the correct state until a genuinely different
-rule exists, and `wazuh/local_rules.xml` documents why inline so this
-isn't casually bumped back to level 3/7 in a future edit without also
-solving the underlying volume problem.
-
-**Not yet designed**: what a real Modbus-content rule should actually
-detect here. Two directions worth considering, not decided:
-- **Rate-based**: Wazuh's `<frequency>`/`<timeframe>` correlation
-  (multiple rule matches within a window) to catch a write *rate* well
-  above this lab's own real baseline (which is now known, concretely -
-  worth measuring precisely before picking a threshold), rather than
-  assuming baseline-zero.
-- **Content-based**: writes to addresses or from sources outside an
-  explicit allowlist of what normal polling actually touches - closer to
-  the stuck-valve pairing's original manual-mode coil write, which *is*
-  distinguishable by address/value from routine polling, unlike the
-  routine polling writes seen here.
-
-### 5.13 Both directions from §5.12 built and validated - including a Wazuh correlation mechanic that isn't documented anywhere obvious
-
-`wazuh/local_rules.xml` now has two real, validated rules on top of the
-suppressed 100100/100101:
-
-- **100102 (content-based, level 12)**: any write targeting the PLC
-  itself. No frequency logic needed - measured baseline is genuinely
-  zero (§5.12's own measurement: 301 real events reached the PLC over
-  133s, zero writes). Validated against the real attack:
-  `attacker/cyber_injects/setpoint_inject.py` run from Kali fired this
-  immediately and correctly, for both the register write and the
-  manual-mode coil write, with the true source (192.168.90.6) correctly
-  attributed.
-- **100103 (rate-based, level 10)**: more than 120 matches of 100101
-  (writes) to the same `id.resp_h` within 2 seconds. Covers the
-  PLC-to-remote-IO polling channel that 100102 doesn't (no existing
-  cyber inject attacks that channel, so this is more a validated
-  template for future scenarios there than an active detection today).
-
-Getting 100103 working at all surfaced a real Wazuh mechanic that isn't
-obviously documented and cost real debugging time - worth recording
-precisely:
-
-- **Level 0 rules are excluded from `if_matched_sid`/`frequency`
-  correlation entirely, not just from alert output.** Confirmed directly
-  with `wazuh-logtest`: feeding 50 matching events through a single
-  session, a level-0 base rule's own `firedtimes` counter climbed
-  normally (1→50), but a rule depending on it via `if_matched_sid` never
-  fired - not even once. Bumping the base rule to any non-zero level
-  (tested with 1 and 3) made correlation work immediately.
-- **`<options>no_log</options>` does not mean what its name suggests.**
-  The natural next guess - "match for correlation, just don't log it" -
-  doesn't do that. Confirmed directly: a rule with `no_log` set still
-  produced full alerts with complete `full_log` content, identical to
-  without it.
-- **The actual mechanism is the manager's global `<log_alert_level>`**
-  (`ossec.conf`, default `3`) - independent of correlation, this is the
-  real floor below which a match never gets written to `alerts.log`/
-  `alerts.json` at all. Rules 100100/100101 are level `1` - non-zero
-  (satisfies correlation) but below the floor (satisfies "don't flood
-  the indexer again"). Confirmed live: zero new `Rule: 100101` alerts
-  over a clean window with real write traffic continuously flowing,
-  while 100103's correlation against it worked correctly in the same
-  test.
-
-### 5.14 The §5.10 "not load-bearing" conclusion about the modbus_pending leak needs a correction - it does have a real, observed effect, just not the one originally suspected
-
-While validating 100103's threshold, a single long-running connection
-(15+ hours uptime) periodically produced the *exact same* stale event -
-identical `uid`, identical original `ts` - written to the log and
-delivered to Wazuh at a *different*, much later wall-clock moment,
-minutes to hours after that `ts`. Every one of these had
-`"matched":false`. A cluster of these flushing out close together was
-enough to cross 100103's frequency threshold as a false positive,
-confirmed directly by inspecting the alert content (the embedded `ts`
-was from an entirely different, much earlier point in the session than
-the alert's own real delivery time).
-
-§5.10 investigated a *stall* hypothesis for the `modbus_pending`
-expiration gap, found the evidence for a stall didn't hold up over a
-longer clean run, and concluded the gap probably wasn't load-bearing in
-practice. That conclusion was too reassuring. The gap is real and has a
-real, reproducible effect - just a different one than originally
-suspected: not a stall, but unmatched entries eventually getting flushed
-out individually, long after the fact, with their stale original
-timestamp intact. For a one-shot rule like 100102 this is harmless
-(content, not timing, is what matters). For a timing-sensitive rule like
-100103 it's a genuine false-positive source. Fixed with a `matched=true`
-field requirement on rule 100101 (so both 100102 and 100103 inherit
-it) - a real attacker burst is always a completed, matched request/
-response exchange happening in real time, so this costs nothing on the
-detection side. Confirmed: a fresh synthetic burst (6,882 writes/1.5s
-from a genuinely separate, mirrored container) still fired 100103
-correctly with the fix in place, and a 4-minute clean window afterward
-produced zero new matches where the unfixed version had been producing
-one every 20-90 seconds.
-
-### 5.15 Measuring a write-rate baseline needs more care than a single sample - two mistakes made and caught before the threshold was trusted
-
-Calibrating 100103's threshold took two wrong attempts, both caught by
-testing against real traffic rather than trusting the measurement:
-
-- **First baseline (133s sample)**: steady ~8.5 writes/sec per
-  remote-IO target, peaking at ~21 writes in any 2-second window.
-  Threshold set to 40 (~2x that peak). `same_field` grouping confirmed
-  working correctly (matches distributed evenly across all 6 targets)
-  but the rule still fired constantly against real, unmodified baseline
-  traffic - the sample wasn't representative.
-- **Contaminated remeasurement**: a second, longer sample showed one
-  target (192.168.95.10) spiking to max=79 and another
-  (192.168.95.13) to max=248 - but this sample unknowingly included
-  leftover traffic from an earlier burst test, not genuine new baseline
-  variance. Caught by noticing the numbers didn't match the "clean"
-  methodology this doc otherwise follows, not by any error or crash.
-- **Actually-clean remeasurement** (log truncated immediately before,
-  zero test traffic during): 5 of 6 targets tight and consistent
-  (max ~19-20/2s), but 192.168.95.13 is a genuine, reproducible
-  outlier (max ~60/2s) - a real structural difference from the other
-  five (cause not fully diagnosed: same single persistent connection as
-  the others, just a different read/write cadence), not measurement
-  noise.
-
-Final threshold (120, ~2x the worst real target's observed peak) trades
-sensitivity for the 5 quieter targets to get zero false positives against
-the noisiest one, since `same_field` applies one threshold across every
-grouped value. Per-target thresholds (a separate rule per target) would
-be more precise but weren't built this round - noted as a possible
-follow-up in §6.
-
-A separate lesson from the same testing: `simulation` is not a stand-in
-for 6 separate remote-IO containers - the "remote-IO units"
-(`192.168.95.10`-`.15`) are secondary IP addresses on `simulation`'s own
-single interface. A test that connects from `simulation` to one of its
-own secondary IPs never leaves that container's network stack - it's
-genuine intra-host loopback, and (correctly) never reaches the mirror at
-all. Burst tests need to originate from a genuinely separate container.
+Two wrong attempts (an unrepresentative sample, then one contaminated by
+leftover test traffic) before a clean measurement found a genuine ~3x
+variance between remote-IO targets; threshold set to clear the worst
+one. Separately: the "remote-IO units" are secondary IPs on
+`simulation`'s own interface, so a test connecting to them from
+`simulation` itself never reaches the mirror - burst tests need a
+genuinely separate container.
 
 ### 5.16 `zeek` was missing `cap_add: NET_ADMIN` - mirrored packets arrived at the interface but libpcap silently never saw them
 
-Found while running the first live integration test of this branch
-together with `feature/noise-floor`'s cyber-injects dashboard controls
-(merged as `feature/cyber-injects-integration`) - the two had never been
-run as one stack before. After re-enabling the mirror post-merge,
-`mirror0`'s own kernel rx counters
-(`/sys/class/net/mirror0/statistics/rx_packets`) showed real traffic
-steadily arriving (tens of thousands of packets), and the host-side `tc
--s filter show` counters confirmed the mirror itself was actively
-matching and forwarding packets - but Zeek's own `stats.log` reported
-`pkts_proc: 0` / `pkts_link: 0` the entire time, and `conn.log`/
-`modbus.log` hadn't been written to in 6 days (their timestamps dated
-back to whenever the container's host last had the mirror enabled, not
-the restart just performed).
-
-Root cause: libpcap needs to put the capture interface into promiscuous
-mode to see frames whose original source/dest MACs don't match the
-interface's own (exactly what every mirrored packet looks like - it kept
-the real hosts' MACs, not `mirror0`'s). Setting `IFF_PROMISC` requires
-`CAP_NET_ADMIN` in that network namespace; Docker only grants
-`CAP_NET_RAW` by default. `zeek`'s service definition in
-`docker-compose.yml` had no `cap_add` at all (every other service that
-touches raw networking - `router`, `plc`, `simulation`, `ews`, `hmi`,
-`kali` - already has one), confirmed via
-`docker exec zeek cat /proc/1/status | grep Cap` showing `cap_net_raw`
-present and `cap_net_admin` absent. The capture silently "succeeded"
-(zeek logged `listening on mirror0`, no error) while structurally never
-receiving a single externally-addressed frame - the kind of failure that
-looks like "no traffic right now" rather than "broken," which is exactly
-why it had apparently gone unnoticed since whenever the mirror was last
-torn down and re-enabled.
-
-Fixed by adding `cap_add: [NET_ADMIN]` to the `zeek` service and
-recreating the container (requires re-running `disable-mirror.sh` then
-`enable-mirror.sh`, same as any container recreate - see §5.9). Confirmed
-fixed, not just plausible: with the fix in place, triggering the
-cyber-injects dashboard's stuck-valve inject (a real beacon/C2 write to
-the PLC) produced two real alerts on rule 100102 within seconds, the
-first time this detection pipeline and the cyber-inject mechanisms it's
-meant to catch had ever actually run together end-to-end.
+libpcap needs `CAP_NET_ADMIN` to set promiscuous mode (required to see
+frames whose MACs don't match the interface's own, true of every
+mirrored packet) - Docker only grants `CAP_NET_RAW` by default, and
+`zeek`'s service definition had no `cap_add` at all, unlike every other
+service touching raw networking. The capture "succeeded" with no error
+while structurally seeing nothing, which looked like "no traffic right
+now" rather than "broken." Fixed by adding the capability.
 
 ## 6. Open risks / questions
 
