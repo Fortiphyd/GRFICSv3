@@ -353,8 +353,9 @@ automation.
   accuracy/speed against it — a stronger, more quantifiable result for the
   talk than a flat two-condition comparison.
 
-**Implemented and validated** (4 of 5 event types now — ARP churn is the
-one still not built, see §7): `simulation/noise_floor/scheduler.py`, a new
+**Implemented and validated** (all 5 event types now, see §7 for the EWS
+setpoint nudges and benign ARP churn mechanisms specifically):
+`simulation/noise_floor/scheduler.py`, a new
 always-on supervisord program in the `simulation` container, talking to
 the same TE_process control socket (`127.0.0.1:55555`, same JSON
 protocol) already used by `index.php` and the Modbus remote-IO devices.
@@ -630,12 +631,33 @@ more than statistical elegance when recruitment itself is the bottleneck.
   depends on is now proven live, not just plausible from each half's
   separate validation.
 
+All five noise-floor ambient event types are now built. The last one,
+benign ARP churn, ended up living in `simulation` too (not Kali or the
+router as originally sketched), since `simulation` already has the Docker
+socket mounted (for the dashboard's "About" version info) and that turned
+out to be the natural way to generate it: `simulation/noise_floor/
+arp_churn.py` creates and destroys short-lived containers on the DMZ
+network (`fortiphyd/grfics-arp-churn-device`, a new minimal Alpine image,
+built locally like every other image here rather than pulled at runtime)
+on a fixed, otherwise-unused IP (192.168.90.50), each one pinging the
+router to force a real ARP exchange, then tearing down after a dwell
+period. A fresh container gets a fresh MAC from Docker every time, so
+reusing the same IP naturally reproduces the exact "changed_mac" signature
+(`router/arpmon.py`, Wazuh rule 100222 - "possible ARP spoofing, or a
+replaced/recreated device") a real device swap would, without ever
+colliding with another IP's MAC (confirmed live: no run ever had
+`mac_also_claimed_by` set, so rule 100223's definite-spoofing escalation
+never fired) - the same ambiguous signal a benign reconnect leaves, by
+construction. Deliberately has no quiet-buffer suppression, unlike the
+other four event types - the point is this keeps recurring regardless of
+when the real attack's own ARP spoofing happens, not avoiding it.
+Validated live: first appearance correctly logged as `new_station`, every
+subsequent reconnect as `changed_mac` with no collision flag, and
+disabling noise floor mid-connection tears the active device down within
+seconds rather than leaving it until its planned dwell timer expires.
+
 Still not built:
 
-- Kali or router: small script for benign ARP churn (noise floor) - the
-  5th and last ambient event type, needs its own script since it doesn't
-  go through the simulation container's control socket at all (see §5 for
-  the 4th, EWS setpoint nudges, now done).
 - The ARP-spoof + iptables REDIRECT positioning itself is still manual
   (deliberately - see §8's "ARP spoofing reliability" entry and the
   compromised-HMI model's "assume the foothold already exists" framing).
